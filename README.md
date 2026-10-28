@@ -1,5 +1,7 @@
 # Privy Council
 
+[![CI](https://github.com/elthommy/privy-council/actions/workflows/ci.yml/badge.svg)](https://github.com/elthommy/privy-council/actions/workflows/ci.yml)
+
 <img src="docs/assets/council-logo.svg" alt="Privy Council logo: six coloured seats wired to a chip" width="96">
 
 A private council of AI personas that debates your questions, on local models, your Claude subscription, or both.
