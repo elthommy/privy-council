@@ -46,6 +46,7 @@ NOTICE_RESEARCH_NEEDS_CLAUDE = (
     "Research needs a Claude-backed moderator (web search runs through the claude CLI)"
 )
 NOTICE_RESEARCH_SEARCHED = "{nick} searched the web: {queries}"
+NOTICE_RESEARCH_READ = "{nick} read web pages: {urls}"
 NOTICE_RESEARCH_NO_SEARCH = "{nick} answered without searching the web"
 NOTICE_RESEARCH_FAILED = "Research failed ({error}); the debate continues without it"
 # Shown with each research note, so the quality difference stays visible.

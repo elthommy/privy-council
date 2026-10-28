@@ -18,6 +18,7 @@ from privy_council.config import Settings
 from privy_council.engine.research import (
     ResearchMode,
     ResearchRequiredError,
+    fetches,
     resolve_mode,
     searches,
 )
@@ -36,9 +37,12 @@ from tests.engine.test_protocol import personas as personas
 FACTS = "- Gold is about $4,170/oz (2026-10-16, https://example.org/gold)"
 
 
-def research_result(text: str = FACTS, queries: tuple[str, ...] = ("gold price",)) -> Reply:
-    """A research reply carrying the WebSearch inputs like the real backend does."""
+def research_result(
+    text: str = FACTS, queries: tuple[str, ...] = ("gold price",), urls: tuple[str, ...] = ()
+) -> Reply:
+    """A research reply carrying the WebSearch and WebFetch inputs like the real backend does."""
     calls = [{"name": "WebSearch", "input": {"query": q}} for q in queries]
+    calls += [{"name": "WebFetch", "input": {"url": u, "prompt": "p"}} for u in urls]
     return CompletionResult(
         text=text, latency_s=0, backend="fake", model="sonnet", raw={"tool_calls": calls}
     )
@@ -121,6 +125,34 @@ def test_searches_extracts_only_web_search_queries() -> None:
         },
     )
     assert searches(result) == ["a"]
+    assert fetches(result) == ["https://x"]
+
+
+@pytest.mark.parametrize(
+    ("urls", "notice"),
+    [
+        (("https://example.org/gold",), "Chair read web pages: https://example.org/gold"),
+        ((), "Chair answered without searching the web"),
+    ],
+)
+async def test_research_notice_without_a_search(
+    tmp_path: Path, personas: dict[str, Persona], urls: tuple[str, ...], notice: str
+) -> None:
+    research = research_result(queries=(), urls=urls)
+    h = Harness(
+        tmp_path,
+        personas,
+        responder([decision([("rigor", "x")])], research),
+        research=ResearchMode.AUTO,
+    )
+    await h.engine.step()
+    system = h.texts("system")
+    assert notice in system
+    assert not any("searched the web" in t for t in system)
+    [note] = h.store.load_meta().runtime.research
+    assert note.searches == [] and note.fetched == list(urls)
+    research_md = (h.store.directory / "dossier" / "research.md").read_text()
+    assert ("· read: https://example.org/gold" in research_md) == bool(urls)
 
 
 async def test_auto_research_before_opening_reaches_blind_round(

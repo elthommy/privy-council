@@ -20,6 +20,7 @@ from privy_council.models.session import (
     ErrorEvent,
     MessageEvent,
     ResearchAdded,
+    ResearchNote,
     RoundStarted,
     VoteTaken,
 )
@@ -30,6 +31,16 @@ _HEADING = re.compile(r"^(#{1,5}) ", re.MULTILINE)
 def demote(text: str, levels: int) -> str:
     """Push Markdown headings down so a model's `## X` nests under the report's own."""
     return _HEADING.sub(lambda m: "#" * min(len(m.group(1)) + levels, 6) + " ", text)
+
+
+def research_meta(note: ResearchNote, labels: dict[str, str]) -> str:
+    """Return a research note's source line: who searched, the queries, the pages read."""
+    meta = labels[f"source_{note.source}"]
+    if note.searches:
+        meta += f" · {labels['searches']} {'; '.join(note.searches)}"
+    if note.fetched:
+        meta += f" · {labels['pages_read']} {'; '.join(note.fetched)}"
+    return meta
 
 
 def _cell(text: str) -> str:
@@ -109,10 +120,8 @@ def _event(report: Report, event: ShownEvent, labels: dict[str, str]) -> str:
         return f"### {event.label or f'Round {event.round}'}\n"
     if isinstance(event, ResearchAdded):
         note = event.note
-        searches = "; ".join(note.searches)
         lines = [f"> **{labels['research']} {note.focus}**"]
-        source = labels[f"source_{note.source}"]
-        lines.append(f"> *{source}{f' · {labels["searches"]} {searches}' if searches else ''}*")
+        lines.append(f"> *{research_meta(note, labels)}*")
         lines += [">", *(f"> {line}" for line in demote(note.text, 4).splitlines())]
         return "\n".join(lines) + "\n"
     if isinstance(event, DossierAdded):

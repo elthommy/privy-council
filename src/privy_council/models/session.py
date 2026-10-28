@@ -106,6 +106,7 @@ class ResearchNote(BaseModel):
     focus: str  # what was asked for: the user's /research query, or the default focus
     text: str
     searches: list[str] = Field(default_factory=list)  # the web queries actually run
+    fetched: list[str] = Field(default_factory=list)  # the pages read (WebFetch URLs)
     ts: datetime = Field(default_factory=_now)
     truncated: bool = False
     auto: bool = False  # started by the moderator on its own (counts toward auto_max)

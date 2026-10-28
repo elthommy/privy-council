@@ -42,7 +42,12 @@ def msg(speaker: str, text: str, rnd: int = 1, **flags: bool) -> MessageEvent:
 
 def events() -> list[Event]:
     """A short closed debate touching every kind of event a report shows or hides."""
-    note = ResearchNote(focus="PEA ceiling", text="- Ceiling: €150,000.", searches=["pea plafond"])
+    note = ResearchNote(
+        focus="PEA ceiling",
+        text="- Ceiling: €150,000.",
+        searches=["pea plafond"],
+        fetched=["https://example.org/pea"],
+    )
     return [
         msg("system", "Question set; opening the debate", 0),
         ResearchAdded(note=note),
@@ -150,7 +155,10 @@ def test_markdown(tmp_path: Path, personas: dict[str, Persona]) -> None:
     assert "###### Mine" in text  # a member's heading nests under the round
     assert "*Attached budget.csv (~1,200 tokens)*" in text
     assert "secret rows" not in text  # dossier contents stay out
-    assert "> *Claude web search · Searches: pea plafond*" in text
+    assert (
+        "> *Claude web search · Searches: pea plafond · Pages read: https://example.org/pea*"
+        in text
+    )
     assert text.count("Build the emergency fund first.") == 1
 
 

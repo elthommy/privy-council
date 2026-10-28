@@ -8,7 +8,7 @@ from html import escape
 from markdown_it import MarkdownIt
 
 from privy_council.export.labels import EXPORT_LABELS, ROLE_NAMES
-from privy_council.export.markdown import demote
+from privy_council.export.markdown import demote, research_meta
 from privy_council.export.report import (
     Report,
     ShownEvent,
@@ -174,10 +174,7 @@ def _event(report: Report, event: ShownEvent, labels: dict[str, str]) -> str:
         return f"<h3>{escape(event.label or f'Round {event.round}')}</h3>"
     if isinstance(event, ResearchAdded):
         note = event.note
-        searches = "; ".join(note.searches)
-        source = labels[f"source_{note.source}"]
-        searched = f" · {labels['searches']} {searches}" if searches else ""
-        meta = f'<p class="note">{escape(source + searched)}</p>'
+        meta = f'<p class="note">{escape(research_meta(note, labels))}</p>'
         summary = f"<summary>{escape(labels['research'])} {escape(note.focus)}</summary>"
         return f"<details>{summary}{meta}{markdown_html(note.text, 3)}</details>"
     if isinstance(event, DossierAdded):

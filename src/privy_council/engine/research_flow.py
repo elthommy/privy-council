@@ -41,9 +41,16 @@ from privy_council.engine.notices import (
     NOTICE_RESEARCH_NEEDS_LOCAL_SEARCH,
     NOTICE_RESEARCH_NO_SEARCH,
     NOTICE_RESEARCH_OFF,
+    NOTICE_RESEARCH_READ,
     NOTICE_RESEARCH_SEARCHED,
 )
-from privy_council.engine.research import WEB_TOOLS, ResearchMode, searches, searches_first
+from privy_council.engine.research import (
+    WEB_TOOLS,
+    ResearchMode,
+    fetches,
+    searches,
+    searches_first,
+)
 from privy_council.models.persona import BackendKind
 from privy_council.models.research import LocalSearchRecord, SearchResult
 from privy_council.models.session import ErrorEvent, Phase, ResearchAdded, ResearchNote, TurnStarted
@@ -255,17 +262,20 @@ class ResearchFlow(EngineCore):
             timeout_s=cfg.timeout_s,
             max_output=cfg.max_output_tokens,
         )
-        queries = searches(result)
+        queries, urls = searches(result), fetches(result)
         nick = self.moderator.name
-        self._notice(
-            NOTICE_RESEARCH_SEARCHED.format(nick=nick, queries="; ".join(queries))
-            if queries
-            else NOTICE_RESEARCH_NO_SEARCH.format(nick=nick)
-        )
+        if queries:
+            self._notice(NOTICE_RESEARCH_SEARCHED.format(nick=nick, queries="; ".join(queries)))
+        # A WebFetch-only call still read the web: say which pages, not "without searching".
+        if urls:
+            self._notice(NOTICE_RESEARCH_READ.format(nick=nick, urls="; ".join(urls)))
+        if not queries and not urls:
+            self._notice(NOTICE_RESEARCH_NO_SEARCH.format(nick=nick))
         return ResearchNote(
             focus=focus,
             text=result.text.strip(),
             searches=queries,
+            fetched=urls,
             truncated=result.truncated,
             auto=auto,
         )

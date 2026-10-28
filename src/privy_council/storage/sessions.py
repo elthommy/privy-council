@@ -71,7 +71,8 @@ def _research_markdown(note: ResearchNote, level: str) -> str:
     searched = "; ".join(note.searches) or "no web search"
     when = f"{note.ts.astimezone():%Y-%m-%d %H:%M}"
     source = RESEARCH_SOURCE_LABELS[note.source]
-    meta = f"*{when} · {source} · searched: {searched}*"
+    read = f" · read: {'; '.join(note.fetched)}" if note.fetched else ""
+    meta = f"*{when} · {source} · searched: {searched}{read}*"
     return f"{level} Research: {note.focus}\n\n{meta}\n\n{note.text}\n\n"
 
 

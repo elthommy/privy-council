@@ -15,6 +15,7 @@ from privy_council.models.council import CouncilPreset
 
 WEB_TOOLS = ["WebSearch", "WebFetch"]
 SEARCH_TOOL = "WebSearch"
+FETCH_TOOL = "WebFetch"
 
 
 class ResearchMode(StrEnum):
@@ -80,4 +81,16 @@ def searches(result: CompletionResult) -> list[str]:
         if call.get("name") == SEARCH_TOOL
         and isinstance(call.get("input"), dict)
         and call["input"].get("query")
+    ]
+
+
+def fetches(result: CompletionResult) -> list[str]:
+    """Return the URLs a research call read with WebFetch (shown to the user)."""
+    calls = result.raw.get("tool_calls") or []
+    return [
+        str(call["input"]["url"])
+        for call in calls
+        if call.get("name") == FETCH_TOOL
+        and isinstance(call.get("input"), dict)
+        and call["input"].get("url")
     ]
