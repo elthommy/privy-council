@@ -1,6 +1,7 @@
 # Personal data — never commit
 data/
 config.local.toml
+docs/STATUS.md
 sessions/
 memory/
 # ...except the memory code and test packages

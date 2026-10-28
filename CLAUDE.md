@@ -222,7 +222,8 @@ When implementing or changing the backend, make sure:
 ## Workflow for Claude Code in this repo
 
 - Work **milestone by milestone** (see `PROJECT_BRIEF.md` §14). Start with **M0** (spike) and record its findings in `docs/spike-notes.md` before building backends.
-- **Read `docs/STATUS.md` at the start of a session, if present.** It's the owner's private dev log (progress, decisions made with the user that supersede the brief) and is left out of the public export (`export-ignore`). Update it at the end of each milestone, and add user-facing changes to `CHANGELOG.md`.
+- **Read `docs/STATUS.md` at the start of a session, if present.** It's the owner's private dev log (progress, decisions made with the user that supersede the brief), gitignored and never committed. Update it at the end of each milestone, and add user-facing changes to `CHANGELOG.md`.
+- **This repository is public.** Commits, messages and code must not quote real session questions, people's names or personal details; those stay in `docs/STATUS.md` and `data/`.
 - For each milestone:
   1. propose a short plan;
   2. implement with tests;
