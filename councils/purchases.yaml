@@ -1,0 +1,11 @@
+name: purchases
+description: Buying, upgrading or repairing IT and audio gear
+moderator: chair
+members: [specialist, fixer, value, pragmatist, rigor, contrarian]
+protocol:
+  blind_first_round: true
+  max_rounds: 6
+  auto_stop_on_consensus: true
+  rebuttal_style: targeted
+  # Chair searches the web before framing the debate: prices and compatibility move fast.
+  require_research: true

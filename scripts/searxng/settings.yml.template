@@ -1,0 +1,21 @@
+# SearXNG settings for council's local web search.
+# scripts/searxng.sh copies this to data/searxng/settings.yml (gitignored)
+# with a random secret key; edit that copy, not this template.
+use_default_settings: true
+
+general:
+  instance_name: "council-search"
+
+server:
+  secret_key: "@SECRET_KEY@"
+  # One local user: no bot limiter, which needs a Valkey/Redis server.
+  limiter: false
+  image_proxy: false
+  public_instance: false
+
+search:
+  # council reads JSON; html stays on for checking results in a browser.
+  formats:
+    - html
+    - json
+  safe_search: 0

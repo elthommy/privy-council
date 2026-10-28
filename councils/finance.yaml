@@ -1,0 +1,11 @@
+name: finance
+description: Personal finance decisions
+moderator: chair
+members: [rigor, compounder, pragmatist, contrarian]
+protocol:
+  blind_first_round: true
+  max_rounds: 6
+  auto_stop_on_consensus: true
+  rebuttal_style: targeted
+  # Chair searches the web before framing the debate; no session runs without facts.
+  require_research: true

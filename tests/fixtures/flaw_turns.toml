@@ -1,0 +1,207 @@
+# Synthetic member turns for the engine's checks (M11). No real session data here:
+# the real bench corpus stays in data/bench/ (gitignored).
+# `flaws` lists the expected "kind:figure-or-excerpt" items, in the order found.
+
+[[turn]]
+name = "wrong sum and invented maximum"
+nick = "Value"
+sources = "The user has 8 GB soldered and one free slot. A 16 GB stick costs €130 to 200."
+text = """**Position:** Add 16 GB (€130–200). A 32 GB stick gives ~5 GB more than 16 GB.
+**Confidence:** 70%"""
+flaws = ["unsourced:32 GB", "unsourced:5 GB"]
+
+[[turn]]
+name = "own arithmetic is not flagged"
+nick = "Value"
+sources = "Option A costs €170. Option B costs €330."
+text = "Option B costs €330 against €170 for A: €160 more, i.e. 94% more."
+flaws = []
+
+[[turn]]
+name = "a percentage of the turn applied to a price"
+nick = "Realist"
+sources = "Brent trades near $108."
+text = "A 10 % reduction to $108 gives roughly $97; a 15 % reduction gives $92, and a 5 % rise $113."
+flaws = []
+
+[[turn]]
+name = "a price no written percentage explains"
+nick = "Realist"
+sources = "Brent trades near $108; analysts see a 15 % fall."
+text = "A 15 % fall from $108 gives $92, but the floor is $70."
+flaws = ["unsourced:$70"]
+
+[[turn]]
+name = "a chained probability from two of the turn's percentages"
+nick = "Forecaster"
+sources = "Forecaster put a pause at about 12% and acceptance given a pause at about 12%."
+text = "P(pause) is about 12% and P(accept | pause) about 12%: 12% × 12% ≈ 1.5% (1.44% exactly)."
+flaws = []
+
+[[turn]]
+name = "a lone percentage doesn't explain its square"
+nick = "Realist"
+sources = "A pause is about 12% likely."
+text = "A pause is about 12% likely, so a strict surrender is about 1.44%."
+flaws = ["unsourced:1.44%"]
+
+[[turn]]
+name = "rounding and French decimals"
+nick = "Rigor"
+sources = "Inflation was 2.4% in 2025; fixed costs: 1 934 € a month."
+text = "Avec une inflation de 2,4 % et ~1 900 € de charges, le fonds doit couvrir 6 mois."
+flaws = ["unsourced:6 mois"]
+
+[[turn]]
+name = "estimate label on a researched price"
+nick = "Fixer"
+sources = "# Fresh facts\n- Crucial 32 GB DDR4 stick: $233 (retailer, 2026-10)."
+given = "# Fresh facts\n- Crucial 32 GB DDR4 stick: $233 (retailer, 2026-10)."
+text = "Even at $233 (estimate, from memory) for 32 GB, the upgrade beats a new laptop."
+flaws = ["mislabelled:$233"]
+
+[[turn]]
+name = "a labelled estimate of something unknown"
+nick = "Rigor"
+sources = "The board is second-hand."
+text = "Assume a 40% (estimate, from memory) chance it fails within a year."
+flaws = ["unsourced:40%"]
+
+[[turn]]
+name = "formatting habits"
+nick = "Steelman"
+sources = ""
+text = "**Steelman:** @nick, I agree with @Rigor's point, but @Nunez and @Steelman miss one."
+flaws = ["self_prefix:**Steelman:**", "nick_literal:@nick", "unknown_mention:@Nunez", "self_mention:@Steelman"]
+
+[[turn]]
+name = "product names, emails and figures of speech"
+nick = "Specialist"
+sources = ""
+text = "An i7-11700K or a 10700K for €0 extra, mail a@b.com; I'm 100% sure. **Confidence:** 80%"
+flaws = []
+
+[[turn]]
+name = "a cost spread over the turn's own period"
+nick = "Value"
+sources = "The bridge costs $175 in all."
+text = "The $175 over 3 years is $58/year; if it fails at 6 months, the risk is real."
+# Both periods are the member's own; 3 isn't 6 - 3 (a figure never derives itself).
+flaws = ["unsourced:3 years", "unsourced:6 months"]
+
+[[turn]]
+name = "a written division"
+nick = "Value"
+sources = "Path A costs €125. Path B costs €750."
+text = "Path A: €125 / 3 = **€42/year**. Path B: €750 divided by 5 = €150/year."
+flaws = []
+
+[[turn]]
+name = "a per-year figure with no written operation stays unsourced"
+nick = "Value"
+sources = "Path B costs €750."
+text = "Path B: €750, so about €190/year."
+flaws = ["unsourced:€190"]
+
+[[turn]]
+name = "the label after a size belongs to the price"
+nick = "Fixer"
+sources = "A Latvian shop lists 1 TB NVMe drives at €82–85."
+given = "A Latvian shop lists 1 TB NVMe drives at €82–85."
+text = "Budget about €85 for a 1 TB NVMe (estimate, from memory)."
+flaws = ["mislabelled:€85"]
+
+[[turn]]
+name = "an estimate in another currency is not mislabelled"
+nick = "Value"
+sources = "Used 32 GB sticks are roughly $110–180."
+given = "Used 32 GB sticks are roughly $110–180."
+text = "That is about €110 a stick (estimate, from memory)."
+flaws = []
+
+[[turn]]
+name = "a truncated price is sourced"
+nick = "Value"
+sources = "Refurbished T14 Gen 4: €858.90–€899."
+text = "Refurbished Gen 4 units start at €858, above the ceiling."
+flaws = []
+
+[[turn]]
+name = "a written division of a sum"
+nick = "Value"
+sources = "A 32 GB DDR5 kit is €450."
+text = "3-year cost: (€450 RAM + €550 CPU/MB) / 3 = **€333/year**."
+flaws = ["unsourced:€550"]
+
+[[turn]]
+name = "a topic's own unit makes a figure, at the rate its facts state"
+nick = "Value"
+sources = "I have 40 pity. Locking in a featured Resonator costs at most 160 pulls, or 25,600 Astrite."
+given = "Locking in a featured Resonator costs at most 160 pulls, or 25,600 Astrite."
+text = "From 40 pity that is 120 pulls (19,200 Astrite) at worst."
+flaws = []
+
+[[turn]]
+name = "an invented price per unit of the topic"
+nick = "Value"
+sources = "I have 40 pity. Locking in a featured Resonator costs at most 160 pulls, or 25,600 Astrite."
+given = "Locking in a featured Resonator costs at most 160 pulls, or 25,600 Astrite."
+text = "The worst case is 120 pulls × 200 = 24,000 Astrite, at 200 Astrite per pull."
+flaws = ["unsourced:120 pulls", "unsourced:24,000 Astrite", "unsourced:200 Astrite"]
+
+[[turn]]
+name = "a figure isn't itself plus a small figure of the turn"
+nick = "Value"
+sources = "I have 40 pity. Locking in a featured Resonator costs at most 160 pulls, or 25,600 Astrite."
+given = "Locking in a featured Resonator costs at most 160 pulls, or 25,600 Astrite."
+text = "Roughly 8 k Astrite (40 × 200 Astrite per pull)."
+flaws = ["unsourced:8 k Astrite", "unsourced:200 Astrite"]
+
+[[turn]]
+name = "a topic unit after a hyphen"
+nick = "Value"
+sources = "Hard pity guarantees a 5-star within 80 pulls."
+given = "Hard pity guarantees a 5-star within 80 pulls."
+text = "With the standard 50‑pull pity you are close."
+flaws = ["unsourced:50‑pull"]
+
+
+[[turn]]
+name = "the user's pulls read as currency"
+nick = "Fan"
+given = "Shards buy pulls; hard pity is at 80 pulls."
+sources = "Shards buy pulls; hard pity is at 80 pulls.\n<User> I have 60 pulls saved."
+text = "Since you have 60 Shards saved, pull now."
+flaws = ["wrong_unit:60 Shards"]
+
+[[turn]]
+name = "pity counts read as currency"
+nick = "Fan"
+given = "Shards buy pulls; hard pity is at 80 pulls."
+sources = "Shards buy pulls; hard pity is at 80 pulls.\n<User> I'm at 40 pity."
+text = "Spending 40–80 Shards now could leave you short."
+flaws = ["wrong_unit:40–80 Shards"]
+
+[[turn]]
+name = "a price written as a word"
+nick = "Fan"
+given = "Shards buy pulls; hard pity is at 80 pulls."
+sources = "Shards buy pulls; hard pity is at 80 pulls. [1] source"
+text = "Each pull costs one Shard, so 10 Shards is plenty."
+flaws = ["unsourced:one Shard", "unsourced:10 Shards"]
+
+[[turn]]
+name = "a number also given bare, a confidence line and the same unit are no wrong unit"
+nick = "Fan"
+given = "Shards buy pulls; hard pity is at 80 pulls. Daily missions give 60 Shards."
+sources = "Shards buy pulls; hard pity is at 80 pulls. Daily missions give 60 Shards.\n<User> I have 60 pulls saved, level 70.\n<Saver> Confidence: 50"
+text = "With 60 Shards a day and 70 Shards from events, 50 Shards is a week's top-up."
+flaws = []
+
+[[turn]]
+name = "words that are no named unit: years, compounds, lowercase words"
+nick = "Rigor"
+given = "The board failed in 2019; boards cost $125. Prices averaged 95 cents."
+sources = "The board failed in 2019; boards cost $125. Prices averaged 95 cents. It sold 3 boards."
+text = "A one-time fix, two boards at most, before a 2027 build; 3 average."
+flaws = []

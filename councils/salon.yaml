@@ -1,0 +1,12 @@
+name: salon
+description: Philosophers' salon on big questions, for fun
+moderator: chair
+members: [socrates, plato, nietzsche, epicurus]
+# Light entertainment: nothing to remember, and no decision to settle early.
+memory: off
+protocol:
+  blind_first_round: true
+  max_rounds: 5
+  auto_stop_on_consensus: false
+  stall_rounds: 0
+  rebuttal_style: targeted

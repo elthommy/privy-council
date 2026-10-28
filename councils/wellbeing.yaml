@@ -1,0 +1,11 @@
+name: wellbeing
+description: Well-being, habits and personal development
+moderator: chair
+members: [stoic, coach, kindness, vitality, contrarian]
+# Read your shared facts for context, but write nothing back: sensitive topics.
+memory: read_only
+protocol:
+  blind_first_round: true
+  max_rounds: 6
+  auto_stop_on_consensus: true
+  rebuttal_style: targeted

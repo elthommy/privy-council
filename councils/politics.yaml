@@ -1,0 +1,13 @@
+name: politics
+description: Current political and social questions
+moderator: chair
+members: [empiricist, sociologist, polsci, historian, steelman]
+# Read your shared facts for context, but write nothing back: political opinions are sensitive.
+memory: read_only
+protocol:
+  blind_first_round: true
+  max_rounds: 6
+  auto_stop_on_consensus: true
+  rebuttal_style: targeted
+  # Chair searches the web before framing the debate; no session runs without facts.
+  require_research: true

@@ -1,0 +1,14 @@
+name: history
+description: Historical and military-history questions
+moderator: chair
+members: [historian, logistician, strategist, counterfactual]
+# Read your shared facts, but save no notes: history facts don't move, and old
+# conclusions would anchor new debates. Turn it on for a series of linked questions.
+memory: read_only
+protocol:
+  blind_first_round: true
+  max_rounds: 6
+  auto_stop_on_consensus: true
+  rebuttal_style: targeted
+  # Chair searches the web before framing the debate; no session runs without facts.
+  require_research: true

@@ -1,0 +1,135 @@
+# Defaults for council. Put personal overrides in config.local.toml (gitignored).
+
+[paths]
+personas = "personas"
+councils = "councils"
+data = "data"
+
+[claude]
+binary = "claude"
+default_model = "sonnet"
+timeout_s = 180
+session_soft_cap_calls = 50
+daily_soft_cap_calls = 200
+quota_warn_utilization = 0.8   # real Pro quota, seen in each streamed call
+fallback_to_local = false
+fallback_model = "qwen3.6:latest"   # fast MoE: stands in for Claude personas when quota runs out
+
+[ollama]
+base_url = "http://localhost:11434"
+timeout_s = 600   # qwen3.6:27b at ~5 tok/s: a full 1500-token answer takes ~300 s
+concurrency = 1
+keep_alive = "10m"
+
+# qwen3.6:27b: dense 27B, ~5.5 tok/s mostly on CPU; persona turns take 30-100 s.
+# The local personas' model since 2026-10-18: in replayed turns it kept the user's
+# details straight where the MoE below mixed them up (scripts/replay_turn.py).
+[ollama.models."qwen3.6:27b"]
+num_ctx = 12288   # 8k dropped every recent message once a file was attached (spike 5)
+think = false   # thinks by default; at ~5 tok/s a draft would take minutes
+
+# qwen3.6: 36B MoE (~3B active); runs ~64% CPU / 36% GPU at ~40 tok/s on 12 GB VRAM.
+# Now the Claude fallback only.
+# Benchmarked 2026-10-16: a persona turn takes ~7 s warm, 18 s to load once.
+[ollama.models."qwen3.6:latest"]
+num_ctx = 12288   # 8k dropped every recent message once a file was attached (spike 5)
+num_batch = 4096   # prefill 3.5x faster (16.4 -> 4.7 s on 8.7k tokens), same tok/s (spike 6)
+think = false   # thinks by default; on, turns ran 36-40 s (target: <= ~30 s)
+
+# gemma4:26b: 25B MoE (8 of 128 experts active); ~20% CPU / 80% GPU, ~37 tok/s.
+# Used by Contrarian for a different model family (brief G1). Switching between it
+# and qwen3.6 costs ~11-13 s per GPU swap (benchmarked 2026-10-16).
+[ollama.models."gemma4:26b"]
+num_ctx = 12288   # 8k dropped every recent message once a file was attached (spike 5)
+num_batch = 2048   # prefill 2.4x faster, same tok/s; 4096 costs 13% tok/s (spike 6)
+think = false   # thinks by default; on, the draft eats the 1500-token cap (empty answers)
+
+# Third families (2026-10-18), chosen with scripts/replay_turn.py: in replayed turns
+# they broke the qwen personas' echo (same arguments, same key assumption) and
+# kept their own role. Pragmatist runs on gpt-oss:120b, Vitality on nemotron.
+# Realist moved from gpt-oss to Super after the M11 live check.
+# gpt-oss:120b: 117B MoE (~5B active), 65 GB, mostly in RAM; ~16 tok/s, 25-50 s
+# turns, ~60 s to load cold. Thinking can't be turned off, only kept low.
+[ollama.models."gpt-oss:120b"]
+num_ctx = 12288
+num_batch = 4096   # prefill 5x faster (54 -> 11 s on 8k tokens), same tok/s (spike 6)
+think = "low"
+
+# nemotron-3.5-super: 120B hybrid MoE (~12B active), 90 GB, mostly in RAM; ~5-6 tok/s,
+# 1.5-5 min turns (prompt processing dominates). Replaced lightning.
+[ollama.models."nemotron-3.5-super:latest"]
+num_ctx = 12288
+num_batch = 4096   # prefill 3.2x faster, ~12% fewer tok/s; 8192 leaves no VRAM for layers (spike 6)
+think = false   # thinks by default
+
+# nemotron-3.5-lightning: 30B hybrid MoE (~3B active); ~30 tok/s, 11-22 s turns. No seat since Super replaced it.
+[ollama.models."nemotron-3.5-lightning:latest"]
+num_ctx = 12288
+think = false   # thinks by default
+
+# Kimi-Linear-48B-A3B (~3B active, linear attention); ~24 tok/s. M15 Chair and member
+# candidate, not adopted (Ollama applies no `format` grammar to it). No seat.
+# bartowski's GGUFs (user downloads, 2026-10-24); Q4_K_M 30 GB, Q6_K 40 GB.
+[ollama.models."hf.co/bartowski/moonshotai_Kimi-Linear-48B-A3B-Instruct-GGUF:Q4_K_M"]
+num_ctx = 12288
+
+[ollama.models."hf.co/bartowski/moonshotai_Kimi-Linear-48B-A3B-Instruct-GGUF:Q6_K"]
+num_ctx = 12288
+
+[ollama.models."qwen3:8b"]
+num_ctx = 8192
+think = false   # qwen3 thinks by default; see docs/spike-notes.md
+
+[engine]
+context_last_k_messages = 6
+max_output_tokens = 1500   # hard cap per turn, a safety net; prompts ask for concision
+max_turn_chars_display = 2000
+max_flaw_prompts_per_round = 2   # turns asking members to check a caught error; 0: off
+
+[memory]
+private_cap_bytes = 4096
+shared_cap_bytes = 4096
+require_shared_approval = true   # also for merging user.md when it outgrows its cap
+context_share = 0.2              # max share of a prompt's budget used by memory
+scope = "council"                # "council": personas recall only notes from the same council; "global": all
+
+[dossier]
+summarize_over_tokens = 4000  # larger attached files are summarized once by the Chair
+max_file_bytes = 1000000      # bigger files are refused
+csv_head_rows = 10            # a summarized CSV keeps its header and first rows verbatim
+context_share = 0.4           # max share of a prompt's budget used by the dossier
+
+[research]
+enabled = true                # false: /research is off unless `council new --research`
+auto_max_per_session = 10      # searches the Chair starts on its own before asking you;
+                              # your /research is never capped
+timeout_s = 300               # one call may run several web searches
+max_output_tokens = 3000
+context_share = 0.25          # max share of a member's prompt budget used by the facts
+provider = "claude"           # normal sessions: "claude" (its web search), "local" (SearXNG,
+                              # Claude writes queries and summary) or "auto" (SearXNG only when
+                              # Claude can't search); "local"/"auto" need [research.local] enabled.
+                              # Local-only and Discord sessions always use SearXNG, never Claude.
+
+[research.local]              # web search via SearXNG: local-only sessions, provider local/auto
+enabled = false               # true = your consent: search queries leave this PC
+base_url = "http://127.0.0.1:8888"   # scripts/searxng.sh start (Podman)
+max_queries = 4               # queries the Chair may write per search
+results_per_query = 5
+max_results = 12              # snippets the Chair summarizes, after merging the queries
+timeout_s = 20                # per query
+manage_container = true       # start SearXNG for a session that needs it; stop it after
+follow_up = true              # before round 1, search again for what the first note says is missing
+
+[local_only]                  # M15: no Claude at all; Claude seats run on local models
+enabled = false               # true: `council new` / `compare new` default to --local-only
+default_model = "gpt-oss:120b"                  # Claude seats not listed below
+moderator_model = "nemotron-3.5-super:latest"   # the Chair (M15 bench)
+moderator_num_ctx = 24576     # for every seat on moderator_model (one size: no reloads)
+
+[local_only.seats]            # persona slug -> Ollama model
+forecaster = "nemotron-3.5-super:latest"
+specialist = "nemotron-3.5-super:latest"
+empiricist = "nemotron-3.5-super:latest"
+counsel = "qwen3.6:27b"
+kindness = "qwen3.6:27b"

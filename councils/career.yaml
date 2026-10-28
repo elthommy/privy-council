@@ -1,0 +1,9 @@
+name: career
+description: Job security, career moves and labour-market shifts
+moderator: chair
+members: [rigor, counsel, skeptic, optimist, contrarian]
+protocol:
+  blind_first_round: true
+  max_rounds: 6
+  auto_stop_on_consensus: true
+  rebuttal_style: targeted

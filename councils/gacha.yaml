@@ -1,0 +1,32 @@
+name: gacha
+description: Gacha games, whether a banner character or weapon is worth the pulls
+moderator: chair
+members: [meta, saver, fan, contrarian]
+protocol:
+  blind_first_round: true
+  max_rounds: 4
+  auto_stop_on_consensus: true
+  rebuttal_style: targeted
+  # Local models know little about current banners: search the kit, banner and reruns first.
+  require_research: true
+# Chair's context for this council: Chair stays one persona everywhere.
+research_focus: >-
+  the game the character is from, the character's role and kit, and the current banner
+  dates and reruns, searched under the character's name alone (never a game the
+  question doesn't name); and the game's pity and 50/50 rules and the price of one pull
+  in its currency, searched under the game's name once a result names it (they are the
+  same for every banner)
+moderator_brief: |
+  # This council
+  A gacha answer turns on facts about the user's account that the question rarely
+  gives. Until the user has said them, ask for them in your questions to the user,
+  most decisive first:
+  - whether their next 5★ is guaranteed or a 50/50 (guaranteed, the worst case drops
+    to the pulls left before hard pity);
+  - their pity count, if the question doesn't give it;
+  - how many pulls (or how much currency) they have, and roughly what they earn per patch;
+  - which game, if neither the question nor the research names it;
+  - whether they want the character for their teams or for the collection.
+  Members often invent pity rules, rates, kits and the price of a pull: press any such
+  figure the facts don't give, and check pull counts times the price per pull against
+  the facts.

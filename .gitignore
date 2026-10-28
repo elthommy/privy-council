@@ -1,0 +1,19 @@
+# Personal data — never commit
+data/
+config.local.toml
+sessions/
+memory/
+# ...except the memory code and test packages
+!src/privy_council/memory/
+!tests/memory/
+
+# Python / tooling
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/
