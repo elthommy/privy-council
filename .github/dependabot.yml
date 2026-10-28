@@ -1,0 +1,31 @@
+# Version updates: once a week, Saturday 08:00 Paris time.
+# Security updates don't follow this schedule: with Dependabot security updates
+# enabled in the repository settings, they open a PR as soon as an advisory lands.
+version: 2
+updates:
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "saturday"
+      time: "08:00"
+      timezone: "Europe/Paris"
+    # One PR for all minor and patch bumps; majors get their own PR.
+    groups:
+      python-minor-and-patch:
+        update-types: ["minor", "patch"]
+    commit-message:
+      prefix: "build(deps)"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "saturday"
+      time: "08:00"
+      timezone: "Europe/Paris"
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "ci(deps)"
