@@ -29,6 +29,27 @@ jobs:
       - name: ruff check
         run: uv run --locked ruff check --output-format=github .
 
+  # A backstop: push protection blocks known tokens before they land, and a local
+  # pre-commit hook runs gitleaks too. This also covers pull requests from others.
+  secrets:
+    name: Secrets (gitleaks)
+    runs-on: ubuntu-latest
+    env:
+      GITLEAKS_VERSION: "8.30.1"
+      GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # the whole history, not just the last commit
+      - name: Install gitleaks
+        run: |
+          tarball="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfLO "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${tarball}"
+          echo "${GITLEAKS_SHA256}  ${tarball}" | sha256sum --check
+          tar -xzf "${tarball}" gitleaks
+      - name: gitleaks
+        run: ./gitleaks git . --redact --no-banner --exit-code 1
+
   test:
     name: Tests (Python ${{ matrix.python }})
     runs-on: ubuntu-latest
