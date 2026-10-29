@@ -240,14 +240,18 @@ def register_commands(
     council_choice = [app_commands.Choice(name=label, value=value) for label, value in choices]
 
     async def reply(
-        interaction: discord.Interaction, name: str, arg: str = "", council: str = ""
+        interaction: discord.Interaction,
+        name: str,
+        arg: str = "",
+        council: str = "",
+        username: str = "",
     ) -> None:
         """Answer privately; commands outside the council channel are refused."""
         await interaction.response.defer(ephemeral=True, thinking=True)
         channel = interaction.channel
         here = interaction.channel_id == bot.config.channel or bot.in_council(channel) is not None
         text = (
-            await bot.frontend.command(interaction.user.id, name, arg, council)
+            await bot.frontend.command(interaction.user.id, name, arg, council, username)
             if here
             else WRONG_PLACE
         )
@@ -264,17 +268,32 @@ def register_commands(
         """/ask."""
         await reply(interaction, "ask", question, council.value if council else "")
 
-    @tree.command(name="run", description="Run rounds (owner); default: the rest.", guild=guild)
+    @tree.command(
+        name="run",
+        description="Run rounds (owner, or handed over); default: the rest.",
+        guild=guild,
+    )
     async def run(interaction: discord.Interaction, rounds: int | None = None) -> None:
         """/run."""
         await reply(interaction, "run", str(rounds) if rounds else "")
 
+    @tree.command(
+        name="handover",
+        description="Let a friend /run, /pause, /vote, /close and /offline this debate (owner).",
+        guild=guild,
+    )
+    @app_commands.describe(friend="A friend on the council's list")
+    async def handover(interaction: discord.Interaction, friend: discord.User) -> None:
+        """/handover: by user ID; the username only names them in the debate."""
+        await reply(interaction, "handover", str(friend.id), username=friend.name)
+
     simple: dict[str, str] = {
-        "pause": "Pause at the next turn boundary (owner).",
-        "vote": "Ask every member for a final position (owner).",
-        "close": "End the debate with the synthesis (owner).",
-        "offline": "Stop after the current turn, save, disconnect (owner).",
+        "pause": "Pause at the next turn boundary (owner, or handed over).",
+        "vote": "Ask every member for a final position (owner, or handed over).",
+        "close": "End the debate with the synthesis (owner, or handed over).",
+        "offline": "Stop after the current turn, save, disconnect (owner, or handed over).",
         "resume": "Reopen the latest unfinished debate (owner).",
+        "takeback": "End the handover: only you run the debate again (owner).",
         "status": "Where the debate is, and who it waits for.",
         "flaws": "The errors caught so far.",
     }

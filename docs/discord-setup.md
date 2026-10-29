@@ -179,7 +179,7 @@ token = "paste-the-bot-token-here"
 guild = 123456789012345678          # Server ID
 channel = 123456789012345678        # #council's Channel ID (forum or text)
 owner = 123456789012345678          # your User ID: starts questions, /run, /offline
-allowed_users = [                   # friends' User IDs: speak and answer the Chair
+allowed_users = [                   # friends' User IDs: speak, answer the Chair (/handover: run one)
   234567890123456789,
 ]
 # Optional:
@@ -209,10 +209,20 @@ with yours or a persona's. `names` overrides it.
 | Command | Who | What |
 |---|---|---|
 | `/ask question [council]` | owner | start a debate in a new post (one at a time); `council` is a dropdown of the councils, default `[chat.discord] council` |
-| `/run [rounds]` | owner | run rounds (default: the rest); the Chair's questions wait for the person asked |
-| `/pause`, `/vote`, `/close` | owner | pause at the next turn, final positions, the synthesis |
-| `/offline`, `/resume` | owner | stop after the current turn and disconnect; reopen later |
+| `/run [rounds]` | owner, or handed over | run rounds (default: the rest); the Chair's questions wait for the person asked |
+| `/pause`, `/vote`, `/close` | owner, or handed over | pause at the next turn, final positions, the synthesis |
+| `/offline` | owner, or handed over | stop after the current turn and disconnect |
+| `/resume` | owner | reopen the latest unfinished debate |
+| `/handover friend`, `/takeback` | owner | let a friend on the list run the open debate while you're away; take it back |
 | `/status`, `/flaws` | everyone listed | where the debate is; errors caught so far |
+
+**Handing over.** `/handover` picks a friend from Discord's user list; only
+someone on `allowed_users` is accepted, and the thread says who holds the floor.
+They can then `/run`, `/pause`, `/vote`, `/close` and `/offline` that debate, but
+never `/ask`, `/resume` or hand it on. The handover ends when the debate closes,
+with `/takeback`, or when the bot restarts (a `/resume` starts with you alone). If
+the Chair asks *you* a question while you're away, the run waits
+`question_timeout_s`, then goes on without your answer.
 
 Everyone listed can write in the debate's thread: lines go to the council (up to
 10 per person per round), and an answer to a question from the Chair counts as

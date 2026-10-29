@@ -11,6 +11,7 @@ All notable changes, by milestone. Dates are when each milestone was built.
 - Councils can add context for the Chair (`moderator_brief`, `research_focus`) in their YAML.
 - Ollama `num_batch` per model.
 - `council personas new` refuses a drafted slug that would write outside `data/`.
+- Discord `/handover @friend` and `/takeback`: the owner lets a friend on the list run, pause, vote, close and take the bot offline for the open debate only (never `/ask` or `/resume`).
 - Research notes name the pages the Chair read (WebFetch), in the chat notice, `research.md` and exports; a fetch-only lookup no longer says "answered without searching the web".
 
 ## M15 — local-only mode (2026-10-24)

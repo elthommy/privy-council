@@ -55,11 +55,14 @@ change an entry point (a command, a front end, a network call, a file read);
   - *Discord* (`council chat discord`): the only input reachable from outside the
     PC, through an outbound connection only (no open port). Friends are allowlisted
     by **user ID**; they can only speak, answer the Chair, and read `/status` and
-    `/flaws`. The bot's commands are a fixed table (never `/attach`, `/export`,
-    `/research`, memory or roster commands), chat text never reaches the REPL/TUI
-    parser, nothing pings, local paths and raw errors stay in the local log, and
-    messages are capped in size and per round. Chat sessions are always local-only
-    with memory off.
+    `/flaws`. The owner may `/handover` the open debate to one or more of them:
+    those friends can also `/run`, `/pause`, `/vote`, `/close` and `/offline` it,
+    never `/ask`, `/resume` or hand it on. The handover ends with that debate,
+    `/takeback` or a restart (never saved). The bot's commands are a fixed table
+    (never `/attach`, `/export`, `/research`, memory or roster commands), chat text
+    never reaches the REPL/TUI parser, nothing pings, local paths and raw errors
+    stay in the local log, and messages are capped in size and per round. Chat
+    sessions are always local-only with memory off.
   - *Dossier files*: the owner's own, but their content goes to models. The dossier
     itself never goes into web search prompts; the Chair's debate state does, and it
     may summarize the dossier (accepted: queries are short and rarely carry it).

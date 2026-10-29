@@ -6,8 +6,10 @@ calls engine methods; `engine/` imports nothing from here. The platform adapter
 
 Rules from the M16 security review: chat text never reaches the REPL/TUI command
 parser (commands are this module's own table, without /attach, /export, /research,
-memory or roster commands); the owner alone starts, runs and closes debates;
-people are known by user ID, never by name; posts never ping anyone (the adapter).
+memory or roster commands); the owner alone starts debates, and runs and closes
+them unless they hand the open one over to a friend on the list (`/handover`: that
+debate only, never saved, so a restart or `/resume` takes it back); people are
+known by user ID, never by name; posts never ping anyone (the adapter).
 """
 
 from __future__ import annotations
@@ -30,9 +32,17 @@ from privy_council.tui.commands import flaws_text, parse_count
 
 log = logging.getLogger(__name__)
 
-OWNER_COMMANDS = {"ask", "run", "pause", "vote", "close", "offline", "resume"}
+# A friend the owner hands the open debate over to may run these too.
+HANDOVER_COMMANDS = {"run", "pause", "vote", "close", "offline"}
+OWNER_COMMANDS = {"ask", "resume", "handover", "takeback"} | HANDOVER_COMMANDS
 OPEN_COMMANDS = {"status", "flaws"}
 NOT_ALLOWED = "Only the council's owner can do that."
+NOT_HANDED = "Only the owner, or a friend they hand the debate over to, can do that."
+HANDED = (
+    "**The owner handed the floor to @{name}**: they can /run, /pause, /vote, /close and "
+    "/offline this debate."
+)
+TAKEN_BACK = "**The owner took the floor back.**"
 NOT_LISTED = "You're not on this council's list."
 NO_DEBATE = "No debate is open: the owner starts one with /ask."
 BUSY = "The council is busy; wait for this step to end, or /pause."
@@ -126,6 +136,7 @@ class ChatFrontend:
         self._asked: set[int] = set()
         self._waiting: dict[int, asyncio.Event] = {}
         self._lines: dict[int, int] = {}
+        self._hosts: set[int] = set()  # friends handed the open debate (never saved)
         self._offline = False
 
     # --- lifecycle ------------------------------------------------------------------
@@ -166,6 +177,7 @@ class ChatFrontend:
     def _attach(self, engine: DebateEngine, thread: int, entry: ChatThread | None) -> None:
         """Make `engine` the open debate, posting its events in `thread`."""
         self.engine, self.thread = engine, thread
+        self._hosts = set()  # a handover never outlives its debate
         reserved = [engine.user_name, *engine.personas, *(p.name for p in engine.personas.values())]
         self.names = NameBook(reserved, entry.names if entry else None)
         self._remember()
@@ -289,13 +301,14 @@ class ChatFrontend:
         """Keep a command sent as text out of the debate; tell the owner, not guests.
 
         Discord sends "/offline" as an ordinary line unless it is picked from the
-        command list. Only the owner gets the hint, so nobody can make the bot post.
+        command list. Only the owner (and a friend they handed over to) gets the
+        hint, so other guests can't make the bot post.
         """
         m = _TYPED.match(text)
         if m is None or m["name"] not in OWNER_COMMANDS | OPEN_COMMANDS:
             return False
         log.info("chat: /%s typed as text by %s, not run", m["name"], user_id)
-        if user_id == self.config.owner:
+        if user_id == self.config.owner or self._is_host(user_id):
             self._say(TYPED_COMMAND.format(command=f"/{m['name']}"))
         return True
 
@@ -309,15 +322,23 @@ class ChatFrontend:
 
     # --- commands -------------------------------------------------------------------
 
-    async def command(self, user_id: int, name: str, arg: str = "", council: str = "") -> str:
+    async def command(
+        self, user_id: int, name: str, arg: str = "", council: str = "", username: str = ""
+    ) -> str:
         """Run one slash command; return the private reply for the person who sent it.
 
         Each command is logged (name, user ID, role, reply), never its argument: a
         question is personal. /status and /flaws replies are debate content: not logged.
+        `/handover` takes the friend's user ID as `arg` and their `username`.
         """
         role = self.role(user_id)
+        if role == "guest" and self._is_host(user_id):
+            role = "host"
         log.info("chat command /%s from %s (%s)", name, user_id, role or "not listed")
-        reply = await self._command(user_id, role, name, arg, council)
+        if name == "handover" and role == "owner":
+            reply = self._handover(arg, username)
+        else:
+            reply = await self._command(user_id, role, name, arg, council)
         log.info("chat command /%s: %s", name, "replied" if name in OPEN_COMMANDS else reply)
         return reply
 
@@ -327,10 +348,14 @@ class ChatFrontend:
         """Check the person's rights, then run the command."""
         if role is None:
             return NOT_LISTED
-        if name in OWNER_COMMANDS and role != "owner":
+        if name in HANDOVER_COMMANDS and role not in ("owner", "host"):
+            return NOT_HANDED
+        if name in OWNER_COMMANDS - HANDOVER_COMMANDS and role != "owner":
             return NOT_ALLOWED
         if name not in OWNER_COMMANDS | OPEN_COMMANDS:
             return f"Unknown command /{name}."
+        if name == "takeback":
+            return self._takeback()
         if name == "ask":
             return await self._ask(arg, council or self.config.council)
         if name == "resume":
@@ -348,6 +373,37 @@ class ChatFrontend:
             engine.request_pause()
             return "Pausing at the next turn boundary."
         return self._engine_command(engine, name, arg)
+
+    def _is_host(self, user_id: int) -> bool:
+        """Whether the open, unfinished debate was handed over to this friend."""
+        engine = self.engine
+        return user_id in self._hosts and engine is not None and engine.phase is not Phase.DONE
+
+    def _handover(self, arg: str, username: str) -> str:
+        """Let a friend on the list run, pause, vote, close and /offline the open debate."""
+        engine = self.engine
+        if engine is None or engine.phase is Phase.DONE:
+            return NO_DEBATE
+        uid = int(arg) if arg.isdigit() else None
+        if uid == self.config.owner:
+            return "You already hold the floor."
+        if uid is None or self.role(uid) != "guest":
+            return "Only a friend on the council's list can take the floor."
+        name = self._name(uid, username)
+        if uid not in self._hosts:
+            self._hosts.add(uid)
+            self._say(HANDED.format(name=name))
+        return (
+            f"@{name} can now run, pause, vote, close and /offline this debate; /takeback ends it."
+        )
+
+    def _takeback(self) -> str:
+        """End every handover of the open debate."""
+        if not self._hosts:
+            return "Nobody else holds the floor."
+        self._hosts = set()
+        self._say(TAKEN_BACK)
+        return "You hold the floor alone again."
 
     def _engine_command(self, engine: DebateEngine, name: str, arg: str) -> str:
         """Start /run, /vote or /close in the background."""
@@ -401,9 +457,11 @@ class ChatFrontend:
         rt = engine.meta.runtime
         busy = "busy" if engine.busy else "idle"
         waiting = ", ".join(self._display(uid, engine) for uid in self._waiting) or "nobody"
+        hosts = [self._display(uid, engine) for uid in sorted(self._hosts) if self._is_host(uid)]
+        handed = f" Handed over to {', '.join(hosts)}." if hosts else ""
         return (
             f"{engine.council.name}: {engine.phase.value}, round {rt.round}/{engine.max_rounds}, "
-            f"{busy}; waiting for {waiting}."
+            f"{busy}; waiting for {waiting}.{handed}"
         )
 
     def _display(self, user_id: int, engine: DebateEngine) -> str:

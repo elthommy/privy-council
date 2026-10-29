@@ -7,16 +7,23 @@ import logging
 from pathlib import Path
 from typing import Any
 
+import discord
 import pytest
 from pydantic import SecretStr
 
+from privy_council.chat.discord_bot import CouncilBot
 from privy_council.chat.frontend import (
+    HANDED,
     LINE_LIMIT,
     NO_DEBATE,
     NOT_ALLOWED,
+    NOT_HANDED,
     NOT_LISTED,
     OFFLINE,
     ONE_AT_A_TIME,
+    OPEN_COMMANDS,
+    OWNER_COMMANDS,
+    TAKEN_BACK,
     TYPED_COMMAND,
     ChatFrontend,
     ChatSetupError,
@@ -147,8 +154,10 @@ async def test_permissions_and_the_command_table(
     await chat.fe.start()
     assert await chat.fe.command(STRANGER, "status") == NOT_LISTED
     assert await chat.fe.command(ANA, "status") == NO_DEBATE
-    for name in ("ask", "run", "close", "offline", "resume", "vote", "pause"):
+    for name in ("ask", "resume", "handover", "takeback"):
         assert await chat.fe.command(ANA, name, "x") == NOT_ALLOWED
+    for name in ("run", "close", "offline", "vote", "pause"):
+        assert await chat.fe.command(ANA, name, "x") == NOT_HANDED
     for name in ("attach", "export", "research", "keep", "forget", "summon", "kick", "lang", "log"):
         assert (await chat.fe.command(OWNER, name, "x")).startswith("Unknown command")
     assert await chat.fe.command(OWNER, "ask", "Q?", "nope") == "Unknown council 'nope'."
@@ -382,3 +391,93 @@ async def test_friends_can_read_status_and_flaws(
     await chat.ask()
     reply = await chat.fe.command(ANA, name)
     assert reply and reply != NOT_ALLOWED
+
+
+async def test_handover_lets_one_friend_run_and_close_the_debate(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    chat = Chat(tmp_path, personas)
+    await chat.ask()
+    assert await chat.fe.command(ANA, "run") == NOT_HANDED
+    reply = await chat.fe.command(OWNER, "handover", str(ANA), username="ana.m")
+    assert reply.startswith("@ana-m can now run")
+    await chat.fe.drain()
+    assert chat.transport.texts()[-1] == HANDED.format(name="ana-m")
+    await chat.fe.command(OWNER, "handover", str(ANA), username="ana.m")
+    await chat.fe.drain()
+    assert chat.transport.texts().count(HANDED.format(name="ana-m")) == 1  # announced once
+    assert "Handed over to @ana-m." in await chat.fe.command(BEN, "status")
+
+    for name in ("ask", "resume", "handover", "takeback"):
+        assert await chat.fe.command(ANA, name, str(BEN)) == NOT_ALLOWED
+    assert await chat.fe.command(BEN, "run") == NOT_HANDED
+    assert await chat.fe.command(ANA, "run", "1") == "Running 1 round(s)."
+    await chat.fe.drain()
+    assert await chat.fe.command(ANA, "pause") == "Pausing at the next turn boundary."
+    assert await chat.fe.command(ANA, "close") == "Closing: the synthesis comes next."
+    await chat.fe.drain()
+    assert chat.harness.engine.phase is Phase.DONE
+    # The handover ended with its debate.
+    assert await chat.fe.command(ANA, "run") == NOT_HANDED
+    assert "Handed over" not in await chat.fe.command(ANA, "status")
+    assert await chat.fe.command(OWNER, "handover", str(ANA)) == NO_DEBATE
+
+
+async def test_handover_refuses_anyone_off_the_list(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    chat = Chat(tmp_path, personas)
+    await chat.fe.start()
+    assert await chat.fe.command(OWNER, "handover", str(ANA)) == NO_DEBATE
+    await chat.ask()
+    refused = "Only a friend on the council's list can take the floor."
+    for arg in (str(STRANGER), "", "ana", "-2"):
+        assert await chat.fe.command(OWNER, "handover", arg) == refused
+    await chat.fe.drain()
+    assert await chat.fe.command(OWNER, "handover", str(OWNER)) == "You already hold the floor."
+    assert await chat.fe.command(STRANGER, "handover", str(STRANGER)) == NOT_LISTED
+    assert await chat.fe.command(STRANGER, "run") == NOT_LISTED
+    assert HANDED.split("@")[0] not in "".join(chat.transport.texts())
+
+
+async def test_takeback_and_a_new_debate_end_the_handover(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    chat = Chat(tmp_path, personas)
+    await chat.ask()
+    assert await chat.fe.command(OWNER, "takeback") == "Nobody else holds the floor."
+    await chat.fe.command(OWNER, "handover", str(ANA), username="ana")
+    await chat.fe.command(OWNER, "handover", str(BEN), username="ben")
+    assert await chat.fe.command(OWNER, "takeback") == "You hold the floor alone again."
+    await chat.fe.drain()
+    assert chat.transport.texts()[-1] == TAKEN_BACK
+    assert await chat.fe.command(BEN, "vote") == NOT_HANDED
+
+    await chat.fe.command(OWNER, "handover", str(ANA), username="ana")
+    chat.fe._attach(chat.harness.engine, THREAD, None)  # what /ask and /resume do
+    assert await chat.fe.command(ANA, "run") == NOT_HANDED
+
+
+async def test_a_friend_handed_over_can_take_the_bot_offline(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    chat = Chat(tmp_path, personas)
+    await chat.ask()
+    await chat.fe.command(OWNER, "handover", str(ANA), username="ana")
+    chat.fe.on_message(ANA, "ana", THREAD, "/run")
+    await chat.fe.drain()
+    assert chat.transport.texts()[-1] == TYPED_COMMAND.format(command="/run")
+    assert await chat.fe.command(ANA, "offline") == "Going offline."
+    await chat.fe.drain()
+    assert chat.fe.stopped.is_set() and chat.transport.texts()[-1] == OFFLINE
+
+
+async def test_the_bot_declares_exactly_the_front_ends_commands() -> None:
+    bot = CouncilBot(config(), lambda transport: None, {"finance": "Money"})  # type: ignore[arg-type,return-value]
+    commands = bot.tree.get_commands(guild=discord.Object(id=10))
+    assert {c.name for c in commands} == OWNER_COMMANDS | OPEN_COMMANDS
+    payload = {c.name: c.to_dict(bot.tree) for c in commands}
+    assert all(len(p["description"]) <= 100 for p in payload.values())
+    (friend,) = payload["handover"]["options"]
+    assert friend["type"] == discord.AppCommandOptionType.user.value and friend["required"]
+    await bot.close()
