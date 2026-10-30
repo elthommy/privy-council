@@ -2,7 +2,7 @@
 
 All notable changes, by milestone. Dates are when each milestone was built.
 
-## Unreleased (2026-10-25 – 2026-10-28)
+## Unreleased (2026-10-25 – 2026-10-30)
 
 - **Discord front end** (`council chat discord`, `doctor --chat`): friends allowlisted by user ID debate with a local-only council in a forum thread; one webhook per persona with its avatar; a fixed command table (`/ask`, `/status`, `/flaws`, …); `/offline` and `/resume`; message size and per-round caps; no pings.
 - **Local web search** (opt-in `[research.local]`): SearXNG in Podman, started and stopped with the session; snippets only; the Chair's summary is checked against the hits (figures and URLs); a follow-up search for missing facts. `[research] provider = "claude" | "local" | "auto"` for normal sessions.
@@ -13,6 +13,9 @@ All notable changes, by milestone. Dates are when each milestone was built.
 - `council personas new` refuses a drafted slug that would write outside `data/`.
 - Discord `/handover @friend` and `/takeback`: the owner lets a friend on the list run, pause, vote, close and take the bot offline for the open debate only (never `/ask` or `/resume`).
 - Research notes name the pages the Chair read (WebFetch), in the chat notice, `research.md` and exports; a fetch-only lookup no longer says "answered without searching the web".
+- Seats no longer stay on "thinking…" while memory is written at close or during `/vote`; an Ollama CUDA out-of-memory error is retried once.
+- Research: later lookups are told which pages earlier ones read and not to fetch them again (a page cut off before the needed part comes back cut off the same way); the Chair skips lookups an earlier note says failed unless it names another source; each page is listed once.
+- A flaw check's floor line no longer repeats the flaw: the Chair's planned prompt loses its self-address and the sentences restating the error.
 
 ## M15 — local-only mode (2026-10-24)
 

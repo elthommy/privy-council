@@ -48,6 +48,58 @@ _MIN_QUOTED_CHARS = 30
 _QUOTE_MARKS = '"\u201c\u201d\u00ab\u00bb '
 # Flaws the moderator reports per update (M11); the engine prompts the first few.
 MAX_FLAWS = 4
+# Share of a planned sentence's words found in the flaw's quote and note for that
+# sentence to restate the flaw (Claude's Chair often did, 2026-10-30).
+RESTATED_OVERLAP = 0.6
+# Fewer words than this and a sentence ("Check it.") is too short to judge.
+_MIN_RESTATED_WORDS = 4
+_SENTENCE_END = re.compile(r"(?<=[.!?;])\s+")
+# Words too common to tell two sentences apart.
+_FILLER = frozenset(
+    {
+        "the",
+        "and",
+        "that",
+        "this",
+        "with",
+        "your",
+        "you",
+        "for",
+        "not",
+        "but",
+        "are",
+        "was",
+        "from",
+        "have",
+        "has",
+        "its",
+        "than",
+        "then",
+        "which",
+        "what",
+        "about",
+        "into",
+        "over",
+        "also",
+        "only",
+        "just",
+        "say",
+        "whether",
+        "les",
+        "des",
+        "une",
+        "est",
+        "que",
+        "qui",
+        "pas",
+        "pour",
+        "dans",
+        "ton",
+        "tes",
+        "avec",
+        "sur",
+    }
+)
 
 
 def moderator_schema(people: int = 1) -> dict[str, Any]:
@@ -402,10 +454,52 @@ def with_flaw_turns(
         planned = next((t for t in rest if t.speaker == flaw.member), None)
         if planned is not None:
             rest.remove(planned)
-        then = planned.prompt if planned is not None else None
+        then = _without_flaw(planned.prompt, flaw) if planned is not None else None
         prompt = prompts.flaw_turn_prompt(flaw.excerpt, flaw.note, lang, then)
         front.append(PendingTurn(speaker=flaw.member, prompt=prompt))
     return front + rest
+
+
+def _without_flaw(planned: str, flaw: Flaw) -> str | None:
+    """Return a planned prompt minus its @address and the sentences restating the flaw.
+
+    The flaw prompt already names the member and quotes the error, so "@Rigor, your
+    30% gives 11%, not 13%." after it only repeats; None when nothing else is left.
+    """
+    text = planned.strip()
+    address = _LEADING_MENTION.match(text)
+    if address and address.group(1).lower() == flaw.member:
+        text = text[address.end() :].lstrip(" ,:")
+    flaw_words = _content_words(f"{flaw.excerpt} {flaw.note}")
+    pieces = _SENTENCE_END.split(text)
+    keep = [not _restates(piece, flaw_words) for piece in pieces]
+    kept = []
+    for i, piece in enumerate(pieces):
+        if not keep[i]:
+            continue
+        if i > 0 and not keep[i - 1]:  # now starts a sentence: "Then say …" → "Say …"
+            piece = re.sub(r"^then\b[ ,:]*", "", piece, flags=re.IGNORECASE)
+            piece = piece[:1].upper() + piece[1:]
+        if piece.endswith(";") and i + 1 < len(pieces) and not keep[i + 1]:
+            piece = piece[:-1] + "."
+        kept.append(piece)
+    rest = " ".join(kept).strip()
+    if rest == planned.strip():
+        return rest
+    return rest[:1].upper() + rest[1:] if rest else None
+
+
+def _restates(sentence: str, flaw_words: set[str]) -> bool:
+    """Whether a sentence mostly repeats the flaw's quote and note."""
+    words = _content_words(sentence)
+    if len(words) < _MIN_RESTATED_WORDS:
+        return False
+    return len(words & flaw_words) / len(words) >= RESTATED_OVERLAP
+
+
+def _content_words(text: str) -> set[str]:
+    """Return the words of a text that carry meaning: numbers, and words of 3+ letters."""
+    return {w for w in _folded(text).split() if (len(w) > 2 or w[0].isdigit()) and w not in _FILLER}
 
 
 def to_pending(turns: Sequence[NextTurn]) -> list[PendingTurn]:

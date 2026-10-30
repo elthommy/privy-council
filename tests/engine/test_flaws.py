@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from privy_council.backends.base import CompletionRequest, CompletionResult
 from privy_council.backends.fake import Reply
 from privy_council.engine import prompts
@@ -101,6 +103,42 @@ def test_flaw_turns_go_first_one_per_member_within_the_cap() -> None:
     )
     assert turns[1].prompt.endswith(" Then: answer X")
     assert with_flaw_turns(planned, flaws, 0) == planned
+
+
+@pytest.mark.parametrize(
+    ("planned", "then"),
+    [
+        # Real Chair plans (2026-10-30): the restated flaw and the self-address go.
+        (
+            "@Rigor, with a 30% shut chance your own formula gives 11%, not 13%. Then say "
+            "which input you are least sure of.",
+            "Say which input you are least sure of.",
+        ),
+        (
+            "Your arithmetic gives 11% not 13% with a 30% shut chance; say which number you hold.",
+            "Say which number you hold.",
+        ),
+        # Another member's @nick and a new question stay.
+        (
+            "@Compounder says your 2-3x multiplier double-counts. Either drop it or name a "
+            "stress factor.",
+            "@Compounder says your 2-3x multiplier double-counts. Either drop it or name a "
+            "stress factor.",
+        ),
+        ("@Rigor: by your formula 30% gives 11%, not 13%.", None),
+    ],
+)
+def test_flaw_turn_drops_what_restates_the_flaw(planned: str, then: str | None) -> None:
+    flaw = Flaw(
+        member="rigor",
+        kind=FlawKind.ARITHMETIC,
+        excerpt="if it is 30%, my number rises to about 13%",
+        note="By Rigor's own formula, a 30% shut chance gives 11%, not 13%.",
+        by="moderator",
+    )
+    [turn] = with_flaw_turns([PendingTurn(speaker="rigor", prompt=planned)], [flaw], 2)
+    expected = "" if then is None else f" Then: {then}"
+    assert turn.prompt.endswith("whether it stands." + expected)
 
 
 def test_flaw_turn_prompt_in_french() -> None:
