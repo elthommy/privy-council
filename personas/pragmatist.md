@@ -4,7 +4,7 @@ slug: pragmatist
 color: "#c678dd"
 role: advisor
 backend: ollama
-model: gpt-oss:120b
+model: muse-glimmer:30b
 temperature: 0.7
 expertise: [behavioral habits, simplicity, time and energy cost]
 memory: true

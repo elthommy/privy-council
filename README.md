@@ -22,7 +22,7 @@ Privy Council is an independent project, not affiliated with Anthropic. It drive
 
 - Python 3.12+ and [uv](https://docs.astral.sh/uv/).
 - The `claude` CLI, logged in (`claude` once, interactively). `ANTHROPIC_API_KEY` is removed from its environment: council never uses the API.
-- [Ollama](https://ollama.com) with the models the personas use (see `council personas list`), e.g. `ollama pull qwen3.6:27b`, `ollama pull gemma4:26b`, `ollama pull gpt-oss:120b`, `ollama pull nemotron-3.5-super` (and `qwen3.6:latest` if you turn on the Claude fallback).
+- [Ollama](https://ollama.com) with the models the personas use (see `council personas list`), e.g. `ollama pull qwen3.6:27b`, `ollama pull gemma4:26b`, `ollama pull gpt-oss:120b`, `ollama pull muse-glimmer:30b`, `ollama pull nemotron-3.5-super` (and `qwen3.6:latest` if you turn on the Claude fallback).
 
 ```bash
 uv sync

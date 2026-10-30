@@ -46,7 +46,7 @@ think = false   # thinks by default; on, the draft eats the 1500-token cap (empt
 
 # Third families (2026-10-18), chosen with scripts/replay_turn.py: in replayed turns
 # they broke the qwen personas' echo (same arguments, same key assumption) and
-# kept their own role. Pragmatist runs on gpt-oss:120b, Vitality on nemotron.
+# kept their own role. Pragmatist ran on gpt-oss:120b (now muse-glimmer), Vitality on nemotron.
 # Realist moved from gpt-oss to Super after the M11 live check.
 # gpt-oss:120b: 117B MoE (~5B active), 65 GB, mostly in RAM; ~16 tok/s, 25-50 s
 # turns, ~60 s to load cold. Thinking can't be turned off, only kept low.
@@ -54,6 +54,13 @@ think = false   # thinks by default; on, the draft eats the 1500-token cap (empt
 num_ctx = 12288
 num_batch = 4096   # prefill 5x faster (54 -> 11 s on 8k tokens), same tok/s (spike 6)
 think = "low"
+
+# muse-glimmer: Meta, dense ~30B, 18 GB, ~50/50 CPU/GPU; ~3-4 tok/s, 2-5 min turns,
+# ~17 s load. Pragmatist since 2026-10-30: the fewest invented figures in a 6-turn
+# bench against gpt-oss:120b, granite4.2, gemma4 (STATUS.md). Fits in RAM beside Super.
+[ollama.models."muse-glimmer:30b"]
+num_ctx = 12288
+think = false
 
 # nemotron-3.5-super: 120B hybrid MoE (~12B active), 90 GB, mostly in RAM; ~5-6 tok/s,
 # 1.5-5 min turns (prompt processing dominates). Replaced lightning.

@@ -88,7 +88,13 @@ def test_fallback_only_when_enabled_and_exhausted(
 
 
 def test_required_models_include_fallback(tmp_path: Path, personas: dict[str, Persona]) -> None:
-    local = {"qwen3.6:27b", "gemma4:26b", "gpt-oss:120b", "nemotron-3.5-super:latest"}
+    local = {
+        "qwen3.6:27b",
+        "gemma4:26b",
+        "gpt-oss:120b",
+        "muse-glimmer:30b",
+        "nemotron-3.5-super:latest",
+    }
     on = BackendRegistry(_settings(tmp_path, True))
     assert on.required_ollama_models(personas.values()) == local | {"qwen3:4b"}
     off = BackendRegistry(_settings(tmp_path, False))

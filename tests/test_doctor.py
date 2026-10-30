@@ -24,6 +24,7 @@ def test_check_config_lists_required_models() -> None:
         "qwen3.6:27b",
         "gemma4:26b",
         "gpt-oss:120b",
+        "muse-glimmer:30b",
         "nemotron-3.5-super:latest",
     }
 
@@ -36,9 +37,10 @@ def test_check_config_local_only_lists_the_seat_map_models() -> None:
         "qwen3.6:27b",
         "gemma4:26b",
         "gpt-oss:120b",
+        "muse-glimmer:30b",
         "nemotron-3.5-super:latest",
     }
-    assert "local-only seat map: 4 model(s)" in health.details
+    assert "local-only seat map: 5 model(s)" in health.details
 
 
 def test_check_config_local_only_reports_a_bad_seat(
