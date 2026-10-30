@@ -85,12 +85,13 @@ def searches(result: CompletionResult) -> list[str]:
 
 
 def fetches(result: CompletionResult) -> list[str]:
-    """Return the URLs a research call read with WebFetch (shown to the user)."""
+    """Return the URLs a research call read with WebFetch, each once (shown to the user)."""
     calls = result.raw.get("tool_calls") or []
-    return [
+    urls = (
         str(call["input"]["url"])
         for call in calls
         if call.get("name") == FETCH_TOOL
         and isinstance(call.get("input"), dict)
         and call["input"].get("url")
-    ]
+    )
+    return list(dict.fromkeys(urls))

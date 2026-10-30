@@ -121,6 +121,7 @@ def test_searches_extracts_only_web_search_queries() -> None:
                 {"name": "WebSearch", "input": {"query": "a"}},
                 {"name": "WebFetch", "input": {"url": "https://x"}},
                 {"name": "WebSearch", "input": {}},
+                {"name": "WebFetch", "input": {"url": "https://x"}},  # read twice, shown once
             ]
         },
     )
@@ -218,6 +219,26 @@ async def test_on_demand_research_with_focus(
     await h.engine.research(None)  # a second search sees the first one's facts
     assert "$4,170/oz" in research_requests(h)[1].messages[0].content
     assert not h.engine.busy
+
+
+async def test_later_research_is_told_which_pages_were_read(
+    tmp_path: Path,
+    personas: dict[str, Persona],
+) -> None:
+    filing = "https://example.org/10-q"
+    first = research_result(urls=(filing, filing))
+    h = Harness(
+        tmp_path, personas, responder([decision([("rigor", "x")])], [first, research_result()])
+    )
+    await h.engine.step()
+    await h.engine.research("the 10-Q")
+    await h.engine.research("debt maturities")
+    assert "Chair read web pages: https://example.org/10-q" in h.texts("system")  # once
+    first_req, second_req = research_requests(h)
+    assert "already read" not in first_req.messages[0].content
+    prompt = second_req.messages[0].content
+    assert f"Pages earlier searches already read (their facts are above): {filing}." in prompt
+    assert "Don't fetch them again." in prompt
 
 
 async def test_research_off_and_user_research_uncapped(

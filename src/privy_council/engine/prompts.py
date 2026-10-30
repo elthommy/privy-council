@@ -12,7 +12,7 @@ from privy_council.models.session import DebateState, Message
 from privy_council.models.vote import Vote
 from privy_council.util.language import Language
 
-PROMPTS_VERSION = "48"
+PROMPTS_VERSION = "49"
 
 # Backends that accept a single user turn (the claude CLI on stdin) flatten a
 # multi-message conversation with these labels.
@@ -371,7 +371,8 @@ RESEARCH_RULE_ON = (
     "at most 2 web searches to run before the next round, for facts the debate needs "
     "that the web can answer (prices, market closes, dates, recent events, official "
     "figures). Each is a short search focus. Skip facts the research above already "
-    "covers; empty if none."
+    "covers, and what an earlier note says it couldn't find or read, unless you name "
+    "another source to try; empty if none."
 )
 RESEARCH_RULE_LAST = (
     "this is the last update and the debate ends after it: always empty, since no member "
@@ -530,7 +531,14 @@ Return at most 8 bullets, about 1,200 characters in total, with no preamble:
 - prefer primary sources (statistics offices, central banks, official sites, research \
 institutes, academic work) over commentary;
 - say when sources disagree or data is missing.
-Don't make recommendations."""
+Don't make recommendations.{read_before}"""
+# Added to RESEARCH_TASK when earlier searches read pages: a page cut off before the
+# part needed comes back cut off at the same place (Note 10 of a 10-Q, read 4 times
+# on 2026-10-30).
+RESEARCH_READ_BEFORE = """
+Pages earlier searches already read (their facts are above): {urls}. Don't fetch them \
+again. If a part you need was missing from them, find another page that holds it: a \
+section page, a data table, the document's index."""
 
 RESEARCH_DEFAULT_FOCUS = "the current facts and figures the council will need"
 

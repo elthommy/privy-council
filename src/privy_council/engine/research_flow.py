@@ -251,9 +251,10 @@ class ResearchFlow(EngineCore):
     async def _claude_research(self, focus: str, auto: bool) -> ResearchNote:
         """Search with the claude CLI's web tools."""
         cfg = self.settings.research
-        prompt = self._research_prompt(
-            prompts.RESEARCH_SYSTEM, prompts.RESEARCH_TASK.format(focus=focus, today=_today())
-        )
+        read = list(dict.fromkeys(url for n in self.meta.runtime.research for url in n.fetched))
+        read_before = prompts.RESEARCH_READ_BEFORE.format(urls="; ".join(read)) if read else ""
+        task = prompts.RESEARCH_TASK.format(focus=focus, today=_today(), read_before=read_before)
+        prompt = self._research_prompt(prompts.RESEARCH_SYSTEM, task)
         result, _ = await self._complete(
             self.moderator,
             prompt,
