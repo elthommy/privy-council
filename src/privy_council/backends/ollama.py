@@ -33,8 +33,11 @@ def pull_hint(model: str) -> str:
     return f"run `ollama pull {model}`"
 
 
-# Ollama's 500 body when a model didn't finish loading within its load timeout.
+# Ollama's 500 bodies worth one retry: a model that didn't finish loading within its
+# load timeout, and a CUDA OOM (Ollama expires loaded models before the next request;
+# seen with gemma4, whose MTP draft model llama.cpp leaves out of its VRAM fit).
 LOAD_TIMEOUT = "timed out waiting for llama-server to start"
+OUT_OF_MEMORY = "out of memory"
 THINK_END = "</think>"
 
 
@@ -113,8 +116,9 @@ class OllamaBackend:
             try:
                 data = await self._chat(payload, req.model, timeout, on_text)
             except ModelLoadError:
-                # A big model swap can outlast Ollama's load wait; the next try finds it
-                # loading or loaded. Retried here so it never costs a caller's own retry.
+                # A big model swap can outlast Ollama's load wait (the next try finds it
+                # loading or loaded), and an OOM frees VRAM for the next request.
+                # Retried here so it never costs a caller's own retry.
                 data = await self._chat(payload, req.model, timeout, on_text)
             latency = time.monotonic() - start
         return self._to_result(data, req, latency)
@@ -168,7 +172,8 @@ class OllamaBackend:
         if resp.status_code == 404:
             raise BackendUnavailableError(f"Ollama model {model!r} not found; {pull_hint(model)}")
         if resp.status_code >= 400:
-            error = ModelLoadError if LOAD_TIMEOUT in resp.text else BackendError
+            retryable = LOAD_TIMEOUT in resp.text or OUT_OF_MEMORY in resp.text
+            error = ModelLoadError if retryable else BackendError
             raise error(f"Ollama error {resp.status_code}: {resp.text[:300]}")
 
     async def _post_chat(

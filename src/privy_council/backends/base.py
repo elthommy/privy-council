@@ -110,7 +110,7 @@ class BackendUnavailableError(BackendError):
 
 
 class ModelLoadError(BackendError):
-    """The model didn't finish loading in time (Ollama retries it once by itself)."""
+    """The model didn't load in time or ran out of VRAM (Ollama retries it once by itself)."""
 
 
 class LocalOnlyError(BackendError):

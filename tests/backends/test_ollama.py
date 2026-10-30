@@ -178,13 +178,18 @@ async def test_server_error(backend: OllamaBackend, httpx_mock: HTTPXMock) -> No
 
 
 LOAD_FAILED = '{"error":"timed out waiting for llama-server to start - "}'
+OOM = (
+    '{"error":"an error was encountered while running the model: '
+    'CUDA error\\nCUDA error: out of memory"}'
+)
 
 
+@pytest.mark.parametrize("body", [LOAD_FAILED, OOM])
 @pytest.mark.parametrize("streamed", [False, True])
-async def test_model_load_timeout_is_retried_once(
-    backend: OllamaBackend, httpx_mock: HTTPXMock, streamed: bool
+async def test_model_load_timeout_or_oom_is_retried_once(
+    backend: OllamaBackend, httpx_mock: HTTPXMock, streamed: bool, body: str
 ) -> None:
-    httpx_mock.add_response(url=CHAT_URL, status_code=500, text=LOAD_FAILED)
+    httpx_mock.add_response(url=CHAT_URL, status_code=500, text=body)
     final = {**chat_response("Loaded."), "done_reason": "stop"}
     httpx_mock.add_response(
         url=CHAT_URL,
