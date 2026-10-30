@@ -25,7 +25,14 @@ from privy_council.engine.notices import (
 )
 from privy_council.engine.scheduler import schedule
 from privy_council.models.persona import BackendKind, Persona
-from privy_council.models.session import BudgetWarning, ErrorEvent, Phase, TurnStarted, VoteTaken
+from privy_council.models.session import (
+    BudgetWarning,
+    ErrorEvent,
+    Phase,
+    TurnEnded,
+    TurnStarted,
+    VoteTaken,
+)
 from privy_council.models.vote import Vote, VoteReply
 
 
@@ -181,4 +188,6 @@ class ReviewFlow(EngineCore):
             )
         except BackendError as exc:
             return Vote(speaker=persona.slug, error=str(exc))
+        finally:
+            self._emit(TurnEnded(speaker=persona.slug))
         return parse_vote(persona.slug, result, fallback)

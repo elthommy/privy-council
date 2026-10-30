@@ -54,6 +54,7 @@ from privy_council.models.session import (
     SessionState,
     SessionStateChanged,
     TextDelta,
+    TurnEnded,
 )
 from privy_council.search import SearchProvider, SearxngProvider
 from privy_council.storage.sessions import SessionStore
@@ -466,8 +467,8 @@ class EngineCore:
         self._emit(SessionStateChanged(state=target))
 
     def _emit(self, event: Event) -> None:
-        """Persist the event (typing chunks excepted), then hand it to listeners."""
-        if self.store and not isinstance(event, TextDelta):
+        """Persist the event (UI-only signals excepted), then hand it to listeners."""
+        if self.store and not isinstance(event, TextDelta | TurnEnded):
             self.store.append(event)
         for listener in self.listeners:
             listener(event)

@@ -27,6 +27,7 @@ from privy_council.models.session import (
     SessionStateChanged,
     StateUpdated,
     TextDelta,
+    TurnEnded,
     TurnStarted,
 )
 from privy_council.tui.commands import (
@@ -199,6 +200,10 @@ class CouncilApp(App[None]):
             if event.message.fallback:
                 self.fallback.add(speaker)
             nicks.set_status(speaker, "fallback" if speaker in self.fallback else "idle")
+        elif isinstance(event, TurnEnded):
+            nicks.set_status(
+                event.speaker, "fallback" if event.speaker in self.fallback else "idle"
+            )
         elif isinstance(event, StateUpdated):
             self.query_one(StatePanel).show_state(
                 state_text(event.state, judgment_of(event), self.engine.nick)

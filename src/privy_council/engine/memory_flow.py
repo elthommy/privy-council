@@ -50,7 +50,12 @@ from privy_council.memory.distill import (
 )
 from privy_council.models.council import MemoryMode
 from privy_council.models.persona import BackendKind, Persona
-from privy_council.models.session import MemoryProposed, MemoryReview, TurnStarted
+from privy_council.models.session import (
+    MemoryProposed,
+    MemoryReview,
+    TurnEnded,
+    TurnStarted,
+)
 
 
 class MemoryFlow(EngineCore):
@@ -208,6 +213,8 @@ class MemoryFlow(EngineCore):
                 self._notice(notice.format(nick=nick, cap=cap))
         except BackendError as exc:
             self._notice(NOTICE_MEMORY_FAILED.format(nick=nick, error=exc))
+        finally:
+            self._emit(TurnEnded(speaker=persona.slug))
 
     async def _propose_facts(
         self, writer: MemoryWriter, digest: SessionDigest, out: list[str]

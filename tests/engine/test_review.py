@@ -15,7 +15,14 @@ from privy_council.backends.fake import Reply
 from privy_council.engine import prompts
 from privy_council.engine.review_flow import parse_vote
 from privy_council.models.persona import Persona
-from privy_council.models.session import ErrorEvent, MessageEvent, Phase, TextDelta, VoteTaken
+from privy_council.models.session import (
+    ErrorEvent,
+    MessageEvent,
+    Phase,
+    TextDelta,
+    TurnEnded,
+    VoteTaken,
+)
 from privy_council.models.vote import Vote
 from tests.engine.test_protocol import MEMBERS, Harness, decision, standard_responder
 from tests.engine.test_protocol import personas as personas
@@ -99,6 +106,8 @@ async def test_vote_failures_become_rows(tmp_path: Path, personas: dict[str, Per
     assert pragmatist.error is not None and "less than or equal to 100" in pragmatist.error
     assert contrarian.error is None and contrarian.confidence == 70
     assert "| Rigor | — | *no vote: boom* |" in h.store.transcript_md.read_text(encoding="utf-8")
+    # A vote posts no message: each turn ends explicitly, the failed one too.
+    assert sorted(e.speaker for e in h.events if isinstance(e, TurnEnded)) == sorted(MEMBERS)
 
 
 def reply(text: str, truncated: bool = False) -> CompletionResult:

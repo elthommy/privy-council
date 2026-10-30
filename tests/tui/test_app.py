@@ -16,7 +16,7 @@ from privy_council.backends.base import CompletionRequest, CompletionResult, Tex
 from privy_council.backends.fake import FakeBackend
 from privy_council.engine.budget import UsageEntry
 from privy_council.models.persona import Persona
-from privy_council.models.session import SessionState
+from privy_council.models.session import SessionState, TurnEnded, TurnStarted
 from privy_council.tui.app import CouncilApp
 from privy_council.tui.widgets import ChatInput, ChatLog, NickList, StatePanel, TopBar
 from tests.engine.test_memory import USER_LINE, memory_responder
@@ -234,6 +234,20 @@ async def test_research_command_shows_queries_and_facts(
         assert "-- research (Claude web search): gold price today --" in text
         assert "$4,170/oz" in text
         assert app.query_one(NickList).status["chair"] == "idle"  # not stuck on thinking…
+
+
+async def test_turn_ended_clears_thinking_without_a_message(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    # Memory notes at close post a notice, not the persona's message.
+    app = CouncilApp(Harness(tmp_path, personas, standard_responder([])).engine)
+    async with app.run_test(size=SIZE):
+        nicks = app.query_one(NickList)
+        for slug in ("rigor", "pragmatist"):
+            app.on_engine_event(TurnStarted(speaker=slug, round=1))
+        app.on_engine_event(TurnEnded(speaker="rigor"))
+        assert nicks.status["rigor"] == "idle"
+        assert nicks.status["pragmatist"] == "thinking…"
 
 
 async def test_close_keep_forget_and_quit_guard(

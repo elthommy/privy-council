@@ -14,7 +14,13 @@ from privy_council.backends.fake import Reply
 from privy_council.memory.store import MemoryStore
 from privy_council.models.council import MemoryMode
 from privy_council.models.persona import Persona
-from privy_council.models.session import MemoryProposed, MessageEvent, SessionState
+from privy_council.models.session import (
+    MemoryProposed,
+    MessageEvent,
+    SessionState,
+    TurnEnded,
+    TurnStarted,
+)
 from tests.engine.test_protocol import Harness, Responder, decision, standard_responder
 from tests.engine.test_protocol import personas as personas
 
@@ -229,6 +235,14 @@ async def test_memory_failures_never_block_the_close(
     assert any(n.startswith("Shared memory proposal failed (not valid JSON") for n in lines)
     assert MemoryStore(h.settings.data_dir).personas_with_notes() == ["contrarian", "pragmatist"]
     assert not proposals(h)
+    # Every note writer's turn ends, failed or not, so no seat stays "thinking…".
+    ended = [e.speaker for e in h.events if isinstance(e, TurnEnded)]
+    assert sorted(ended) == sorted(SPEAKERS)
+    for slug in SPEAKERS:  # each seat ends after it started its notes
+        last_start = max(
+            i for i, e in enumerate(h.events) if isinstance(e, TurnStarted) and e.speaker == slug
+        )
+        assert any(isinstance(e, TurnEnded) and e.speaker == slug for e in h.events[last_start:])
 
 
 async def test_memory_false_persona_neither_reads_nor_writes_notes(
@@ -300,6 +314,8 @@ async def test_close_estimate_and_events_on_disk(
     assert "**Shared memory, proposed facts:**" in md
     assert "> - " in md and "rents a flat in Lyon" in md
     assert any(isinstance(e, MessageEvent) for e in h.store.events())
+    assert any(isinstance(e, TurnEnded) for e in h.events)
+    assert not any(isinstance(e, TurnEnded) for e in h.store.events())  # UI-only
 
 
 async def test_members_who_never_spoke_write_no_notes(

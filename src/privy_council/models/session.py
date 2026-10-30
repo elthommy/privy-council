@@ -274,6 +274,13 @@ class TurnStarted(_EventBase):
     round: int = Field(ge=0)
 
 
+class TurnEnded(_EventBase):
+    """A turn that posts no message finished (memory notes, a vote); never saved to disk."""
+
+    kind: Literal["turn_ended"] = "turn_ended"
+    speaker: str
+
+
 class ResearchAdded(_EventBase):
     """The moderator added web research to the shared context."""
 
@@ -336,6 +343,7 @@ Event = Annotated[
     | ErrorEvent
     | SessionStateChanged
     | TurnStarted
+    | TurnEnded
     | ResearchAdded
     | MemoryProposed
     | RosterChanged
