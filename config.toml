@@ -57,7 +57,7 @@ think = "low"
 
 # muse-glimmer: Meta, dense ~30B, 18 GB, ~50/50 CPU/GPU; ~3-4 tok/s, 2-5 min turns,
 # ~17 s load. Pragmatist since 2026-10-30: the fewest invented figures in a 6-turn
-# bench against gpt-oss:120b, granite4.2, gemma4 (STATUS.md). Fits in RAM beside Super.
+# bench against gpt-oss:120b, granite4.2, gemma4 (STATUS.md); Fan too. Fits in RAM beside Super.
 [ollama.models."muse-glimmer:30b"]
 num_ctx = 12288
 think = false

@@ -23,7 +23,6 @@ def test_check_config_lists_required_models() -> None:
     assert models == {
         "qwen3.6:27b",
         "gemma4:26b",
-        "gpt-oss:120b",
         "muse-glimmer:30b",
         "nemotron-3.5-super:latest",
     }

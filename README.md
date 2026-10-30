@@ -22,7 +22,7 @@ Privy Council is an independent project, not affiliated with Anthropic. It drive
 
 - Python 3.12+ and [uv](https://docs.astral.sh/uv/).
 - The `claude` CLI, logged in (`claude` once, interactively). `ANTHROPIC_API_KEY` is removed from its environment: council never uses the API.
-- [Ollama](https://ollama.com) with the models the personas use (see `council personas list`), e.g. `ollama pull qwen3.6:27b`, `ollama pull gemma4:26b`, `ollama pull gpt-oss:120b`, `ollama pull muse-glimmer:30b`, `ollama pull nemotron-3.5-super` (and `qwen3.6:latest` if you turn on the Claude fallback).
+- [Ollama](https://ollama.com) with the models the personas use (see `council personas list`), e.g. `ollama pull qwen3.6:27b`, `ollama pull gemma4:26b`, `ollama pull muse-glimmer:30b`, `ollama pull nemotron-3.5-super` (and `qwen3.6:latest` if you turn on the Claude fallback, `gpt-oss:120b` for local-only mode).
 
 ```bash
 uv sync
@@ -241,7 +241,7 @@ Current models (the persona files are the source of truth; `council personas lis
 | Nietzsche | advisor | `gemma4:26b` | salon |
 | Steelman | devil_advocate | `gemma4:26b` | politics |
 | Counterfactual | devil_advocate | `gemma4:26b` | history |
-| Pragmatist | advisor | `gpt-oss:120b` | finance, purchases |
+| Pragmatist | advisor | `muse-glimmer:30b` | finance, purchases |
 | Realist | advisor | `nemotron-3.5-super` | geopolitics |
 | Vitality | advisor | `nemotron-3.5-super:latest` | wellbeing |
 | Economist | advisor | `nemotron-3.5-super:latest` | geopolitics |
@@ -250,7 +250,7 @@ Current models (the persona files are the source of truth; `council personas lis
 | Value | advisor | `nemotron-3.5-super:latest` | purchases |
 | Meta | advisor | `qwen3.6:27b` | gacha |
 | Saver | risk_officer | `nemotron-3.5-super:latest` | gacha |
-| Fan | advisor | `gpt-oss:120b` | gacha |
+| Fan | advisor | `muse-glimmer:30b` | gacha |
 | Rigor | risk_officer | `nemotron-3.5-super:latest` | finance, career, purchases |
 
 Members of the same council run on different model families where possible, so they don't echo each other: finance and wellbeing use four (Claude, qwen, gemma, plus gpt-oss or nemotron), geopolitics and purchases five (Claude, qwen, gpt-oss, nemotron, gemma; purchases has gemma twice, for Fixer and Contrarian), politics four, history four, career three, and salon two among its members (all local; Chair moderates on Claude).

@@ -15,7 +15,7 @@ All notable changes, by milestone. Dates are when each milestone was built.
 - Research notes name the pages the Chair read (WebFetch), in the chat notice, `research.md` and exports; a fetch-only lookup no longer says "answered without searching the web".
 - Seats no longer stay on "thinking…" while memory is written at close or during `/vote`; an Ollama CUDA out-of-memory error is retried once.
 - Research: later lookups are told which pages earlier ones read and not to fetch them again (a page cut off before the needed part comes back cut off the same way); the Chair skips lookups an earlier note says failed unless it names another source; each page is listed once.
-- Pragmatist moves from gpt-oss:120b to Meta's `muse-glimmer:30b` (`ollama pull muse-glimmer:30b`): in a replay bench it invented no figures where gpt-oss invented several, and at 18 GB it stays loaded beside the other local models.
+- Pragmatist and Fan move from gpt-oss:120b to Meta's `muse-glimmer:30b` (`ollama pull muse-glimmer:30b`): in a replay bench it invented no figures where gpt-oss invented several, and at 18 GB it stays loaded beside the other local models. gpt-oss:120b is now only the local-only default seat.
 - A flaw check's floor line no longer repeats the flaw: the Chair's planned prompt loses its self-address and the sentences restating the error.
 
 ## M15 — local-only mode (2026-10-24)

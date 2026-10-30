@@ -91,7 +91,6 @@ def test_required_models_include_fallback(tmp_path: Path, personas: dict[str, Pe
     local = {
         "qwen3.6:27b",
         "gemma4:26b",
-        "gpt-oss:120b",
         "muse-glimmer:30b",
         "nemotron-3.5-super:latest",
     }

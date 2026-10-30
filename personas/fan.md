@@ -4,7 +4,7 @@ slug: fan
 color: "#c3e88d"
 role: advisor
 backend: ollama
-model: gpt-oss:120b
+model: muse-glimmer:30b
 temperature: 0.8
 expertise: [character appeal, playstyle, player enjoyment, collecting]
 memory: true
