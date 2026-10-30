@@ -203,12 +203,14 @@ moderator_brief: ""          # this domain's context for Chair: what to ask you,
 
 Chair is one persona for every council; a council adds its own context through `research_focus` and `moderator_brief` (see `councils/gacha.yaml`).
 
-Example councils: `finance`, `career`, `wellbeing` (habits and personal development: Stoic, Coach, Kindness, Vitality and Contrarian, with `memory: read_only` so these sessions save nothing about you), and `salon` (light entertainment: Socrates, Plato, Nietzsche and Epicurus debate a big question in character, all on Ollama; `memory: off`, and it always runs its 5 rounds since there's no decision to settle early).
+Example councils: `finance` (your own savings, investments and money decisions), `career`, `wellbeing` (habits and personal development: Stoic, Coach, Kindness, Vitality and Contrarian, with `memory: read_only` so these sessions save nothing about you), and `salon` (light entertainment: Socrates, Plato, Nietzsche and Epicurus debate a big question in character, all on Ollama; `memory: off`, and it always runs its 5 rounds since there's no decision to settle early).
 
 Three councils cover politics and history. They and `finance` require web research (`require_research: true`): Chair searches the web as soon as the question is in, before framing the debate, so every member starts from the same fresh facts. `--no-research` is refused, and if that first search fails, the session pauses until `/step` retries it.
 - `geopolitics`: wars, international relations and forecasts. Forecaster, Realist, Strategist, Economist, Insider and Contrarian.
 - `politics`: current political and social questions. Empiricist, Sociologist, PolSci, Historian and Steelman, a devil's advocate that gives the neglected camp its strongest argument. It uses `memory: read_only`, because political opinions are sensitive.
 - `history`: historical and military-history questions. Historian, Logistician, Strategist and Counterfactual. It uses `memory: read_only`, so old conclusions don't anchor new debates.
+
+`economics` takes forecasts about economies, markets and companies (a state's debt, a company default, layoffs, a crash) rather than your own money: Forecaster, Macro (sovereign debt, central banks, credit cycles), Analyst (balance sheets, debt maturities, restructuring), Insider and Contrarian. It requires research, and its brief has Chair pin down what counts as the outcome (which kind of bailout, default or crash) before round 1.
 
 `purchases` helps decide on buying, upgrading or repairing IT and audio gear: Specialist (hardware, Linux and audio), Fixer (diagnose and repair first), Value (cost per year of use, timing), Pragmatist, Rigor and Contrarian. It also requires research, since prices and compatibility move fast, and keeps memory on, so facts about your gear carry over between questions.
 
@@ -222,8 +224,8 @@ Current models (the persona files are the source of truth; `council personas lis
 | Compounder | advisor | Claude `sonnet` | finance |
 | Counsel | advisor | Claude `sonnet` | career |
 | Kindness | advisor | Claude `sonnet` | wellbeing |
-| Forecaster | advisor | Claude `sonnet` | geopolitics |
-| Insider | advisor | Claude `sonnet` | geopolitics |
+| Forecaster | advisor | Claude `sonnet` | geopolitics, economics |
+| Insider | advisor | Claude `sonnet` | geopolitics, economics |
 | Empiricist | advisor | Claude `sonnet` | politics |
 | Historian | advisor | Claude `sonnet` | politics, history |
 | Specialist | advisor | Claude `sonnet` | purchases |
@@ -234,7 +236,7 @@ Current models (the persona files are the source of truth; `council personas lis
 | Epicurus | advisor | `qwen3.6:27b` | salon |
 | Strategist | advisor | `qwen3.6:27b` | geopolitics, history |
 | Sociologist | advisor | `qwen3.6:27b` | politics |
-| Contrarian | devil_advocate | `gemma4:26b` | finance, career, wellbeing, geopolitics, purchases, gacha |
+| Contrarian | devil_advocate | `gemma4:26b` | finance, career, wellbeing, geopolitics, purchases, gacha, economics |
 | Fixer | advisor | `gemma4:26b` | purchases |
 | Skeptic | advisor | `gemma4:26b` | career |
 | Socrates | advisor | `gemma4:26b` | salon |
@@ -242,9 +244,11 @@ Current models (the persona files are the source of truth; `council personas lis
 | Steelman | devil_advocate | `gemma4:26b` | politics |
 | Counterfactual | devil_advocate | `gemma4:26b` | history |
 | Pragmatist | advisor | `muse-glimmer:30b` | finance, purchases |
+| Analyst | advisor | `muse-glimmer:30b` | economics |
 | Realist | advisor | `nemotron-3.5-super` | geopolitics |
 | Vitality | advisor | `nemotron-3.5-super:latest` | wellbeing |
 | Economist | advisor | `nemotron-3.5-super:latest` | geopolitics |
+| Macro | advisor | `nemotron-3.5-super:latest` | economics |
 | PolSci | advisor | `nemotron-3.5-super:latest` | politics |
 | Logistician | advisor | `nemotron-3.5-super:latest` | history |
 | Value | advisor | `nemotron-3.5-super:latest` | purchases |
@@ -253,7 +257,7 @@ Current models (the persona files are the source of truth; `council personas lis
 | Fan | advisor | `muse-glimmer:30b` | gacha |
 | Rigor | risk_officer | `nemotron-3.5-super:latest` | finance, career, purchases |
 
-Members of the same council run on different model families where possible, so they don't echo each other: finance and wellbeing use four (Claude, qwen, gemma, plus gpt-oss or nemotron), geopolitics and purchases five (Claude, qwen, gpt-oss, nemotron, gemma; purchases has gemma twice, for Fixer and Contrarian), politics four, history four, career three, and salon two among its members (all local; Chair moderates on Claude).
+Members of the same council run on different model families where possible, so they don't echo each other: finance and wellbeing use four (Claude, qwen, gemma, plus gpt-oss or nemotron), economics four (Claude, nemotron, muse-glimmer, gemma), geopolitics and purchases five (Claude, qwen, gpt-oss, nemotron, gemma; purchases has gemma twice, for Fixer and Contrarian), politics four, history four, career three, and salon two among its members (all local; Chair moderates on Claude).
 
 `council personas validate` reports errors with the file and field.
 

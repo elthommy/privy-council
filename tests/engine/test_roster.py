@@ -90,10 +90,10 @@ async def test_summon_refusals(tmp_path: Path, personas: dict[str, Persona]) -> 
     assert notices(h) == [
         "usage: /summon <persona> (council personas list)",
         "No persona called 'nobody'; available: "
-        "coach, counsel, counterfactual, economist, empiricist, epicurus, fan, fixer, "
-        "forecaster, historian, insider, kindness, logistician, meta, nietzsche, optimist, "
-        "plato, polsci, realist, saver, skeptic, sociologist, socrates, specialist, steelman, "
-        "stoic, strategist, value, vitality",
+        "analyst, coach, counsel, counterfactual, economist, empiricist, epicurus, fan, "
+        "fixer, forecaster, historian, insider, kindness, logistician, macro, meta, "
+        "nietzsche, optimist, plato, polsci, realist, saver, skeptic, sociologist, socrates, "
+        "specialist, steelman, stoic, strategist, value, vitality",
         "Rigor is already in the channel",
         "Chair is a moderator persona and can't join as a member",
         "Busy: wait for the current turn, or /pause",

@@ -22,7 +22,7 @@ def test_personas_list_shows_badges() -> None:
 def test_validate_repo_examples_ok() -> None:
     result = runner.invoke(app, ["--root", str(REPO_ROOT), "personas", "validate"])
     assert result.exit_code == 0, result.output
-    assert "34 personas, 9 councils OK" in result.output
+    assert "36 personas, 10 councils OK" in result.output
 
 
 def test_validate_reports_file_and_field(tmp_path: Path, write_persona: PersonaWriter) -> None:

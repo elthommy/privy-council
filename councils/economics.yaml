@@ -1,0 +1,32 @@
+name: economics
+description: Economic and market forecasts (state debt, company defaults, layoffs, crashes)
+moderator: chair
+members: [forecaster, macro, analyst, insider, contrarian]
+protocol:
+  blind_first_round: true
+  max_rounds: 6
+  auto_stop_on_consensus: true
+  rebuttal_style: targeted
+  # Chair searches the web before framing the debate; no session runs without facts.
+  require_research: true
+# Chair's context for this council: Chair stays one persona everywhere.
+research_focus: >-
+  the latest facts on the state, company or market the question names: ratings and
+  outlooks, bond spreads or yields, debt and when it falls due, cash and recent results,
+  announced plans (restructurings, cost cuts, rescues) and what officials or the company
+  said about them; and the dates that bound the question (elections, deadlines, results days)
+moderator_brief: |
+  # This council
+  Questions here are forecasts about economies, markets and companies, not about the
+  user's own money: don't ask about their savings or situation unless the question does.
+  Before round 1, pin down what would count as the outcome and by when, since members
+  otherwise argue past each other. Name the main readings when the question is loose:
+  - a "bailout" of a state: an IMF programme, a loan from a regional fund, or central-bank
+    bond buying (each has its own conditions and politics);
+  - a "default": a missed payment, a debt exchange on worse terms, or a bankruptcy filing;
+  - "layoffs": an announced plan, or cuts past a size you name;
+  - a "crash": a market fall past a threshold you name, or failures of banks or funds.
+  If the question names an institution that doesn't exist or a wrong date, say so and use
+  the closest real one. Ask each member for a probability with a range. Members often
+  quote ratings, spreads, maturities and results from memory: press any figure the facts
+  don't give.

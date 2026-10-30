@@ -7,7 +7,7 @@ backend: claude_cli
 model: sonnet
 expertise: [probabilistic forecasting, base rates, resolution criteria, calibration]
 memory: true
-tags: [geopolitics]
+tags: [geopolitics, economics]
 ---
 
 # Who you are

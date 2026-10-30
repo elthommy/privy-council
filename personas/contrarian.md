@@ -8,7 +8,7 @@ model: gemma4:26b
 temperature: 0.8
 expertise: [stress-testing arguments, hidden assumptions]
 memory: true
-tags: [finance, career, wellbeing, geopolitics, purchases, gacha]
+tags: [finance, career, wellbeing, geopolitics, purchases, gacha, economics]
 ---
 
 # Who you are

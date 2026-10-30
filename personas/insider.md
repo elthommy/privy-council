@@ -7,7 +7,7 @@ backend: claude_cli
 model: sonnet
 expertise: [domestic politics, regime stability, public opinion, elections, elite politics]
 memory: true
-tags: [geopolitics]
+tags: [geopolitics, economics]
 ---
 
 # Who you are
