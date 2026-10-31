@@ -59,6 +59,7 @@ _LABEL = re.compile(
     r"[^()\n.;]{0,25}\((?:estimate|estimation|estimé|est\.)[^)]{0,40}\)", re.IGNORECASE
 )
 _TIMES = "\u00d7"  # the multiplication sign, as in "3\u00d7"
+_NUMBER_NEXT = re.compile(r"\s?\d")
 # A number written as the right side of an operation: "/ 3", "* 12", "divided by 455".
 _OPERAND = re.compile(
     r"(?:[/\u00f7*\u00d7]|\b(?:divided by|times|divisés? par|fois)\b)"
@@ -71,12 +72,18 @@ _EXPRESSION = re.compile(
     rf"(?<![\w.,])(?P<a>{_NUM})\s?(?:[^\W\d_]+\s?)?"
     rf"(?P<op>[+\u2212\u00d7*/\u00f7]|\s[-\u2013]\s)\s?(?P<b>{_NUM})(?![\d.,])"
 )
+# A weighted sum written out: "0.3\u00d735% + 0.7\u00d720%", "30% x 35% + 70% x 20%".
+_TERM_TEXT = rf"{_NUM}\s?%?\s?[\u00d7x*]\s?{_NUM}\s?%?"
+_TERM = re.compile(rf"(?P<w>{_NUM})\s?(?P<wp>%)?\s?[\u00d7x*]\s?(?P<v>{_NUM})\s?%?")
+_WEIGHTED = re.compile(rf"(?<![\w.,]){_TERM_TEXT}(?:\s?\+\s?{_TERM_TEXT})+")
 # A moderator's note that says the quote's arithmetic holds ("which is correct", "no
-# flaw found"), and one that also disputes something ("is wrong", "not 20"); 6 and 2
-# of the 22 arithmetic flags saved by 2026-10-27.
+# flaw found", "shown only roughly"), and one that also disputes something ("is
+# wrong", "not 20"); 6 and 2 of the 22 arithmetic flags saved by 2026-10-27.
 _CONFIRMS = re.compile(
     r"\b(?:is|are|was|were) (?:\w+ )?(?:correct|fine|right|accurate)\b"
     r"|\bno (?:flaw|error)s?\b|\bnot (?:actually |really )?an? (?:\w+ )?error\b"
+    r"|\b(?:only|roughly|approximately|broadly) (?:right|correct|accurate|fine)\b"
+    r"|\b(?:shown|holds|stands) only roughly\b"
     r"|\b(?:est|sont) (?:correcte?s?|justes?|exacte?s?)\b|\baucune erreur\b|\bpas une erreur\b",
     re.IGNORECASE,
 )
@@ -257,6 +264,8 @@ def figures(text: str, extra: Collection[str] = (), named: Collection[str] = ())
             continue  # "€0", "100% sure": nothing to source
         if _model_number(m) and not word:
             continue
+        if m["unit"] in (_TIMES, "x") and _NUMBER_NEXT.match(blanked, m.end()):
+            continue  # "0.3\u00d735%": a multiplication sign, not a "3x" multiple
         unit, end = word if word else (m["unit"], m.end())
         out.append(
             Figure(
@@ -394,6 +403,23 @@ def _derived(figs: list[Figure], text: str, skip: Figure | None = None) -> dict[
         out.setdefault(family, set()).update(v / n for v in values for n in operands)
         out[family].update(v * n for v in values for n in operands)
     out["x"] = out.get(_TIMES, set())
+    return out
+
+
+def _weighted(text: str) -> set[float]:
+    """Return the weighted sums a turn writes out ("0.3\u00d735% + 0.7\u00d720%" gives 24.5).
+
+    The weights are the member's own (its scenario odds), so unlike `_written` the
+    operands needn't be in the sources: the moderator judges the inputs.
+    """
+    out: set[float] = set()
+    for m in _WEIGHTED.finditer(text):
+        total = 0.0
+        for term in _TERM.finditer(m.group()):
+            w, _ = parse_number(term["w"])
+            v, _ = parse_number(term["v"])
+            total += (w / 100 if term["wp"] else w) * v
+        out.add(total)
     return out
 
 
@@ -619,7 +645,7 @@ def figure_flaws(text: str, sources: str, given: str, member: str, round_: int =
     totals = _sourced_totals(figs, known)
     converted = _converted(figs, _rates(given, extra))
     priced = _priced(text, occurrences[0])
-    written = _written(text, known)
+    written = _written(text, known) | _weighted(text)
     chained = _chained(figs)
     out: list[Flaw] = []
     for fig in figs:
@@ -669,7 +695,7 @@ def figures_cleared(quote: str, text: str, sources: str, given: str) -> bool:
 
 
 def note_confirms(note: str) -> bool:
-    """Whether a moderator's note says the quote's arithmetic holds."""
+    """Whether a moderator's note says the quote's figures hold."""
     return bool(_CONFIRMS.search(note))
 
 

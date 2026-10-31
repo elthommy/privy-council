@@ -76,14 +76,18 @@ class FlawFlow(EngineCore):
     def _withdrawn(self, flaw: ReportedFlaw, rnd: int) -> bool:
         """Whether a moderator's flag doesn't hold by its own note or the engine's checks.
 
-        Unsourced: the figures are given or the member's own arithmetic. Arithmetic:
+        Unsourced: the figures are given or the member's own arithmetic. Other kinds:
+        the note says the figures hold ("shown only roughly", 2026-10-31 debate: the
+        member then "corrected" a right figure) and disputes nothing. Arithmetic:
         the note says it holds ("35 x 160 = 5,600 is correct"); a note that also calls
         something wrong needs the quote's figures cleared too (2026-10-27 Discord debate).
         """
         if flaw.kind == FlawKind.UNSOURCED.value:
             return self._cleared(flaw.member, flaw.quote, rnd)
-        if flaw.kind != FlawKind.ARITHMETIC.value or not checks.note_confirms(flaw.note):
+        if not checks.note_confirms(flaw.note):
             return False
+        if flaw.kind != FlawKind.ARITHMETIC.value:
+            return not checks.note_disputes(flaw.note)
         return not checks.note_disputes(flaw.note) or self._cleared(flaw.member, flaw.quote, rnd)
 
     def _cleared(self, member: str, quote: str, rnd: int) -> bool:

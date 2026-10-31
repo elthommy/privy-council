@@ -72,6 +72,16 @@ def test_a_range_quoted_from_the_facts_is_sourced() -> None:
         assert checks.figure_flaws(turn, facts, facts, "macro") == []
 
 
+def test_a_weighted_sum_is_the_members_own_arithmetic() -> None:
+    sources = "Stress is 35% if it disappoints and 20% if not."
+    for turn in (
+        "That gives 0.3\u00d735% + 0.7\u00d720% ≈ 24.5%, so roughly 25%.",
+        "Weighted: 0.3 \u00d7 35% + 0.7 \u00d7 20% = 24.5%.",
+    ):
+        assert checks.figure_flaws(turn, sources, sources, "forecaster") == []
+    assert [f.note for f in checks.figure_flaws("It is 3x faster.", sources, "", "f")] == ["3x"]
+
+
 def test_bare_numbers_are_not_figures() -> None:
     assert checks.figures("Round 2: my top 3 reasons, in 2026.") == []
 
@@ -255,6 +265,12 @@ def test_figures_cleared_for_a_given_figure_or_own_arithmetic() -> None:
         ("At 40 pity Thomas needs 40 pulls to reach hard pity, not 20.", False, True),
         ("Two 8 TB drives would cost about $660, well over 400 EUR.", False, False),
         ("Le total de 2 320 € est correct, mais la marge est faible.", True, False),
+        (
+            "30% on a 25-point lift gives ~8 points, so the 12% share is shown only roughly.",
+            True,
+            False,
+        ),
+        ("The total is only roughly right, but 6-10% is wrong.", True, True),
     ],
 )
 def test_moderator_notes_that_confirm_or_dispute(note: str, confirms: bool, disputes: bool) -> None:

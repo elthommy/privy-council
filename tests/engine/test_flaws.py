@@ -265,6 +265,24 @@ async def test_an_arithmetic_flag_whose_note_says_it_holds_is_dropped(
     assert by_moderator == ["so 7,300 EUR a year", "a 4% rate"]
 
 
+async def test_a_logic_flag_whose_note_says_it_holds_is_dropped(
+    tmp_path: Path, personas: dict[str, Any]
+) -> None:
+    note = "30% on a 25-point lift gives ~8 points, so the 12% share is shown only roughly."
+    flags = [
+        {"member": "rigor", "kind": "logic", "quote": "gives roughly 60-70%", "note": note},
+        {"member": "rigor", "kind": "logic", "quote": "so 12%", "note": "12% is wrong."},
+    ]
+    first = {**decision([("rigor", "go")]), "flaws": flags}
+    h = Harness(
+        tmp_path, personas, responder_with([first, first], "It gives roughly 60-70%, so 12%.")
+    )
+    await h.engine.step()  # opening
+    await h.engine.step()  # blind round + update
+    by_moderator = [f.excerpt for f in h.engine.meta.runtime.flaws if f.by == "moderator"]
+    assert by_moderator == ["so 12%"]
+
+
 async def test_no_errors_heading_without_moderator_flaws(
     tmp_path: Path, personas: dict[str, Any]
 ) -> None:

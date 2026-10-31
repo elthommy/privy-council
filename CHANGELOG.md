@@ -19,6 +19,7 @@ All notable changes, by milestone. Dates are when each milestone was built.
 - A flaw check's floor line no longer repeats the flaw: the Chair's planned prompt loses its self-address and the sentences restating the error.
 - New `economics` council for economic and market forecasts (a state's debt, company defaults, layoffs, crashes): Forecaster, Insider, Contrarian and two new personas, Macro and Analyst, both on nemotron-3.5-super (in a replay bench muse-glimmer ran past the output cap on company questions and kept flagged claims); its brief has Chair pin down what counts as the outcome. `finance` is described as personal finance.
 - An error several members share is now caught for each of them: the Chair reports it per member, and the synthesis names everyone who never corrected it. A range whose multiplier is written once ("$860–940M") is no longer flagged as unsourced when the facts give it.
+- A Chair flaw report whose own note says the figures hold ("shown only roughly") is dropped for every kind of flaw, not only arithmetic, so a member is no longer asked to correct a right figure. A weighted sum written out ("0.3×35% + 0.7×20% ≈ 24.5%") counts as the member's own arithmetic, not an unsourced figure.
 
 ## M15 — local-only mode (2026-10-24)
 
