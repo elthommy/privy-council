@@ -20,7 +20,7 @@ Privy Council is an independent project, not affiliated with Anthropic. It drive
 
 ## Demo
 
-[![Privy Council launch video](docs/assets/privy-council_brag.jpg)](docs/assets/privy-council_brag.mp4)
+https://github.com/user-attachments/assets/d333134b-8f4b-471b-b7f6-07eda01f0c05
 
 <sub>Demo session staged with the app's fake backend. Music: "Happy Beats / Business Moves Vol. 9" by Sascha Ende, [ende.app](https://ende.app) — licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).</sub>
 
