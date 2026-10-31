@@ -2,7 +2,7 @@
 
 All notable changes, by milestone. Dates are when each milestone was built.
 
-## Unreleased (2026-10-25 – 2026-10-30)
+## Unreleased (2026-10-25 – 2026-10-31)
 
 - **Discord front end** (`council chat discord`, `doctor --chat`): friends allowlisted by user ID debate with a local-only council in a forum thread; one webhook per persona with its avatar; a fixed command table (`/ask`, `/status`, `/flaws`, …); `/offline` and `/resume`; message size and per-round caps; no pings.
 - **Local web search** (opt-in `[research.local]`): SearXNG in Podman, started and stopped with the session; snippets only; the Chair's summary is checked against the hits (figures and URLs); a follow-up search for missing facts. `[research] provider = "claude" | "local" | "auto"` for normal sessions.
@@ -18,6 +18,7 @@ All notable changes, by milestone. Dates are when each milestone was built.
 - Pragmatist and Fan move from gpt-oss:120b to Meta's `muse-glimmer:30b` (`ollama pull muse-glimmer:30b`): in a replay bench it invented no figures where gpt-oss invented several, and at 18 GB it stays loaded beside the other local models. gpt-oss:120b is now only the local-only default seat.
 - A flaw check's floor line no longer repeats the flaw: the Chair's planned prompt loses its self-address and the sentences restating the error.
 - New `economics` council for economic and market forecasts (a state's debt, company defaults, layoffs, crashes): Forecaster, Insider, Contrarian and two new personas, Macro and Analyst, both on nemotron-3.5-super (in a replay bench muse-glimmer ran past the output cap on company questions and kept flagged claims); its brief has Chair pin down what counts as the outcome. `finance` is described as personal finance.
+- An error several members share is now caught for each of them: the Chair reports it per member, and the synthesis names everyone who never corrected it. A range whose multiplier is written once ("$860–940M") is no longer flagged as unsourced when the facts give it.
 
 ## M15 — local-only mode (2026-10-24)
 

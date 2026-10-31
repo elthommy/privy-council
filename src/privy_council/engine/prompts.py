@@ -12,7 +12,7 @@ from privy_council.models.session import DebateState, Message
 from privy_council.models.vote import Vote
 from privy_council.util.language import Language
 
-PROMPTS_VERSION = "50"
+PROMPTS_VERSION = "51"
 
 # Backends that accept a single user turn (the claude CLI on stdin) flatten a
 # multi-message conversation with these labels.
@@ -363,8 +363,9 @@ pasted into the floor line to that member: no name, no he, she or they ("The cha
 gives 3.6 %, below the 8-12 % held"). Only errors you can show, \
 never a difference of judgment or a labelled estimate that is plausible. Do the check \
 before you report: if the quote turns out right, or right "in context", it is no flaw, \
-leave it out; and never "correct" a member toward a figure nobody sourced. {flaw_rule} \
-An empty list if none.
+leave it out; and never "correct" a member toward a figure nobody sourced. When several \
+members made the same error, report it for each of them, with each one's own quote: \
+the floor line goes only to the member named. {flaw_rule} An empty list if none.
 
 Attribution: only attribute a position or argument to a member who actually stated it \
 in the messages. Put your own inferences in open_questions, never in a member's mouth.
@@ -485,7 +486,9 @@ Errors you caught in members' messages during the debate:
 Add a section "## {h_errors}" right after "## {h_disagreements}": the errors above \
 that the debate never corrected, one line each (who, what was wrong, and the right \
 figure or reasoning if the debate established it). Leave out the ones a member \
-corrected, and the whole section if none is left. An error is not a disagreement: \
+corrected, and the whole section if none is left. The same error stated by another \
+member who never corrected it counts too: name them on that line, and don't repeat \
+their version as a sound argument elsewhere. An error is not a disagreement: \
 don't list it among the disagreements."""
 SYNTHESIS_ERROR_LINE = '- round {round}, {nick} ({kind}): "{quote}"{note}'
 

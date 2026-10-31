@@ -157,6 +157,13 @@ def test_synthesis_errors_only_when_there_are_flaws() -> None:
     assert '"## Erreurs relevées" right after "## Désaccords restants"' in text
 
 
+def test_a_shared_error_is_reported_and_listed_for_each_member() -> None:
+    assert "report it for each of them" in prompts.MODERATE_TASK
+    text = prompts.synthesis_errors([reported("rigor", "q")], str.capitalize, "en")
+    assert text is not None
+    assert "The same error stated by another member who never corrected it" in text
+
+
 def test_flaws_text_lists_both_sources() -> None:
     engine_flaw = Flaw(
         member="rigor", kind=FlawKind.UNSOURCED, excerpt="max 32 GB.", note="32 GB", round=2
