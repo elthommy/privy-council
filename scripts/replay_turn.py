@@ -56,6 +56,18 @@ def _think(raw: str | None) -> bool | str | None:
     return {"true": True, "false": False}.get(raw.lower(), raw.lower())
 
 
+def model_think(settings: Settings, raw: str) -> tuple[str, bool | str | None]:
+    """Split `model[=think]`; without a suffix, use the model's config like the council.
+
+    Ollama's own default is to think, which can spend the whole output cap on thinking.
+    """
+    model, _, think = raw.partition("=")
+    if think:
+        return model, _think(think)
+    config = settings.ollama.models.get(model)
+    return model, config.think if config is not None else None
+
+
 def _cut(events: list[Event], speaker: str, round_: int) -> int:
     """Return the index of the member's first message in that round."""
     for i, e in enumerate(events):
@@ -198,7 +210,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Replay member turns on local models.")
     parser.add_argument("session", type=Path, help="Session directory (data/sessions/...)")
     parser.add_argument("--turn", action="append", required=True, help="speaker:round")
-    parser.add_argument("--models", nargs="+", required=True, help="model[=think]")
+    parser.add_argument(
+        "--models", nargs="+", required=True, help="model[=think] (default: config's think)"
+    )
     parser.add_argument("--runs", type=int, default=1, help="Answers per model and turn")
     parser.add_argument("--flag", default=None, help="Regex counted in each answer")
     parser.add_argument("--num-ctx", type=int, default=12288)
@@ -212,10 +226,10 @@ def main() -> None:
         print(requests[spec][1][-600:])
     # Model-major order: each model loads once for all its turns.
     for raw in args.models:
-        model, _, think = raw.partition("=")
+        model, think = model_think(settings, raw)
         for spec in args.turn:
             for n in range(1, args.runs + 1):
-                result = _run(model, _think(think or None), requests[spec], args.num_ctx)
+                result = _run(model, think, requests[spec], args.num_ctx)
                 _report(f"{model} [{spec}]", n, result, flag)
 
 

@@ -31,7 +31,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from replay_turn import ReplayTurn, _run, _think, build_turn
+from replay_turn import ReplayTurn, _run, build_turn, model_think
 
 from privy_council.config import load_settings
 from privy_council.engine import checks, context, dynamics
@@ -108,12 +108,12 @@ def _load_manifest(path: Path) -> list[dict[str, str]]:
 
 def _bench(args: argparse.Namespace) -> None:
     """Replay the manifest on the models and count the flaws."""
+    settings = load_settings(args.root)
     if args.prompts_from:
         saved = _saved_turns(args.prompts_from)
         entries = [{"session": session, "turn": spec} for session, spec in saved]
         turns = list(saved.values())
     else:
-        settings = load_settings(args.root)
         entries = _load_manifest(args.manifest)
         turns = [build_turn(settings, Path(e["session"]), e["turn"]) for e in entries]
     args.out.parent.mkdir(parents=True, exist_ok=True)
@@ -142,11 +142,11 @@ def _bench(args: argparse.Namespace) -> None:
                 keep(ORIGINAL, turn, turn.original, {})
         # Model-major order: each model loads once for all its turns.
         for raw in args.models:
-            model, _, think = raw.partition("=")
+            model, think = model_think(settings, raw)
             for turn in turns:
                 request = (turn.system, turn.user, turn.temperature, turn.max_output)
                 for _ in range(args.runs):
-                    r = _run(model, _think(think or None), request, args.num_ctx)
+                    r = _run(model, think, request, args.num_ctx)
                     if "error" in r:
                         print(f"[{model}] {turn.spec}: ERROR {r['error']}", flush=True)
                         continue
@@ -187,7 +187,9 @@ def main() -> None:
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     parser = argparse.ArgumentParser(description="Count flaws in replayed member turns.")
     parser.add_argument("--manifest", type=Path, default=Path("data/bench/manifest.toml"))
-    parser.add_argument("--models", nargs="*", default=[], help="model[=think]")
+    parser.add_argument(
+        "--models", nargs="*", default=[], help="model[=think] (default: config's think)"
+    )
     parser.add_argument("--original", action="store_true", help="Check the saved answers too")
     parser.add_argument("--runs", type=int, default=1, help="Answers per model and turn")
     parser.add_argument("--num-ctx", type=int, default=12288)
