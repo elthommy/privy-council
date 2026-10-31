@@ -18,6 +18,12 @@ Models run only through:
 
 Privy Council is an independent project, not affiliated with Anthropic. It drives the `claude` CLI you installed and logged in yourself: every Claude call counts against your plan's usage limits, under your account's terms. No subscription, or no wish to send anything to Anthropic? `--local-only` runs everything on Ollama.
 
+## Demo
+
+https://github.com/user-attachments/assets/d333134b-8f4b-471b-b7f6-07eda01f0c05
+
+<sub>Demo session staged with the app's fake backend. Music: "Happy Beats / Business Moves Vol. 9" by Sascha Ende, [ende.app](https://ende.app) — licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).</sub>
+
 ## Requirements
 
 - Python 3.12+ and [uv](https://docs.astral.sh/uv/).
