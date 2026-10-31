@@ -324,13 +324,20 @@ def _with_labels(text: str, figs: list[Figure]) -> list[Figure]:
 
 
 def numbers(text: str) -> list[float]:
-    """Return every number in a text, also scaled by its k / M suffix if it has one."""
+    """Return every number in a text, also scaled by its k / M suffix if it has one.
+
+    In a range the second end's suffix scales the first too ("$860-940M" gives 860M),
+    as in `figures`: else a member quoting the range was flagged (2026-10-31 run).
+    """
     out: list[float] = []
     for m in _ANY_NUMBER.finditer(text):
         value, _ = parse_number(m["n"])
         out.append(value)
         if m["m"]:
             out.append(value * _multiplier(m["m"]))
+    for m in _FIGURE.finditer(text):
+        if m["b"] and m["bm"] and not m["am"]:
+            out.append(parse_number(m["a"])[0] * _multiplier(m["bm"]))
     return out
 
 

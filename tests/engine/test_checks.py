@@ -65,6 +65,13 @@ def test_figures_read_ranges_multipliers_and_units() -> None:
     ]
 
 
+def test_a_range_quoted_from_the_facts_is_sourced() -> None:
+    facts = "Guidance for Q3 net interest was $860\u2013940M."
+    assert 860e6 in checks.numbers(facts)
+    for turn in ("Q3 guidance jumps to $860\u2013940M.", "Guidance of $860-940M for Q3."):
+        assert checks.figure_flaws(turn, facts, facts, "macro") == []
+
+
 def test_bare_numbers_are_not_figures() -> None:
     assert checks.figures("Round 2: my top 3 reasons, in 2026.") == []
 
