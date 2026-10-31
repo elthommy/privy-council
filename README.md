@@ -244,7 +244,7 @@ Current models (the persona files are the source of truth; `council personas lis
 | Steelman | devil_advocate | `gemma4:26b` | politics |
 | Counterfactual | devil_advocate | `gemma4:26b` | history |
 | Pragmatist | advisor | `muse-glimmer:30b` | finance, purchases |
-| Analyst | advisor | `muse-glimmer:30b` | economics |
+| Analyst | advisor | `nemotron-3.5-super:latest` | economics |
 | Realist | advisor | `nemotron-3.5-super` | geopolitics |
 | Vitality | advisor | `nemotron-3.5-super:latest` | wellbeing |
 | Economist | advisor | `nemotron-3.5-super:latest` | geopolitics |
@@ -257,7 +257,7 @@ Current models (the persona files are the source of truth; `council personas lis
 | Fan | advisor | `muse-glimmer:30b` | gacha |
 | Rigor | risk_officer | `nemotron-3.5-super:latest` | finance, career, purchases |
 
-Members of the same council run on different model families where possible, so they don't echo each other: finance and wellbeing use four (Claude, qwen, gemma, plus gpt-oss or nemotron), economics four (Claude, nemotron, muse-glimmer, gemma), geopolitics and purchases five (Claude, qwen, gpt-oss, nemotron, gemma; purchases has gemma twice, for Fixer and Contrarian), politics four, history four, career three, and salon two among its members (all local; Chair moderates on Claude).
+Members of the same council run on different model families where possible, so they don't echo each other: finance and wellbeing use four (Claude, qwen, gemma, plus gpt-oss or nemotron), economics three (Claude, nemotron for Macro and Analyst, gemma), geopolitics and purchases five (Claude, qwen, gpt-oss, nemotron, gemma; purchases has gemma twice, for Fixer and Contrarian), politics four, history four, career three, and salon two among its members (all local; Chair moderates on Claude).
 
 `council personas validate` reports errors with the file and field.
 
