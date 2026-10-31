@@ -12,7 +12,7 @@ from privy_council.models.session import DebateState, Message
 from privy_council.models.vote import Vote
 from privy_council.util.language import Language
 
-PROMPTS_VERSION = "49"
+PROMPTS_VERSION = "50"
 
 # Backends that accept a single user turn (the claude CLI on stdin) flatten a
 # multi-message conversation with these labels.
@@ -358,7 +358,9 @@ important. {asked_rule}
 conclusion that doesn't follow, or a rule turned upside down), "unsourced" (a figure \
 stated as fact that neither the facts, the dossier nor the user gave; see the engine's \
 list above, if any) or "other" (another factual error); `quote` is the member's exact \
-words, short; `note` says what is wrong in one sentence. Only errors you can show, \
+words, short; `note` says what is wrong in one sentence, impersonally, since it is \
+pasted into the floor line to that member: no name, no he, she or they ("The chain \
+gives 3.6 %, below the 8-12 % held"). Only errors you can show, \
 never a difference of judgment or a labelled estimate that is plausible. Do the check \
 before you report: if the quote turns out right, or right "in context", it is no flaw, \
 leave it out; and never "correct" a member toward a figure nobody sourced. {flaw_rule} \
