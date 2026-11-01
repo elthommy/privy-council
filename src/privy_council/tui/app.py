@@ -7,6 +7,7 @@ at the next turn boundary.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable, Coroutine, Sequence
 from pathlib import Path
 from typing import Any, ClassVar
@@ -21,6 +22,7 @@ from privy_council.models.session import (
     ErrorEvent,
     Event,
     MessageEvent,
+    Phase,
     RosterChanged,
     RoundStarted,
     SessionState,
@@ -34,7 +36,12 @@ from privy_council.tui.commands import (
     AS_USAGE,
     COMMANDS,
     INPUT_PLACEHOLDER,
+    NO_ANSWER,
     QUESTION_PLACEHOLDER,
+    STILL_TYPING,
+    STOPPED_WAITING,
+    WAITING_ANSWER,
+    WAITING_PLACEHOLDER,
     Command,
     Judgment,
     export_command,
@@ -115,6 +122,9 @@ class CouncilApp(App[None]):
         self.fallback: set[str] = set()
         self._confirm_run: int | None = None
         self._confirm_quit = False
+        self._asked = False  # the Chair asked the user during the current /run step
+        self._paused = False  # Esc during the current /run
+        self._answered: asyncio.Event | None = None  # set while a /run waits for an answer
 
     def compose(self) -> ComposeResult:
         """Lay out bar, chat, state pane, nick list and input."""
@@ -220,6 +230,7 @@ class CouncilApp(App[None]):
     def update_placeholder(self, event: Event) -> None:
         """Remind how to resume while the Chair's question is open (until the next round)."""
         if isinstance(event, MessageEvent) and event.message.to_user:
+            self._asked = True
             self.query_one(ChatInput).placeholder = QUESTION_PLACEHOLDER
         elif isinstance(event, RoundStarted):
             self.query_one(ChatInput).placeholder = INPUT_PLACEHOLDER
@@ -295,7 +306,9 @@ class CouncilApp(App[None]):
 
     def start(self, job: EngineJob) -> None:
         """Run an engine coroutine in a worker, unless one is already running."""
-        if self.engine.busy or any(w.group == "engine" and w.is_running for w in self.workers):
+        if self._answered is not None:  # a command ends the wait (exclusive cancels it)
+            self.stop_waiting()
+        elif self.engine.busy or any(w.group == "engine" and w.is_running for w in self.workers):
             self.chat.notice("Busy: /pause (or Esc) to stop at the next turn")
             return
 
@@ -333,7 +346,53 @@ class CouncilApp(App[None]):
             return
         self._confirm_run = None
         self.chat.notice(f"Running up to {rounds} round(s), ~{estimate} Claude calls; Esc pauses")
-        self.start(lambda: self.engine.run(rounds))
+        self.start(lambda: self.run_rounds(rounds))
+
+    async def run_rounds(self, rounds: int) -> None:
+        """Run rounds; when the Chair asks the user, wait for the answer, then go on."""
+        self._paused = False
+        left = rounds
+        while left > 0:
+            self._asked = False
+            left -= await self.engine.run(left)
+            if not self.should_wait(left):
+                return
+            await self.wait_answer()
+
+    def should_wait(self, left: int) -> bool:
+        """Return whether the /run stopped on a Chair question and should wait, then go on."""
+        return (
+            left > 0
+            and self._asked
+            and not self._paused
+            and self.engine.settings.engine.question_timeout_s > 0
+            and self.engine.phase not in (Phase.SYNTHESIS, Phase.DONE)
+        )
+
+    async def wait_answer(self) -> None:
+        """Wait for the user's answer up to the timeout; a half-typed one is waited for."""
+        timeout = self.engine.settings.engine.question_timeout_s
+        answered = self._answered = asyncio.Event()
+        self.query_one(ChatInput).placeholder = WAITING_PLACEHOLDER
+        self.chat.notice(WAITING_ANSWER.format(minutes=max(round(timeout / 60), 1)), ORANGE)
+        try:
+            await asyncio.wait_for(answered.wait(), timeout)
+        except TimeoutError:
+            if self.query_one(ChatInput).value.strip():  # never drop an answer being typed
+                self.chat.notice(STILL_TYPING)
+                await answered.wait()
+            else:
+                self.chat.notice(NO_ANSWER, ORANGE)
+        finally:
+            if self._answered is answered:
+                self._answered = None
+
+    def stop_waiting(self) -> None:
+        """End a /run's wait for an answer; the rest of the /run is dropped."""
+        self._answered = None
+        self.workers.cancel_group(self, "engine")
+        self.query_one(ChatInput).placeholder = QUESTION_PLACEHOLDER
+        self.chat.notice(STOPPED_WAITING)
 
     def cmd_more(self, arg: str) -> None:
         """`/more N`: add N rounds past max_rounds, then refresh the round counter."""
@@ -353,6 +412,8 @@ class CouncilApp(App[None]):
                 self.start(self.engine.step)
         elif arg:
             self.engine.say(arg)
+            if self._answered is not None:  # the answer a /run waits for: it goes on
+                self._answered.set()
         else:
             self.chat.notice("usage: /say <text>", RED)
 
@@ -413,8 +474,11 @@ class CouncilApp(App[None]):
         self.chat.notice("multi-line paste is kept whole: line breaks show as ⏎ until you send")
 
     def action_pause(self) -> None:
-        """Pause at the next turn boundary."""
-        if self.engine.busy:
+        """Pause at the next turn boundary, or stop a /run waiting for an answer."""
+        if self._answered is not None:
+            self.stop_waiting()
+        elif self.engine.busy:
+            self._paused = True
             self.engine.request_pause()
         else:
             self.chat.notice("Nothing is running")

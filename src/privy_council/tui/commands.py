@@ -48,6 +48,14 @@ COMMANDS = {
 QUESTION_HINT = "↳ answer in plain text, then /step (or /run N) to continue"
 INPUT_PLACEHOLDER = "/help for commands; plain text talks to the council"
 QUESTION_PLACEHOLDER = "answer the Chair here, then /step (or /run N) to continue"
+WAITING_PLACEHOLDER = "answer the Chair here: the /run goes on once you send it"
+WAITING_ANSWER = (
+    "Waiting up to {minutes} min for your answer: send it and the /run goes on; "
+    "past that it goes on without it (Esc stops waiting)"
+)
+NO_ANSWER = "No answer from you: the debate goes on with what it knows"
+STILL_TYPING = "You're typing: the /run waits for your answer"
+STOPPED_WAITING = "Stopped waiting for your answer: /step or /run N to continue"
 
 PROPOSAL_FACTS_TITLE = "-- shared memory: proposed facts (from your own words) --"
 PROPOSAL_FACTS_HINT = "/keep 1 3 | all | none to choose what everyone remembers about you"

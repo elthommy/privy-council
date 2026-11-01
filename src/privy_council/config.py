@@ -79,6 +79,9 @@ class EngineConfig(_Section):
     # Floor turns per round asking members to check an error the moderator caught
     # (M11); 0 turns them off. Errors past the cap go to the synthesis.
     max_flaw_prompts_per_round: int = Field(default=2, ge=0)
+    # TUI `/run`: how long to wait for the user's answer to the Chair before the
+    # debate goes on without it (like Discord's question_timeout_s); 0 waits for it.
+    question_timeout_s: float = Field(default=600, ge=0)
 
 
 class LocalSearchConfig(_Section):

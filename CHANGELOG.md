@@ -2,8 +2,9 @@
 
 All notable changes, by milestone. Dates are when each milestone was built.
 
-## Unreleased (2026-10-25 – 2026-10-31)
+## Unreleased (2026-10-25 – 2026-11-01)
 
+- **TUI `/run` no longer waits forever on the Chair's questions**: it waits up to `[engine] question_timeout_s` (600 s, as on Discord), then goes on without the answer; sending an answer resumes the run at once, a half-typed answer holds it, Esc or another command stops the wait. `0` keeps the old behaviour. The `--no-tui` REPL still waits.
 - **Discord front end** (`council chat discord`, `doctor --chat`): friends allowlisted by user ID debate with a local-only council in a forum thread; one webhook per persona with its avatar; a fixed command table (`/ask`, `/status`, `/flaws`, …); `/offline` and `/resume`; message size and per-round caps; no pings.
 - **Local web search** (opt-in `[research.local]`): SearXNG in Podman, started and stopped with the session; snippets only; the Chair's summary is checked against the hits (figures and URLs); a follow-up search for missing facts. `[research] provider = "claude" | "local" | "auto"` for normal sessions.
 - **Fewer flaws**: a "wrong unit" check (a number the sources give only with another unit), numbers spelled out as words, a member's own written-out arithmetic no longer flagged as unsourced, moderator flags that confirm the quote or that a member already answered are dropped.

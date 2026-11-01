@@ -92,6 +92,7 @@ context_last_k_messages = 6
 max_output_tokens = 1500   # hard cap per turn, a safety net; prompts ask for concision
 max_turn_chars_display = 2000
 max_flaw_prompts_per_round = 2   # turns asking members to check a caught error; 0: off
+question_timeout_s = 600   # TUI /run: wait this long for your answer to the Chair, then go on; 0: wait
 
 [memory]
 private_cap_bytes = 4096

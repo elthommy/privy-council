@@ -303,12 +303,14 @@ async def test_chair_questions_are_highlighted(
         decision([("rigor", "go")]),
     ]
     h = Harness(tmp_path, personas, standard_responder(decisions))
+    h.settings.engine.question_timeout_s = 0  # wait for the answer, as before the timeout
     app = CouncilApp(h.engine)
     async with app.run_test(size=SIZE) as pilot:
         await app.workers.wait_for_complete()
         await submit(pilot, "/run 3")
         assert h.engine.meta.runtime.round == 1
         text = chat_text(app)
+        assert "Waiting up to" not in text
         assert "▶ <Chair> question for you:" in text
         assert f"@User {QUESTION}" in text
         assert "/run paused for Chair's question" in text
@@ -317,6 +319,90 @@ async def test_chair_questions_are_highlighted(
         await submit(pilot, "2 months")
         await submit(pilot, "/step")
         assert "/help for commands" in app.query_one(ChatInput).placeholder
+
+
+def asking_harness(tmp_path: Path, personas: dict[str, Persona], timeout: float) -> Harness:
+    """A session whose Chair asks the user after the blind round, with this answer timeout."""
+    decisions: list[dict[str, Any] | str] = [
+        asking([("rigor", "go")], QUESTION),
+        *[decision([("rigor", "go")]) for _ in range(6)],
+    ]
+    h = Harness(tmp_path, personas, standard_responder(decisions))
+    h.settings.engine.question_timeout_s = timeout
+    return h
+
+
+async def start_run_until_waiting(pilot: Pilot[None], app: CouncilApp) -> None:
+    """Send `/run 3` and return once it waits for the user's answer."""
+    await app.workers.wait_for_complete()
+    app.query_one(ChatInput).value = "/run 3"
+    await pilot.press("enter")
+    for _ in range(500):
+        if app._answered is not None:
+            return
+        await pilot.pause(0.01)
+    raise AssertionError("the /run never waited for an answer")
+
+
+async def test_run_goes_on_without_an_answer_after_the_timeout(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    h = asking_harness(tmp_path, personas, timeout=0.05)
+    app = CouncilApp(h.engine)
+    async with app.run_test(size=SIZE) as pilot:
+        await app.workers.wait_for_complete()
+        await submit(pilot, "/run 3")
+        text = chat_text(app)
+        assert "Waiting up to 1 min for your answer" in text
+        assert "No answer from you: the debate goes on" in text
+        assert h.engine.meta.runtime.round == 3
+        assert app._answered is None
+
+
+async def test_answer_during_the_wait_resumes_the_run(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    h = asking_harness(tmp_path, personas, timeout=60)
+    app = CouncilApp(h.engine)
+    async with app.run_test(size=SIZE) as pilot:
+        await start_run_until_waiting(pilot, app)
+        assert h.engine.meta.runtime.round == 1
+        assert "the /run goes on once you send it" in app.query_one(ChatInput).placeholder
+        await submit(pilot, "2 months")
+        assert h.engine.meta.runtime.round == 3
+        assert any(m.text == "2 months" for m in h.engine.messages)
+        assert "No answer from you" not in chat_text(app)
+
+
+async def test_half_typed_answer_holds_the_run_past_the_timeout(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    h = asking_harness(tmp_path, personas, timeout=0.2)
+    app = CouncilApp(h.engine)
+    async with app.run_test(size=SIZE) as pilot:
+        await start_run_until_waiting(pilot, app)
+        app.query_one(ChatInput).value = "2 mon"
+        await pilot.pause(0.4)
+        assert "You're typing: the /run waits for your answer" in chat_text(app)
+        assert h.engine.meta.runtime.round == 1
+        await submit(pilot, "2 months")
+        assert h.engine.meta.runtime.round == 3
+
+
+async def test_escape_or_a_command_stops_the_wait(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    h = asking_harness(tmp_path, personas, timeout=60)
+    app = CouncilApp(h.engine)
+    async with app.run_test(size=SIZE) as pilot:
+        await start_run_until_waiting(pilot, app)
+        await pilot.press("escape")
+        await app.workers.wait_for_complete()
+        assert "Stopped waiting for your answer" in chat_text(app)
+        assert h.engine.meta.runtime.round == 1 and app._answered is None
+        await submit(pilot, "/step")  # nothing waits any more: no "Busy"
+        assert "Busy" not in chat_text(app)
+        assert h.engine.meta.runtime.round == 2
 
 
 def unread_line(app: CouncilApp) -> Static:
