@@ -165,6 +165,9 @@ class EngineRuntime(BaseModel):
     proposed_summons: list[str] = Field(default_factory=list)
     # Questions the moderator put to the user, listed in its task so it never re-asks.
     asked_questions: list[str] = Field(default_factory=list)
+    # Questions nobody answered yet (a TUI or Discord /run goes on after a timeout), and
+    # those the last update wrote, never posted: the synthesis lists them for the user.
+    unanswered_questions: list[str] = Field(default_factory=list)
     # The debate stopped before max_rounds (consensus or looping): `pending` keeps the
     # moderator's plan, and /step or /run resumes debating instead of the synthesis.
     early_stop: bool = False

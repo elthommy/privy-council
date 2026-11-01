@@ -27,6 +27,11 @@ def questions_posted(h: Harness) -> list[str]:
     return [m.text for m in h.engine.messages if m.to_user]
 
 
+def prompt_text(request: CompletionRequest) -> str:
+    """Return a request's messages as one text."""
+    return "\n".join(m.content for m in request.messages)
+
+
 async def test_run_pauses_after_the_round_that_asked(
     tmp_path: Path, personas: dict[str, Persona]
 ) -> None:
@@ -81,7 +86,7 @@ async def test_step_shows_questions_without_extra_pause(
     assert not any("question for you" in n for n in notices)
 
 
-async def test_questions_are_forwarded_when_the_debate_stops(
+async def test_questions_at_the_end_go_to_the_synthesis_not_the_user(
     tmp_path: Path, personas: dict[str, Persona]
 ) -> None:
     decisions: list[dict[str, Any] | str] = [
@@ -90,8 +95,43 @@ async def test_questions_are_forwarded_when_the_debate_stops(
     ]
     h = Harness(tmp_path, personas, standard_responder(decisions))
     await h.engine.run(3)  # no early stop after round 1: the stop comes after round 2
-    assert questions_posted(h) == [f"@User {QUESTION}"]
+    assert questions_posted(h) == []  # no member left to use the answer
     assert h.engine.phase.value == "synthesis"
+    await h.engine.close()
+    synthesis = next(r for r in h.claude.requests if r.tag.purpose == "synthesis")
+    assert f'The user never answered these questions: "{QUESTION}"' in prompt_text(synthesis)
+
+
+async def test_the_last_update_is_told_not_to_ask(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    h = Harness(tmp_path, personas, standard_responder([decision([("rigor", "go")])] * 12))
+    await h.engine.run(h.engine.max_rounds)
+    assert h.engine.phase.value == "synthesis"
+    *earlier, last = [r for r in h.claude.requests if r.tag.purpose == "moderate"]
+    rule = "This is the last update and the debate ends after it: leave questions_for_user"
+    assert rule in prompt_text(last)
+    assert earlier and not any(rule in prompt_text(r) for r in earlier)
+
+
+async def test_synthesis_lists_unanswered_questions_and_not_answered_ones(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    other = "Is your job stable?"
+    decisions: list[dict[str, Any] | str] = [
+        asking([("rigor", "go")], QUESTION),
+        asking([("rigor", "go")], other),
+        decision([("rigor", "go")]),
+    ]
+    h = Harness(tmp_path, personas, standard_responder(decisions))
+    await h.engine.run(1)
+    h.engine.say("About 2 months.")
+    await h.engine.run(1)  # nobody answers the second question: the run goes on
+    assert h.engine.meta.runtime.unanswered_questions == [other]
+    await h.engine.close()
+    synthesis = next(r for r in h.claude.requests if r.tag.purpose == "synthesis")
+    assert f'You already asked the user during the debate: "{QUESTION}"' in prompt_text(synthesis)
+    assert f'The user never answered these questions: "{other}"' in prompt_text(synthesis)
 
 
 async def test_personas_address_the_user_by_name(

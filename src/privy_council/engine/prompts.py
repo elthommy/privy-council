@@ -395,6 +395,11 @@ REASON_BUDGET = "the Claude budget is getting tight"
 REASON_OFF = "web research is off"
 
 ASKED_RULE_NONE = "Never ask something the user already answered."
+# Asked at the last update, the user's answer reached only the synthesis (2026-11-01).
+QUESTIONS_RULE_LAST = (
+    "This is the last update and the debate ends after it: leave questions_for_user "
+    "empty, since no member could use the answer."
+)
 ASKED_RULE = (
     "You already asked the user: {asked}. Never ask any of these again, even reworded "
     "or combined with something new, nor anything the user already answered. If the "
@@ -477,6 +482,12 @@ Only attribute positions members actually stated. Refer to a member by nick or a
 SYNTHESIS_ASKED = (
     "You already asked the user during the debate: {asked}. The questions section must "
     "not repeat any of them, even reworded, nor ask anything the user already answered."
+)
+# A question the debate went on without (the /run timeout) was left out of the
+# synthesis, though members said its answer would move their numbers (2026-11-01 run).
+SYNTHESIS_UNANSWERED = (
+    "The user never answered these questions: {asked}. List each of them in the "
+    "questions section (tightened if needed), and say what the debate assumed instead."
 )
 
 # The moderator's flaw reports (M11), appended to the synthesis task when there are any.
@@ -962,18 +973,28 @@ def summon_rule(candidates: Sequence[Persona]) -> str:
     return SUMMON_RULE_ON.format(available=available)
 
 
-def synthesis_asked(asked: Sequence[str]) -> str | None:
-    """Return the synthesis's rule against re-asking; None if nothing was asked."""
-    if not asked:
-        return None
-    return SYNTHESIS_ASKED.format(asked="; ".join(f'"{q}"' for q in asked))
+def synthesis_asked(asked: Sequence[str], unanswered: Sequence[str] = ()) -> str | None:
+    """Return the synthesis's rules on questions asked; None if nothing was asked.
+
+    Answered questions must not come back; unanswered ones must be listed.
+    """
+    answered = [q for q in asked if q not in unanswered]
+    rules = [
+        *([SYNTHESIS_ASKED.format(asked=_quoted(answered))] if answered else []),
+        *([SYNTHESIS_UNANSWERED.format(asked=_quoted(unanswered))] if unanswered else []),
+    ]
+    return " ".join(rules) or None
 
 
-def asked_rule(asked: Sequence[str]) -> str:
-    """Return the moderator's rule against re-asking, listing the questions already asked."""
-    if not asked:
-        return ASKED_RULE_NONE
-    return ASKED_RULE.format(asked="; ".join(f'"{q}"' for q in asked))
+def asked_rule(asked: Sequence[str], last_round: bool = False) -> str:
+    """Return the moderator's rules on asking: never re-ask, nothing on the last update."""
+    rule = ASKED_RULE.format(asked=_quoted(asked)) if asked else ASKED_RULE_NONE
+    return f"{rule} {QUESTIONS_RULE_LAST}" if last_round else rule
+
+
+def _quoted(questions: Sequence[str]) -> str:
+    """Return the questions quoted and joined for a prompt."""
+    return "; ".join(f'"{q}"' for q in questions)
 
 
 def stop_rule(auto_stop: bool, last_round: bool, first_round: bool = False) -> str:

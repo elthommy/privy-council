@@ -305,6 +305,12 @@ def guest_question(
     return []
 
 
+def still_unanswered(questions: Sequence[str], author: str, owner: str) -> list[str]:
+    """Return the questions left open once `author` wrote (unaddressed ones are the owner's)."""
+    who = author.lower()
+    return [q for q in questions if (_addressee(q) or owner.lower()) != who]
+
+
 def _addressee(question: str) -> str | None:
     """Return the lower-cased @name a question starts with, if any."""
     match = _LEADING_MENTION.match(question)

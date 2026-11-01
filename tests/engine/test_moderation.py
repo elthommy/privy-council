@@ -25,6 +25,7 @@ from privy_council.engine.moderation import (
     parse_decision,
     resolve_speaker,
     round_robin,
+    still_unanswered,
 )
 from privy_council.loaders.personas import load_personas
 from privy_council.models.persona import Persona
@@ -257,3 +258,9 @@ def test_a_question_naming_nobody_goes_to_the_owner() -> None:
 def test_a_question_that_only_shares_a_few_words_is_new() -> None:
     asked = ["@Thomas can you afford the extra pulls for hard pity now?"]
     assert not asked_before("@Thomas can you afford a second copy now?", asked, "Thomas")
+
+
+def test_a_reply_answers_only_the_questions_put_to_its_author() -> None:
+    questions = ["How much is saved?", "@Ben Which bank?", "@Ada Your horizon?"]
+    assert still_unanswered(questions, "Ada", "Ada") == ["@Ben Which bank?"]
+    assert still_unanswered(questions, "ben", "Ada") == ["How much is saved?", "@Ada Your horizon?"]

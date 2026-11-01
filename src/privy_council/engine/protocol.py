@@ -39,6 +39,7 @@ from privy_council.engine.moderation import (
     moderator_schema,
     resolve_speaker,
     round_robin,
+    still_unanswered,
     to_pending,
     with_flaw_turns,
 )
@@ -309,6 +310,11 @@ class DebateEngine(ResearchFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
         `author` names the person in a shared chat; None is the owner.
         """
         self._post("user", text, author=author)
+        rt = self.meta.runtime
+        if rt.unanswered_questions:
+            who = author or self.user_name
+            rt.unanswered_questions = still_unanswered(rt.unanswered_questions, who, self.user_name)
+            self._save()
 
     async def _run_phase(self, phase: Phase) -> None:
         """Dispatch one phase and settle the resulting state."""
@@ -517,8 +523,12 @@ class DebateEngine(ResearchFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
                 rt.pending = self._with_flaw_turns(planned)
                 self._notice(NOTICE_NEXT.format(speakers=self._speaker_list(rt.pending)))
             summon = self._summon_ask(decision.summon)
-            self._forward_questions([*decision.questions_for_user, *relayed, *summon])
-            rt.asked_questions.extend(decision.questions_for_user)
+            # Once the debate ends no member could use an answer (2026-11-01 run): the
+            # synthesis lists the questions instead.
+            questions = [] if ending else decision.questions_for_user
+            self._forward_questions([*questions, *relayed, *summon])
+            rt.asked_questions.extend(questions)
+            rt.unanswered_questions.extend(decision.questions_for_user)
 
     def _moderate_request(
         self, stats: list[dynamics.MemberStats], last_round: bool
@@ -567,7 +577,7 @@ class DebateEngine(ResearchFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
                 else prompts.RESEARCH_RULE_ON
             ),
             summon_rule=prompts.summon_rule([] if last_round else self._summon_candidates()),
-            asked_rule=prompts.asked_rule(rt.asked_questions),
+            asked_rule=prompts.asked_rule(rt.asked_questions, last_round),
             flaw_rule=prompts.flaw_rule(
                 self.settings.engine.max_flaw_prompts_per_round, last_round
             ),
@@ -770,7 +780,7 @@ class DebateEngine(ResearchFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
             self.meta.language,
             reason=rt.stop_reason or prompts.SYNTHESIS_REASON_DEFAULT,
         )
-        asked = prompts.synthesis_asked(rt.asked_questions)
+        asked = prompts.synthesis_asked(rt.asked_questions, rt.unanswered_questions)
         vote = prompts.synthesis_vote(rt.last_vote, rt.last_vote_round, self.nick)
         # A member who answered a challenge either withdrew the error or kept it, and the
         # moderator's next update, which read the answer, flags it again if it still stands.
