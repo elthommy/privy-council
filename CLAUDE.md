@@ -227,6 +227,7 @@ When implementing or changing the backend, make sure:
 - Work **milestone by milestone** (see `PROJECT_BRIEF.md` §14). Start with **M0** (spike) and record its findings in `docs/spike-notes.md` before building backends.
 - **Read `docs/STATUS.md` at the start of a session, if present.** It's the owner's private dev log (progress, decisions made with the user that supersede the brief), gitignored and never committed. Update it at the end of each milestone, and add user-facing changes to `CHANGELOG.md`.
 - **This repository is public.** Commits, messages and code must not quote real session questions, people's names or personal details; those stay in `docs/STATUS.md` and `data/`.
+  - That includes the owner's figures from real sessions (amounts, contributions, dates). When a test, docstring or commit message is built from a real turn, use made-up numbers that give the same arithmetic.
 - For each milestone:
   1. propose a short plan;
   2. implement with tests;
