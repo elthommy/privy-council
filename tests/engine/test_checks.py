@@ -275,3 +275,42 @@ def test_figures_cleared_for_a_given_figure_or_own_arithmetic() -> None:
 )
 def test_moderator_notes_that_confirm_or_dispute(note: str, confirms: bool, disputes: bool) -> None:
     assert (checks.note_confirms(note), checks.note_disputes(note)) == (confirms, disputes)
+
+
+SAVINGS = (
+    "<User> TECHNOLOGY: 18240.35 EUR (25.20%), COMMUNICATION: 2410.62 EUR (3.33%).\n"
+    "State: total savings ~72.4k EUR. The plan shares vest over 3 years."
+)
+
+
+@pytest.mark.parametrize(
+    ("text", "note"),
+    [
+        ("Tech plus communication is €18,240 + €2,410 = €20,651.", "€20,651"),
+        ("Your figures sum to about €72.4k (€18.2k tech ÷ 25.2%).", "€72.4k"),
+        ("€20,651 is about 28.5% of savings. Later, at 28.5%, a fall costs more.", "28.5%"),
+        (
+            "Add bonds until the buffer is 12\u201315% of savings, about 9\u201311k EUR.",
+            "9\u201311k EUR",
+        ),
+        ("Keep the band at 20-25%, and trim back toward 22.5%.", "22.5%"),
+        ("A match of €150 a month, or €1,800 a year, is worth keeping.", "€1,800"),
+        ("Headroom is €1,800. At €450 a month that's about 4 months.", "4 months"),
+        ("The shares are locked for at least 36 months.", "36 months"),
+    ],
+)
+def test_shares_conversions_and_midpoints_are_the_members_math(text: str, note: str) -> None:
+    flagged = [f.note for f in checks.figure_flaws(text, SAVINGS, SAVINGS, "compounder")]
+    assert note not in flagged
+
+
+@pytest.mark.parametrize(
+    ("text", "note"),
+    [
+        ("Budget €150 for it, but assume a 40% chance it fails.", "40%"),  # no "of"
+        ("Set a monthly budget (e.g. ≤ €30 of treats), and €200 a year.", "€30"),
+        ("€20,651 is about 31.5% of savings.", "31.5%"),
+    ],
+)
+def test_other_shares_and_conversions_stay_unsourced(text: str, note: str) -> None:
+    assert note in [f.note for f in checks.figure_flaws(text, SAVINGS, SAVINGS, "compounder")]

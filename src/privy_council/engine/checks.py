@@ -22,12 +22,17 @@ period of the turn ("$175 over 3 years: $58/year"), a percentage of the turn app
 to an amount ("15 % off $108: $92"), or a figure divided or multiplied by a number
 the turn writes as an operation ("€750 / 3"). A total of two or three sourced
 figures of the turn counts too, a bare "40 k" joining a money total ("25 k, 40 k
-and 15 k: €80 k"): invented numbers rarely add up from quoted facts. Wider rules
-(any pair of numbers) excuse almost every small number.
+and 15 k: €80 k"): invented numbers rarely add up from quoted facts. So do a
+band's middle ("20-25%": 22.5%), an amount "a month" times 12 (or "a year" over
+12), a sum over a monthly amount as months, years as months, a percentage "of"
+a sourced total within its sentence ("€20,651, about 28.5% of savings"), and a
+value the turn already derived, written again. Wider rules (any pair of numbers)
+excuse almost every small number.
 """
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Collection, Iterable
 from dataclasses import dataclass, replace
@@ -67,11 +72,20 @@ _OPERAND = re.compile(
     re.IGNORECASE,
 )
 # An operation written out between two numbers, whatever their units: "(80 - 15)",
-# "35 x 160". A hyphen counts only between spaces: "40-80" is a range.
+# "35 x 160", "€18,240 + €2,410", "€18.2k tech ÷ 25.2%". A hyphen counts only
+# between spaces: "40-80" is a range.
 _EXPRESSION = re.compile(
-    rf"(?<![\w.,])(?P<a>{_NUM})\s?(?:[^\W\d_]+\s?)?"
-    rf"(?P<op>[+\u2212\u00d7*/\u00f7]|\s[-\u2013]\s)\s?(?P<b>{_NUM})(?![\d.,])"
+    rf"(?<![\w.,]){_CURRENCY}?\s?(?P<a>{_NUM})(?:\s?(?P<am>{_MULT})(?!\w))?\s?(?:[^\W\d_]+\s?)?"
+    rf"(?P<op>[+\u2212\u00d7*/\u00f7]|\s[-\u2013]\s)\s?{_CURRENCY}?\s?(?P<b>{_NUM})"
+    rf"(?:\s?(?P<bm>{_MULT})(?!\w))?(?P<bp>\s?%)?(?![\d.,])"
 )
+# An amount written "a month" or "a year" converts to the other ("€150 a month, or
+# €1,800 a year"), and a sum divided by a monthly amount is a number of months.
+_PER_MONTH = re.compile(r"\s?(?:a|per|each|/|par)\s?(?:months?|mois)\b", re.IGNORECASE)
+_PER_YEAR = re.compile(r"\s?(?:a|per|each|/|par)\s?(?:years?|an|année)\b", re.IGNORECASE)
+_MONTHS_A_YEAR = 12
+# A percentage written as a share of something: "28.5% of savings", "12 % de l'épargne".
+_SHARE_OF = re.compile(r"\s?(?:of|de|du|des|d')(?=[\s'])", re.IGNORECASE)
 # A weighted sum written out: "0.3\u00d735% + 0.7\u00d720%", "30% x 35% + 70% x 20%".
 _TERM_TEXT = rf"{_NUM}\s?%?\s?[\u00d7x*]\s?{_NUM}\s?%?"
 _TERM = re.compile(rf"(?P<w>{_NUM})\s?(?P<wp>%)?\s?[\u00d7x*]\s?(?P<v>{_NUM})\s?%?")
@@ -402,8 +416,54 @@ def _derived(figs: list[Figure], text: str, skip: Figure | None = None) -> dict[
     for family, values in totals.items():
         out.setdefault(family, set()).update(v / n for v in values for n in operands)
         out[family].update(v * n for v in values for n in operands)
+    for fig in figs:
+        if fig is not skip and len(fig.values) == 2:  # a band's middle: "20-25%", 22.5%
+            out.setdefault(fig.family, set()).add(sum(fig.values) / 2)
+    monthly = _per(figs, text, _PER_MONTH, skip)
+    out["money"].update(m * _MONTHS_A_YEAR for m in monthly)
+    out["money"].update(y / _MONTHS_A_YEAR for y in _per(figs, text, _PER_YEAR, skip))
+    # "€1,800 of headroom at €450 a month": 4 months.
+    out.setdefault("time", set()).update(m / r for m in money for r in monthly if r)
     out["x"] = out.get(_TIMES, set())
     return out
+
+
+def _per(figs: list[Figure], text: str, period: re.Pattern[str], skip: Figure | None) -> set[float]:
+    """Return the turn's amounts of money written per period ("€450 a month")."""
+    return {
+        v
+        for f in figs
+        if f is not skip and f.family == "money" and period.match(text, f.end)
+        for v in f.values
+    }
+
+
+def _shares(fig: Figure, figs: list[Figure], text: str, totals: set[float]) -> set[float]:
+    """Return what a figure can be as a share of a sourced total, within its sentence.
+
+    "€20,651, which is about 28.5% of savings" and "12-15% of savings, about
+    9-11k EUR" take the total (€72.4k) from the prompt, not the turn: a percentage
+    "of" something is an amount of its sentence over a sourced amount, and an amount
+    is such a percentage times one (2026-11-02 run). Without "of", "a 40% chance"
+    beside "$150" is 150 / 375 by chance.
+    """
+    lo = max((m.end() for m in _SENTENCE_END.finditer(text, 0, fig.start)), default=0)
+    after = _SENTENCE_END.search(text, fig.end)
+    hi = after.start() if after else len(text)
+    near = [f for f in figs if f is not fig and lo <= f.start and f.end <= hi]
+    if fig.family == "%" and _SHARE_OF.match(text, fig.end):
+        amounts = {v for f in near if f.family == "money" for v in f.values if v}
+        return {a / t * 100 for a in amounts for t in totals if t > a}
+    if fig.family == "money":
+        shares = {
+            v
+            for f in near
+            if f.family == "%" and _SHARE_OF.match(text, f.end)
+            for v in f.values
+            if 0 < v < 100
+        }
+        return {p / 100 * t for p in shares for t in totals}
+    return set()
 
 
 def _weighted(text: str) -> set[float]:
@@ -432,20 +492,40 @@ def _written(text: str, known: Collection[float]) -> set[float]:
     """
     out: set[float] = set()
     for m in _EXPRESSION.finditer(text):
-        (a, pa), (b, pb) = parse_number(m["a"]), parse_number(m["b"])
         pool = [*known, *out]
-        if not (_matches(a, min(pa, 1.0), pool) and _matches(b, min(pb, 1.0), pool)):
-            continue
-        op = m["op"].strip()
-        if op == "+":
-            out.add(a + b)
-        elif op in ("\u2212", "-", "\u2013"):
-            out.add(a - b)
-        elif op in ("\u00d7", "*"):
-            out.add(a * b)
-        elif b:
-            out.add(a / b)
+        a_values = _operand(m["a"], m["am"], pool)
+        b_values = _operand(m["b"], m["bm"], pool)
+        if m["bp"]:
+            b_values = {b / 100 for b in b_values}
+        out.update(_apply(m["op"].strip(), a, b) for a in a_values for b in b_values)
+    out.discard(math.nan)
     return out
+
+
+def _operand(raw: str, mult: str | None, pool: Collection[float]) -> set[float]:
+    """Return an operand's values: as written and the sourced numbers it rounds, or none.
+
+    Exact up to the units digit ("80" isn't 75-85), but "€18.2k" may round 18,240.35
+    and "€18,240" truncate it: the member computed with the precise figure, so its
+    "€20,651" is 18,240.35 + 2,410.62, not 18,240 + 2,410 (2026-11-02 run).
+    """
+    value, precision = parse_number(raw)
+    factor = _multiplier(mult)
+    value, precision = value * factor, min(precision, 1.0) * factor
+    if not _matches(value, precision, pool):
+        return set()
+    return {value} | {k for k in pool if _matches(value, precision, (k,))}
+
+
+def _apply(op: str, a: float, b: float) -> float:
+    """Return `a op b` for a written operator (NaN for a division by zero)."""
+    if op == "+":
+        return a + b
+    if op in ("\u2212", "-", "\u2013"):
+        return a - b
+    if op in ("\u00d7", "*"):
+        return a * b
+    return a / b if b else math.nan
 
 
 def _priced(text: str, prices: dict[str, set[float]]) -> dict[str, set[float]]:
@@ -647,29 +727,36 @@ def figure_flaws(text: str, sources: str, given: str, member: str, round_: int =
     priced = _priced(text, occurrences[0])
     written = _written(text, known) | _weighted(text)
     chained = _chained(figs)
-    out: list[Flaw] = []
+    periods = occurrences[0].get("time", set()) | _by_family(figs).get("time", set())
+    # "3 years" is 36 months: the time family doesn't tell years from months.
+    calendar = {v * k for v in periods for k in (_MONTHS_A_YEAR, 1 / _MONTHS_A_YEAR)}
+    checked: list[tuple[Figure, bool, set[float]]] = []
     for fig in figs:
-        pairs = list(zip(fig.values, fig.precisions, strict=True))
-        sourced = _sourced(fig, known, occurrences[0])
         own = (
             _derived(figs, text, fig).get(fig.family, set())
             | totals.get(fig.family, set())
             | converted.get(fig.family, set())
             | written
+            | (calendar if fig.family == "time" else set())
+            | _shares(fig, figs, text, occurrences[0].get("money", set()))
         )
         exact = priced.get(fig.family, set())
         ranges = chained if fig.family == "%" else []
-        if (
-            not sourced
-            and not fig.spelled
-            and all(
-                _matches(v, p, known)
-                or _matches(v, p, own)
-                or _matches(v, min(p, 1.0), exact)
-                or _in_range(v, p, ranges)
-                for v, p in pairs
-            )
-        ):
+        arithmetic = not fig.spelled and all(
+            _matches(v, p, known)
+            or _matches(v, p, own)
+            or _matches(v, min(p, 1.0), exact)
+            or _in_range(v, p, ranges)
+            for v, p in zip(fig.values, fig.precisions, strict=True)
+        )
+        checked.append((fig, arithmetic, own))
+    # A result the turn derived once may come back later on its own ("at 28.5%").
+    derived = {(f.family, v) for f, ok, _ in checked if ok for v in f.values}
+    out: list[Flaw] = []
+    for fig, arithmetic, own in checked:
+        sourced = _sourced(fig, known, occurrences[0])
+        again = not fig.spelled and all((fig.family, v) in derived for v in fig.values)
+        if not sourced and (arithmetic or again):
             continue  # the member's own arithmetic: the moderator judges it
         kind = _kind(fig, sourced, quoted, occurrences, own)
         if kind is None:
