@@ -45,3 +45,34 @@ sequenceDiagram
     Members-->>Chair: Positions and confidence
     Chair-->>User: Synthesis (recommendation, errors caught, next steps)
 ```
+
+## Error checks
+
+What "flag errors" does above. The engine's checks are plain Python
+(`engine/checks.py`, no model call). They only test where a figure comes from:
+whether it is in the member's own prompt or the member's own arithmetic on figures
+from the same turn. Wrong sums, contradictions and logic errors are judged by the
+Chair alone. The engine then drops the Chair's reports that don't hold up. A
+flagged turn's text is never changed.
+
+```mermaid
+flowchart TD
+    A[Member writes a turn] --> B["Engine: check_turn<br/>(engine/checks.py, no model)"]
+    B -->|"figure found nowhere in the member's prompt<br/>→ unsourced / wrong_unit / mislabelled"| C[Engine flags]
+    B -->|"format slips<br/>(Nick: prefix, bad @mention…)"| L[Logged only]
+
+    C -->|"listed in 'Debate dynamics'<br/>(max 8)"| D["Chair reviews the round<br/>returns JSON flaws (max 4):<br/>arithmetic · contradiction · logic · unsourced · other"]
+
+    D --> E{"Engine cross-check<br/>(engine/flaw_flow.py)"}
+    E -->|"figure is in the member's sources,<br/>or the member's own arithmetic,<br/>or the Chair's note says it holds"| X[Flag dropped]
+    E -->|holds| F[Flaw recorded]
+    F -->|"new research gives the figure"| X
+
+    F -->|"first max_flaw_prompts_per_round (2)"| G["Next round: Chair asks the member<br/>'you wrote …, check it'"]
+    F -->|the rest| H[Final synthesis]
+    G -->|"member answers"| OK[Resolved]
+    G -->|"no answer"| H
+    H --> S["'Errors' section<br/>in the synthesis"]
+```
+
+`/flaws` lists every flag, from both the engine and the Chair.
