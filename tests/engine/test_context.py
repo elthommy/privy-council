@@ -73,6 +73,25 @@ def test_message_filters() -> None:
     assert context.recent_messages(msgs, 0) == []
 
 
+def test_recent_messages_keep_user_lines_the_moderator_has_not_seen() -> None:
+    msgs = [
+        Message(speaker="user", text="old answer"),
+        Message(speaker="chair", text="update"),
+        Message(speaker="user", text="new answer"),
+        Message(speaker="rigor", text="a"),
+        Message(speaker="system", text="notice"),
+        Message(speaker="pragmatist", text="b"),
+    ]
+    kept = context.recent_messages(msgs, 2, user_since=2)
+    assert [m.text for m in kept] == ["new answer", "a", "b"]  # chat order, no duplicates
+    assert [m.text for m in context.recent_messages(msgs, 3, user_since=2)] == [
+        "new answer",
+        "a",
+        "b",
+    ]
+    assert "old answer" not in [m.text for m in context.recent_messages(msgs, 0, user_since=2)]
+
+
 def test_state_text_none_until_built() -> None:
     assert context.state_text(DebateState(), str.upper) is None
     text = context.state_text(DebateState(positions={"rigor": "wait"}), str.upper)

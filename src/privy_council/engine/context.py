@@ -72,10 +72,21 @@ def given_text(user: str) -> str:
     return "\n".join(parts)
 
 
-def recent_messages(messages: Sequence[Message], k: int) -> list[Message]:
-    """Return the last `k` chat messages, skipping system notices."""
-    chat = [m for m in messages if m.speaker != "system"]
-    return chat[-k:] if k > 0 else []
+def recent_messages(
+    messages: Sequence[Message], k: int, user_since: int | None = None
+) -> list[Message]:
+    """Return the last `k` chat messages, skipping system notices.
+
+    With `user_since`, the user's lines from that index on are kept even when older
+    than the window: the debate state only picks them up at the next moderator
+    update, so a busy round would otherwise drop an answer the members still need.
+    """
+    chat = [i for i, m in enumerate(messages) if m.speaker != "system"]
+    tail = set(chat[-k:]) if k > 0 else set()
+    since = len(messages) if user_since is None else user_since
+    return [
+        messages[i] for i in chat if i in tail or (i >= since and messages[i].speaker == "user")
+    ]
 
 
 def blind_messages(messages: Sequence[Message], moderator: str) -> list[Message]:

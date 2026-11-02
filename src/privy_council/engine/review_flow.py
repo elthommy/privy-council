@@ -177,7 +177,9 @@ class ReviewFlow(EngineCore):
             state_text=context.state_text(self.meta.runtime.debate_state, self.nick),
             history=context.render_history(
                 context.recent_messages(
-                    self.messages, self.settings.engine.context_last_k_messages
+                    self.messages,
+                    self.settings.engine.context_last_k_messages,
+                    user_since=self.meta.runtime.moderated_upto,
                 ),
                 self.nick,
             ),

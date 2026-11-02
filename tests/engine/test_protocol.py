@@ -274,6 +274,27 @@ async def test_cross_round_sees_state_history_and_interjection(
     assert "contrarian says something" not in text  # already folded into the state
 
 
+async def test_user_answer_after_an_update_outlives_the_last_k_window(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    turns = [("rigor", "r"), ("pragmatist", "p"), ("contrarian", "c"), ("compounder", "k")]
+    h = Harness(
+        tmp_path,
+        personas,
+        standard_responder([decision(turns), decision([("rigor", "x")])]),
+        config={"engine": {"context_last_k_messages": 2}},
+    )
+    await h.engine.step()
+    await h.engine.step()
+    h.engine.say("The plan shares are my employer's, vested over 2 years")
+    await h.engine.step()
+    last = [r for r in h.claude.requests if r.tag.persona == "compounder"][-1]
+    assert "vested over 2 years" in last.messages[0].content
+    # Once an update has seen it, the answer lives in the state, not the window.
+    answer = next(i for i, m in enumerate(h.engine.messages) if "vested" in m.text)
+    assert h.engine.meta.runtime.moderated_upto > answer
+
+
 async def test_user_facts_reach_members_and_the_next_update(
     tmp_path: Path, personas: dict[str, Persona]
 ) -> None:

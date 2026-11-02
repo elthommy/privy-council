@@ -88,6 +88,7 @@ from privy_council.models.session import (
     BudgetWarning,
     ErrorEvent,
     MemoryProposed,
+    Message,
     PendingTurn,
     Phase,
     RoundStarted,
@@ -455,9 +456,7 @@ class DebateEngine(ResearchFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
             history = context.blind_messages(self.messages, self.moderator.slug)
             task = prompts.task(prompts.BLIND_TASK, lang)
         else:
-            history = context.recent_messages(
-                self.messages, self.settings.engine.context_last_k_messages
-            )
+            history = self._recent()
             task = (
                 prompts.task(
                     prompts.CROSS_TASK,
@@ -485,12 +484,22 @@ class DebateEngine(ResearchFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
             history=context.render_history(history, self.nick),
         )
 
+    def _recent(self) -> list[Message]:
+        """Return the last K messages plus every user line the moderator hasn't seen."""
+        return context.recent_messages(
+            self.messages,
+            self.settings.engine.context_last_k_messages,
+            user_since=self.meta.runtime.moderated_upto,
+        )
+
     async def _moderate(self) -> None:
         """Ask the moderator to update the debate state and plan the next round."""
         rt = self.meta.runtime
         last_round = rt.round >= self.max_rounds
         stats = dynamics.member_stats(self.messages, list(self.members), rt.round)
         request = self._moderate_request(stats, last_round)
+        # Lines typed while the call runs aren't in its prompt: the next update gets them.
+        seen = len(self.messages)
 
         async def call(messages: list[ChatMessage], purpose: str) -> CompletionResult:
             """Send the moderator conversation in JSON mode."""
@@ -509,7 +518,7 @@ class DebateEngine(ResearchFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
             self._notice(NOTICE_MODERATOR_PROBLEM.format(problem=problem))
         if decision is not None:
             decision = self._settle_questions(decision)
-        rt.moderated_upto = len(self.messages)
+        rt.moderated_upto = seen
         if decision is not None:
             self._record_flaws(self._moderator_flaws(decision))
         planned = self._apply_decision(decision, stats, last_round)
@@ -825,9 +834,7 @@ class DebateEngine(ResearchFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
     async def _ask_turn(self, persona: Persona, question: str) -> None:
         """Answer a direct user question with the debate state and recent messages."""
         self._emit(TurnStarted(speaker=persona.slug, round=self.meta.runtime.round))
-        recent = context.recent_messages(
-            self.messages, self.settings.engine.context_last_k_messages
-        )
+        recent = self._recent()
         prompt = context.build_prompt(
             system=self._member_system(persona),
             topic=self.meta.topic,
