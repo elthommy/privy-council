@@ -52,6 +52,9 @@ class ModeratorDecision(BaseModel):
     stop_reason: str | None = None
     # Forwarded to the user by the moderator; the engine keeps at most two.
     questions_for_user: list[str] = Field(default_factory=list)
+    # Numbers, in the task's list, of the questions the user's lines left unanswered or
+    # half answered; None (a reply without the field) means not judged.
+    still_open: list[int] | None = None
     # Web searches the moderator wants before the next round (search focuses).
     research: list[str] = Field(default_factory=list)
     consensus: Consensus = Consensus.NONE

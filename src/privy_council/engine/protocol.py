@@ -13,7 +13,7 @@ Shared plumbing lives in `core.py`; research, memory, the roster, `/vote` +
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from privy_council.backends.base import (
@@ -29,17 +29,20 @@ from privy_council.engine.dossier_flow import DossierFlow
 from privy_council.engine.flaw_flow import FlawFlow
 from privy_council.engine.memory_flow import MemoryFlow
 from privy_council.engine.moderation import (
+    asked_of,
     cap_questions,
     decide,
     drop_answered,
     drop_asked,
     drop_quoted_facts,
     guest_question,
+    judged_open,
     keep_user_facts,
     moderator_schema,
+    next_question,
     resolve_speaker,
     round_robin,
-    still_unanswered,
+    split_questions,
     to_pending,
     with_flaw_turns,
 )
@@ -58,6 +61,7 @@ from privy_council.engine.notices import (
     NOTICE_MODERATOR_PROBLEM,
     NOTICE_MORE,
     NOTICE_NEXT,
+    NOTICE_NEXT_QUESTION,
     NOTICE_NO_ANSWER,
     NOTICE_OPENING_FAILED,
     NOTICE_PAUSED,
@@ -249,6 +253,7 @@ class DebateEngine(ResearchFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
 
     async def _step(self) -> None:
         """Run one phase, marking the engine busy meanwhile."""
+        self._skip_queued()
         self.busy = True
         try:
             await self._step_unguarded()
@@ -305,17 +310,48 @@ class DebateEngine(ResearchFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
         self._save()
         self._notice(NOTICE_MORE.format(count=rounds, limit=self.max_rounds))
 
-    def say(self, text: str, author: str | None = None) -> None:
+    def say(self, text: str, author: str | None = None) -> bool:
         """Record a user interjection; the moderator integrates it at the next update.
 
-        `author` names the person in a shared chat; None is the owner.
+        `author` names the person in a shared chat; None is the owner. Returns True if
+        that person's next queued question was posted: they're being asked again.
         """
         self._post("user", text, author=author)
         rt = self.meta.runtime
-        if rt.unanswered_questions:
-            who = author or self.user_name
-            rt.unanswered_questions = still_unanswered(rt.unanswered_questions, who, self.user_name)
+        who = author or self.user_name
+        question = next_question(rt.queued_questions, who, self.user_name, self.guests)
+        if question is None:
+            return False
+        rt.queued_questions.remove(question)
+        self._forward_questions([question])
+        self._save()
+        return True
+
+    def _skip_queued(self) -> None:
+        """Drop the questions never posted: the debate goes on, and they were never asked.
+
+        They stay unanswered for the synthesis, and the moderator may ask them later.
+        """
+        rt = self.meta.runtime
+        if rt.queued_questions:
+            rt.asked_questions = [q for q in rt.asked_questions if q not in rt.queued_questions]
+            rt.queued_questions = []
             self._save()
+
+    def _answered_late(self) -> list[str]:
+        """Return the questions posted since the last update and replied to: none was judged.
+
+        Older ones keep the moderator's verdict: a later line doesn't answer them.
+        """
+        rt = self.meta.runtime
+        posted = "\n".join(m.text for m in self.messages[rt.moderated_upto :] if m.to_user)
+        return [q for q in self._questions_to_judge() if q in posted]
+
+    def _questions_to_judge(self) -> list[str]:
+        """Return the posted, unanswered questions whose addressee wrote since the update."""
+        rt = self.meta.runtime
+        posted = [q for q in rt.unanswered_questions if q in rt.asked_questions]
+        return asked_of(posted, self._spoke_since(), self.user_name)
 
     async def _run_phase(self, phase: Phase) -> None:
         """Dispatch one phase and settle the resulting state."""
@@ -497,7 +533,8 @@ class DebateEngine(ResearchFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
         rt = self.meta.runtime
         last_round = rt.round >= self.max_rounds
         stats = dynamics.member_stats(self.messages, list(self.members), rt.round)
-        request = self._moderate_request(stats, last_round)
+        judged = self._questions_to_judge()
+        request = self._moderate_request(stats, last_round, judged)
         # Lines typed while the call runs aren't in its prompt: the next update gets them.
         seen = len(self.messages)
 
@@ -517,6 +554,9 @@ class DebateEngine(ResearchFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
         for problem in problems:
             self._notice(NOTICE_MODERATOR_PROBLEM.format(problem=problem))
         if decision is not None:
+            rt.unanswered_questions = judged_open(
+                rt.unanswered_questions, judged, decision.still_open
+            )
             decision = self._settle_questions(decision)
         rt.moderated_upto = seen
         if decision is not None:
@@ -535,12 +575,16 @@ class DebateEngine(ResearchFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
             # Once the debate ends no member could use an answer (2026-11-01 run): the
             # synthesis lists the questions instead.
             questions = [] if ending else decision.questions_for_user
-            self._forward_questions([*questions, *relayed, *summon])
+            first, later = split_questions(questions, self.user_name, self.guests)
+            self._forward_questions([*first, *relayed, *summon])
+            if later:
+                self._notice(NOTICE_NEXT_QUESTION)
             rt.asked_questions.extend(questions)
+            rt.queued_questions = later
             rt.unanswered_questions.extend(decision.questions_for_user)
 
     def _moderate_request(
-        self, stats: list[dynamics.MemberStats], last_round: bool
+        self, stats: list[dynamics.MemberStats], last_round: bool, judged: Sequence[str] = ()
     ) -> context.Prompt:
         """Build the moderator's update prompt for the round that just ended."""
         rt = self.meta.runtime
@@ -552,7 +596,7 @@ class DebateEngine(ResearchFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
             facts_share=self.settings.research.context_share,
             dossier=self._dossier(),
             dossier_share=self.settings.dossier.context_share,
-            task=self._moderate_task(stats, last_round),
+            task=self._moderate_task(stats, last_round, judged),
             budget_tokens=self._budget(self.moderator),
             memory=self._memory(self.moderator),
             memory_share=self.settings.memory.context_share,
@@ -561,7 +605,9 @@ class DebateEngine(ResearchFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
             history_title=prompts.TITLE_ROUND_MESSAGES,
         )
 
-    def _moderate_task(self, stats: list[dynamics.MemberStats], last_round: bool) -> str:
+    def _moderate_task(
+        self, stats: list[dynamics.MemberStats], last_round: bool, judged: Sequence[str]
+    ) -> str:
         """Return the moderator's update task, with the engine's debate dynamics."""
         rt = self.meta.runtime
         protocol = self.council.protocol
@@ -587,6 +633,7 @@ class DebateEngine(ResearchFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
             ),
             summon_rule=prompts.summon_rule([] if last_round else self._summon_candidates()),
             asked_rule=prompts.asked_rule(rt.asked_questions, last_round),
+            still_open_rule=prompts.still_open_rule(judged),
             flaw_rule=prompts.flaw_rule(
                 self.settings.engine.max_flaw_prompts_per_round, last_round
             ),
@@ -789,7 +836,9 @@ class DebateEngine(ResearchFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
             self.meta.language,
             reason=rt.stop_reason or prompts.SYNTHESIS_REASON_DEFAULT,
         )
-        asked = prompts.synthesis_asked(rt.asked_questions, rt.unanswered_questions)
+        late = self._answered_late()
+        unanswered = [q for q in rt.unanswered_questions if q not in late]
+        asked = prompts.synthesis_asked(rt.asked_questions, unanswered)
         vote = prompts.synthesis_vote(rt.last_vote, rt.last_vote_round, self.nick)
         # A member who answered a challenge either withdrew the error or kept it, and the
         # moderator's next update, which read the answer, flags it again if it still stands.

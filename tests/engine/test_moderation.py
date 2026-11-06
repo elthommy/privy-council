@@ -14,18 +14,21 @@ from privy_council.engine.moderation import (
     MAX_USER_FACTS,
     DecisionError,
     asked_before,
+    asked_of,
     cap_questions,
     decide,
     drop_answered,
     drop_asked,
     drop_quoted_facts,
     guest_question,
+    judged_open,
     keep_user_facts,
     moderator_schema,
+    next_question,
     parse_decision,
     resolve_speaker,
     round_robin,
-    still_unanswered,
+    split_questions,
 )
 from privy_council.loaders.personas import load_personas
 from privy_council.models.persona import Persona
@@ -174,7 +177,7 @@ def test_research_requests_are_optional_cleaned_and_capped(members: dict[str, Pe
 
 def test_user_facts_are_optional_cleaned_and_capped(members: dict[str, Persona]) -> None:
     assert parse_decision(result(structured=VALID), members).debate_state.user_facts == []
-    facts = [" shaves  every 4 days", "shaves every 4 days", "", *(f"fact {i}" for i in range(20))]
+    facts = [" shaves  every 4 days", "shaves every 4 days", "", *(f"fact {i}" for i in range(40))]
     stated = {**VALID, "debate_state": {**VALID["debate_state"], "user_facts": facts}}
     kept = parse_decision(result(structured=stated), members).debate_state.user_facts
     assert kept[0] == "shaves every 4 days" and len(kept) == MAX_USER_FACTS
@@ -188,6 +191,57 @@ def test_keep_user_facts() -> None:
     corrected = DebateState(user_facts=["shaves every 3 days"])
     assert keep_user_facts(before, corrected).user_facts == ["shaves every 3 days"]
     assert keep_user_facts(DebateState(), DebateState()).user_facts == []
+
+
+def test_a_dropped_user_fact_comes_back_after_the_new_ones() -> None:
+    before = DebateState(user_facts=["rents a flat in Lyon", "the neighbour waters the garden"])
+    new = DebateState(user_facts=["rents a flat in Lyon", "has two children"])
+    assert keep_user_facts(before, new).user_facts == [
+        "rents a flat in Lyon",
+        "has two children",
+        "the neighbour waters the garden",
+    ]
+
+
+def test_a_reworded_or_merged_user_fact_is_kept_as_written() -> None:
+    before = DebateState(
+        user_facts=["the cat sleeps in the garage", "the boiler was replaced in May"]
+    )
+    new = DebateState(user_facts=["cat sleeps in garage; boiler replaced last May"])
+    assert keep_user_facts(before, new).user_facts == new.user_facts
+
+
+def test_restored_user_facts_stay_within_the_cap() -> None:
+    before = DebateState(user_facts=["keeps a boat in Brest"])
+    new = DebateState(user_facts=[f"fact number {i}" for i in range(MAX_USER_FACTS)])
+    assert keep_user_facts(before, new).user_facts == new.user_facts
+
+
+def test_questions_split_into_each_persons_first_and_the_rest() -> None:
+    questions = ["First?", "@Ana One?", "Second?", "@Ana Two?"]
+    assert split_questions(questions, "Thomas", ["Ana"]) == (
+        ["First?", "@Ana One?"],
+        ["Second?", "@Ana Two?"],
+    )
+
+
+def test_next_question_is_the_persons_own() -> None:
+    queued = ["@Ana Two?", "Second?"]
+    assert next_question(queued, "Thomas", "Thomas", ["Ana"]) == "Second?"
+    assert next_question(queued, "ana", "Thomas", ["Ana"]) == "@Ana Two?"
+    assert next_question(queued, "Ben", "Thomas", ["Ana"]) is None
+
+
+def test_judged_open_keeps_what_the_moderator_says_is_open() -> None:
+    unanswered = ["Asked of nobody who spoke?", "First?", "Second?"]
+    judged = ["First?", "Second?"]
+    assert judged_open(unanswered, judged, [2]) == ["Asked of nobody who spoke?", "Second?"]
+    assert judged_open(unanswered, judged, []) == ["Asked of nobody who spoke?"]
+    assert judged_open(unanswered, judged, [7, 0]) == ["Asked of nobody who spoke?"]
+
+
+def test_judged_open_without_a_judgment_counts_a_reply_as_an_answer() -> None:
+    assert judged_open(["First?", "Other?"], ["First?"], None) == ["Other?"]
 
 
 def test_research_copied_into_user_facts_is_dropped() -> None:
@@ -262,5 +316,6 @@ def test_a_question_that_only_shares_a_few_words_is_new() -> None:
 
 def test_a_reply_answers_only_the_questions_put_to_its_author() -> None:
     questions = ["How much is saved?", "@Ben Which bank?", "@Ada Your horizon?"]
-    assert still_unanswered(questions, "Ada", "Ada") == ["@Ben Which bank?"]
-    assert still_unanswered(questions, "ben", "Ada") == ["How much is saved?", "@Ada Your horizon?"]
+    assert asked_of(questions, {"Ada"}, "Ada") == ["How much is saved?", "@Ada Your horizon?"]
+    assert asked_of(questions, {"ben"}, "Ada") == ["@Ben Which bank?"]
+    assert asked_of(questions, set(), "Ada") == []

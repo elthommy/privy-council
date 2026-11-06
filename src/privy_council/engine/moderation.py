@@ -40,7 +40,19 @@ MAX_RESEARCH_REQUESTS = 2
 # New arguments the moderator lists per update; more is a sign it isn't filtering.
 MAX_NEW_ARGUMENTS = 5
 # User facts kept in the debate state; past this, the state crowds out messages.
-MAX_USER_FACTS = 12
+# High enough never to bind: at 12 the moderator squeezed a long story into 12 lines at
+# every update and facts vanished (2026-11-06 session).
+MAX_USER_FACTS = 30
+# Share of an earlier fact's words one new fact must hold for it to count as kept: in
+# every saved session this tells a reworded or merged fact from a dropped one.
+FACT_KEPT_OVERLAP = 0.5
+_FACT_FILLER = frozenset(
+    {
+        *("a", "an", "and", "are", "as", "at", "be", "but", "by", "for", "from", "had", "has"),
+        *("have", "he", "her", "his", "in", "is", "it", "no", "not", "of", "on", "or", "she"),
+        *("that", "the", "their", "them", "they", "this", "to", "was", "which", "who", "with"),
+    }
+)
 # A user fact this long found word for word in the research or the dossier is a copy
 # (shorter ones, "40 pity", the user may well have said too).
 _MIN_QUOTED_CHARS = 30
@@ -132,6 +144,7 @@ def moderator_schema(people: int = 1) -> dict[str, Any]:
         "maxItems": MAX_NEW_ARGUMENTS,
     }
     schema["properties"]["position_changes"] = {"type": "array", "items": {"type": "string"}}
+    schema["properties"]["still_open"] = {"type": "array", "items": {"type": "integer"}}
     schema["properties"]["flaws"]["maxItems"] = MAX_FLAWS
     flaw = schema["$defs"]["ReportedFlaw"]
     flaw["properties"]["kind"] = {"type": "string", "enum": list(FLAW_KINDS)}
@@ -192,14 +205,30 @@ def _normalize_state(state: DebateState, members: Mapping[str, Persona]) -> Deba
 
 
 def keep_user_facts(previous: DebateState, new: DebateState) -> DebateState:
-    """Return the new state, keeping the earlier user facts if it has none at all.
+    """Return the new state with the earlier user facts it dropped put back.
 
-    A changed list is taken as given (the user may have corrected a detail); an
-    empty one is the moderator forgetting the field, not the user unsaying everything.
+    The moderator may reword, merge or correct a fact (the words stay), but a compacted
+    state must not lose what the user said: members see only these facts once the raw
+    lines age out. A fact the user took back with entirely new words comes back too,
+    beside its correction; losing facts silently is the worse of the two.
     """
-    if new.user_facts or not previous.user_facts:
+    dropped = [f for f in previous.user_facts if not _fact_kept(f, new.user_facts)]
+    if not dropped:
         return new
-    return new.model_copy(update={"user_facts": previous.user_facts})
+    return new.model_copy(update={"user_facts": [*new.user_facts, *dropped][:MAX_USER_FACTS]})
+
+
+def _fact_kept(fact: str, facts: Sequence[str]) -> bool:
+    """Tell whether one of `facts` holds most of this fact's words."""
+    words = _fact_words(fact)
+    return not words or any(
+        len(words & _fact_words(other)) / len(words) >= FACT_KEPT_OVERLAP for other in facts
+    )
+
+
+def _fact_words(fact: str) -> set[str]:
+    """Return a fact's words, without the filler every fact shares."""
+    return set(_folded(fact).split()) - _FACT_FILLER
 
 
 def drop_quoted_facts(previous: DebateState, new: DebateState, sources: str) -> DebateState:
@@ -238,17 +267,45 @@ def drop_answered(previous: DebateState, new: DebateState, spoke: Collection[str
     return new.model_copy(update={"open_questions": kept})
 
 
-def cap_questions(questions: Sequence[str], owner: str, guests: Sequence[str]) -> list[str]:
-    """Keep the first MAX_USER_QUESTIONS questions of each person, in order.
+def _asked_person(question: str, owner: str, guests: Sequence[str]) -> str:
+    """Return who a question goes to: the guest whose @name starts it, else the owner."""
+    name = _addressee(question)
+    return name if name in {g.lower() for g in guests} else owner.lower()
 
-    A question goes to the person whose @name starts it, else to the owner.
+
+def split_questions(
+    questions: Sequence[str], owner: str, guests: Sequence[str]
+) -> tuple[list[str], list[str]]:
+    """Split questions into each person's first one and the rest, in order.
+
+    One at a time, each answer belongs to one question: asked together, the /run went
+    on after the first line and the second answer landed mid-round (2026-11-06).
     """
-    guest_names = {g.lower() for g in guests}
+    first: dict[str, str] = {}
+    later: list[str] = []
+    for question in questions:
+        person = _asked_person(question, owner, guests)
+        if person in first:
+            later.append(question)
+        else:
+            first[person] = question
+    return list(first.values()), later
+
+
+def next_question(
+    queued: Sequence[str], person: str, owner: str, guests: Sequence[str]
+) -> str | None:
+    """Return the next queued question for `person`, if any."""
+    who = person.lower()
+    return next((q for q in queued if _asked_person(q, owner, guests) == who), None)
+
+
+def cap_questions(questions: Sequence[str], owner: str, guests: Sequence[str]) -> list[str]:
+    """Keep the first MAX_USER_QUESTIONS questions of each person, in order."""
     counts: dict[str, int] = {}
     kept: list[str] = []
     for question in questions:
-        name = _addressee(question)
-        person = name if name in guest_names else owner.lower()
+        person = _asked_person(question, owner, guests)
         if counts.get(person, 0) < MAX_USER_QUESTIONS:
             counts[person] = counts.get(person, 0) + 1
             kept.append(question)
@@ -305,10 +362,23 @@ def guest_question(
     return []
 
 
-def still_unanswered(questions: Sequence[str], author: str, owner: str) -> list[str]:
-    """Return the questions left open once `author` wrote (unaddressed ones are the owner's)."""
-    who = author.lower()
-    return [q for q in questions if (_addressee(q) or owner.lower()) != who]
+def asked_of(questions: Sequence[str], people: Collection[str], owner: str) -> list[str]:
+    """Return the questions put to any of `people` (unaddressed ones are the owner's)."""
+    names = {name.lower() for name in people}
+    return [q for q in questions if (_addressee(q) or owner.lower()) in names]
+
+
+def judged_open(
+    unanswered: Sequence[str], judged: Sequence[str], still_open: Sequence[int] | None
+) -> list[str]:
+    """Return `unanswered` without the `judged` questions the moderator found answered.
+
+    `still_open` holds 1-based numbers in `judged`. A reply without the field judged
+    nothing: the person spoke, so their questions count as answered.
+    """
+    numbers = set(still_open or ())
+    kept = {q for i, q in enumerate(judged, start=1) if i in numbers}
+    return [q for q in unanswered if q not in judged or q in kept]
 
 
 def _addressee(question: str) -> str | None:

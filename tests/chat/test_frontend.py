@@ -81,6 +81,9 @@ def config(**extra: Any) -> DiscordConfig:
     )
 
 
+TWO_QUESTIONS = ["@ana how much can you put in?", "@ana by when?"]
+
+
 def asking(question: str) -> dict[str, Any]:
     """A moderator decision that puts one question to a person."""
     return {**decision([("rigor", "go")]), "questions_for_user": [question]}
@@ -227,6 +230,35 @@ async def test_run_waits_for_the_guest_asked_then_goes_on(
     assert any(
         t.startswith("**Chair** · *question*\n@ana how much") for t in chat.transport.texts("Chair")
     )
+
+
+async def test_a_guests_second_question_waits_for_their_first_answer(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    decisions: list[dict[str, Any] | str] = [
+        {**asking("@ana how much can you put in?"), "questions_for_user": TWO_QUESTIONS},
+        decision([("rigor", "x")]),
+    ]
+    chat = Chat(tmp_path, personas, decisions, question_timeout_s=30)
+    await chat.ask()
+    chat.fe.on_message(ANA, "ana", THREAD, "Hello")
+    await chat.fe.command(OWNER, "run")
+
+    async def waiting() -> None:
+        """Return once the front end waits for Ana."""
+        while ANA not in chat.fe._waiting:
+            await asyncio.sleep(0.01)
+
+    await asyncio.wait_for(waiting(), 5)
+    engine = chat.harness.engine
+    assert [m.text for m in engine.messages if m.to_user] == ["@ana how much can you put in?"]
+    chat.fe.on_message(ANA, "ana", THREAD, "About 9,000 EUR")
+    await asyncio.sleep(0.05)
+    assert [m.text for m in engine.messages if m.to_user][-1] == "@ana by when?"
+    assert engine.meta.runtime.round == 1 and ANA in chat.fe._waiting  # waits for the second
+    chat.fe.on_message(ANA, "ana", THREAD, "By June")
+    await chat.fe.drain()
+    assert engine.meta.runtime.round == 2
 
 
 async def test_unanswered_question_times_out(tmp_path: Path, personas: dict[str, Persona]) -> None:

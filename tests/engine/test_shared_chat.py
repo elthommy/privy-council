@@ -205,7 +205,10 @@ async def test_each_person_gets_up_to_two_questions(
     await h.engine.step()
     await h.engine.step()
     forwarded = [m.text for m in h.engine.messages if m.to_user][-1]
-    assert forwarded.splitlines() == ["@User A?", "@Ana B?", "@Ben C?", "@Ana D?"]
+    assert forwarded.splitlines() == ["@User A?", "@Ana B?", "@Ben C?"]  # one each at a time
+    assert h.engine.meta.runtime.queued_questions == ["@Ana D?"]  # E is over Ana's cap
+    assert h.engine.say("Later", author="Ana")
+    assert [m.text for m in h.engine.messages if m.to_user][-1] == "@Ana D?"
     schema = [r.json_schema for r in h.requests() if r.tag.purpose == "moderate"][-1]
     assert schema is not None and schema["properties"]["questions_for_user"]["maxItems"] == 6
 

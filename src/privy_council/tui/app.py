@@ -123,6 +123,7 @@ class CouncilApp(App[None]):
         self._confirm_run: int | None = None
         self._confirm_quit = False
         self._asked = False  # the Chair asked the user during the current /run step
+        self._asked_next = False  # the answer brought the Chair's next question: wait again
         self._paused = False  # Esc during the current /run
         self._answered: asyncio.Event | None = None  # set while a /run waits for an answer
 
@@ -357,7 +358,10 @@ class CouncilApp(App[None]):
             left -= await self.engine.run(left)
             if not self.should_wait(left):
                 return
-            await self.wait_answer()
+            self._asked_next = True
+            while self._asked_next:  # each question gets its own wait
+                self._asked_next = False
+                await self.wait_answer()
 
     def should_wait(self, left: int) -> bool:
         """Return whether the /run stopped on a Chair question and should wait, then go on."""
@@ -390,6 +394,7 @@ class CouncilApp(App[None]):
     def stop_waiting(self) -> None:
         """End a /run's wait for an answer; the rest of the /run is dropped."""
         self._answered = None
+        self._asked_next = False
         self.workers.cancel_group(self, "engine")
         self.query_one(ChatInput).placeholder = QUESTION_PLACEHOLDER
         self.chat.notice(STOPPED_WAITING)
@@ -411,8 +416,9 @@ class CouncilApp(App[None]):
                 self.cmd_log()
                 self.start(self.engine.step)
         elif arg:
-            self.engine.say(arg)
+            asked_next = self.engine.say(arg)
             if self._answered is not None:  # the answer a /run waits for: it goes on
+                self._asked_next = asked_next
                 self._answered.set()
         else:
             self.chat.notice("usage: /say <text>", RED)

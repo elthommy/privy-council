@@ -12,7 +12,7 @@ from privy_council.models.session import DebateState, Message
 from privy_council.models.vote import Vote
 from privy_council.util.language import Language
 
-PROMPTS_VERSION = "51"
+PROMPTS_VERSION = "52"
 
 # Backends that accept a single user turn (the claude CLI on stdin) flatten a
 # multi-message conversation with these labels.
@@ -348,8 +348,11 @@ member who keeps repeating themselves only to confront them with something new.
 - questions_for_user: at most {questions_cap} where the user's answer would change the \
 advice, rephrased for the user from what members said they need to know or from \
 open_questions. Only what the user personally knows (their situation, goals, \
-preferences), never a fact the web can answer. Leave it empty if nothing is that \
-important. {asked_rule}
+preferences), never a fact the web can answer. Each question asks one thing, \
+since the user answers them one at a time: never join two with "and" or "or" ("How \
+much do you spend a month, and do you rent?" is two questions; keep the one that \
+matters more). Leave it empty if nothing is that important. {asked_rule}
+- still_open: {still_open_rule}
 - research: {research_rule}
 - summon: {summon_rule}
 - flaws: clear errors in this round's member messages, most serious first, at most 4. \
@@ -395,6 +398,12 @@ REASON_BUDGET = "the Claude budget is getting tight"
 REASON_OFF = "web research is off"
 
 ASKED_RULE_NONE = "Never ask something the user already answered."
+STILL_OPEN_RULE_NONE = "always empty."
+STILL_OPEN_RULE = (
+    "you asked these questions and the person has written since:\n{questions}\nJudging "
+    "only from what they wrote, list the numbers of those not fully answered, a "
+    "half-answered one included. An empty list if all are answered."
+)
 # Asked at the last update, the user's answer reached only the synthesis (2026-11-01).
 QUESTIONS_RULE_LAST = (
     "This is the last update and the debate ends after it: leave questions_for_user "
@@ -984,6 +993,14 @@ def synthesis_asked(asked: Sequence[str], unanswered: Sequence[str] = ()) -> str
         *([SYNTHESIS_UNANSWERED.format(asked=_quoted(unanswered))] if unanswered else []),
     ]
     return " ".join(rules) or None
+
+
+def still_open_rule(judged: Sequence[str]) -> str:
+    """Return the moderator's rule on judging which of its questions were answered."""
+    if not judged:
+        return STILL_OPEN_RULE_NONE
+    numbered = "\n".join(f"{i}. {q}" for i, q in enumerate(judged, start=1))
+    return STILL_OPEN_RULE.format(questions=numbered)
 
 
 def asked_rule(asked: Sequence[str], last_round: bool = False) -> str:

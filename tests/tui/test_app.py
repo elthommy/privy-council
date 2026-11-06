@@ -359,6 +359,52 @@ async def test_run_goes_on_without_an_answer_after_the_timeout(
         assert app._answered is None
 
 
+async def test_each_question_gets_its_own_wait(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    second = "Is your job stable?"
+    decisions: list[dict[str, Any] | str] = [
+        {**decision([("rigor", "go")]), "questions_for_user": [QUESTION, second]},
+        *[decision([("rigor", "go")]) for _ in range(6)],
+    ]
+    h = Harness(tmp_path, personas, standard_responder(decisions))
+    h.settings.engine.question_timeout_s = 60
+    app = CouncilApp(h.engine)
+    async with app.run_test(size=SIZE) as pilot:
+        await start_run_until_waiting(pilot, app)
+        assert second not in chat_text(app)
+        first_wait = app._answered
+        app.query_one(ChatInput).value = "2 months"
+        await pilot.press("enter")
+        for _ in range(500):
+            if app._answered is not None and app._answered is not first_wait:
+                break
+            await pilot.pause(0.01)
+        assert second in chat_text(app)
+        assert h.engine.meta.runtime.round == 1  # still waiting, now on the second question
+        await submit(pilot, "Yes")
+        await app.workers.wait_for_complete()
+        assert h.engine.meta.runtime.round == 3
+
+
+async def test_a_timeout_skips_the_next_question(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    second = "Is your job stable?"
+    decisions: list[dict[str, Any] | str] = [
+        {**decision([("rigor", "go")]), "questions_for_user": [QUESTION, second]},
+        *[decision([("rigor", "go")]) for _ in range(6)],
+    ]
+    h = Harness(tmp_path, personas, standard_responder(decisions))
+    h.settings.engine.question_timeout_s = 0.05
+    app = CouncilApp(h.engine)
+    async with app.run_test(size=SIZE) as pilot:
+        await app.workers.wait_for_complete()
+        await submit(pilot, "/run 3")
+        assert h.engine.meta.runtime.round == 3
+        assert second not in chat_text(app)
+
+
 async def test_answer_during_the_wait_resumes_the_run(
     tmp_path: Path, personas: dict[str, Persona]
 ) -> None:

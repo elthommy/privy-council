@@ -4,6 +4,9 @@ All notable changes, by milestone. Dates are when each milestone was built.
 
 ## Unreleased (2026-10-25 – 2026-11-06)
 
+- **The Chair asks one question at a time**: its second question comes once you answer the first, and each gets the full wait (`question_timeout_s`); a timeout skips the rest, so an absent user holds the debate no longer than before. On Discord each person gets their own sequence. The Chair's questions now ask one thing each.
+- **A reply no longer counts as an answer on its own**: at the next update the Chair judges which of its questions your lines left open, a half-answered one included, and the synthesis lists them.
+- **Your facts stay in the debate state**: the cap of 12 forced the Chair to squeeze long stories at every update and facts vanished, so it's now 30, and a fact the Chair drops comes back (a reworded or merged one is left as it is).
 - `career` requires web research, on public facts only (law, the employer's announced plans, the job market), never the people or events in your story.
 - **Fewer false "unsourced" flags on members' own arithmetic**: written operations with currencies, `k` and `%` ("€18.2k ÷ 25.2%"), computed with the precise figure a rounded operand stands for; a percentage "of" a total from the prompt, in the same sentence; a band's middle; amounts a month ↔ a year; months from a monthly amount; years ↔ months; a derived value written again.
 - **Your answers no longer fall out of the members' view mid-round**: members see the last K messages, and the debate state only records your lines at the next Chair update, so an answer given just after an update could scroll out before the round's last speaker (who then asked again). Every line of yours since the last update is now kept in their prompts.

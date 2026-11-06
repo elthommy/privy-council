@@ -135,6 +135,7 @@ class ChatFrontend:
         self._task: asyncio.Task[None] | None = None
         self._asked: set[int] = set()
         self._waiting: dict[int, asyncio.Event] = {}
+        self._asked_next: set[int] = set()  # got their next question: their wait starts again
         self._lines: dict[int, int] = {}
         self._hosts: set[int] = set()  # friends handed the open debate (never saved)
         self._offline = False
@@ -274,8 +275,12 @@ class ChatFrontend:
             if count == cap + 1:  # say it once per round
                 self._say(LINE_LIMIT.format(name=self._name(user_id, username), count=cap))
             return
-        engine.say(text, None if user_id == self.config.owner else self._name(user_id, username))
+        asked_next = engine.say(
+            text, None if user_id == self.config.owner else self._name(user_id, username)
+        )
         if user_id in self._waiting:
+            if asked_next:
+                self._asked_next.add(user_id)
             self._waiting[user_id].set()
 
     def _plain_mentions(self, text: str, engine: DebateEngine) -> str:
@@ -484,19 +489,35 @@ class ChatFrontend:
             await self._wait_answers(engine)
 
     async def _wait_answers(self, engine: DebateEngine) -> None:
-        """Wait for each person asked, up to the timeout; then the debate goes on."""
+        """Wait for each person asked, up to the timeout per question; then the debate goes on."""
         self._waiting = {uid: asyncio.Event() for uid in self._asked}
         names = ", ".join(self._display(uid, engine) for uid in self._waiting)
         timeout = self.config.question_timeout_s
         self._say(WAITING.format(minutes=max(round(timeout / 60), 1), names=names))
         try:
-            waits = [event.wait() for event in self._waiting.values()]
-            await asyncio.wait_for(asyncio.gather(*waits), timeout)
-        except TimeoutError:
-            missing = [self._display(u, engine) for u, e in self._waiting.items() if not e.is_set()]
-            self._say(NO_ANSWER.format(names=", ".join(missing)))
+            people = list(self._waiting)
+            answers = await asyncio.gather(*(self._wait_person(u, timeout) for u in people))
+            missing = [
+                self._display(u, engine) for u, ok in zip(people, answers, strict=True) if not ok
+            ]
+            if missing:
+                self._say(NO_ANSWER.format(names=", ".join(missing)))
         finally:
             self._waiting = {}
+            self._asked_next = set()
+
+    async def _wait_person(self, user_id: int, timeout: float) -> bool:
+        """Wait for one person's answers, each with its own timeout; False if one never came."""
+        event = self._waiting[user_id]
+        while True:
+            try:
+                await asyncio.wait_for(event.wait(), timeout)
+            except TimeoutError:
+                return False
+            if user_id not in self._asked_next:
+                return True
+            self._asked_next.discard(user_id)
+            event.clear()
 
     # --- going offline --------------------------------------------------------------
 

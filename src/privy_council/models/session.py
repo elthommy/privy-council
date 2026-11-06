@@ -168,6 +168,9 @@ class EngineRuntime(BaseModel):
     # Questions nobody answered yet (a TUI or Discord /run goes on after a timeout), and
     # those the last update wrote, never posted: the synthesis lists them for the user.
     unanswered_questions: list[str] = Field(default_factory=list)
+    # Questions waiting for the same person's answer to the one before, posted one at a
+    # time; the next step skips those left (they stay in unanswered_questions).
+    queued_questions: list[str] = Field(default_factory=list)
     # The debate stopped before max_rounds (consensus or looping): `pending` keeps the
     # moderator's plan, and /step or /run resumes debating instead of the synthesis.
     early_stop: bool = False

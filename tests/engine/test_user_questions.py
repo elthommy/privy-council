@@ -44,13 +44,16 @@ async def test_run_pauses_after_the_round_that_asked(
     done = await h.engine.run(5)
     assert done == 2  # the blind round, then the round whose update asked
     assert h.engine.meta.runtime.round == 2
-    assert questions_posted(h) == [f"@User {QUESTION}\n@User Is your job stable?"]
+    assert questions_posted(h) == [f"@User {QUESTION}"]  # the second waits for the answer
     chair_question = next(m for m in h.engine.messages if m.to_user)
     assert chair_question.speaker == "chair"
     notices = [m.text for m in h.engine.messages if m.speaker == "system"]
+    assert notices[-2:] == ["One more question after your answer.", notices[-1]]
     assert notices[-1] == "/run paused for Chair's question"
 
-    h.engine.say("About 2 months.")
+    assert h.engine.say("About 2 months.")  # the next question comes at once
+    assert questions_posted(h)[-1] == "@User Is your job stable?"
+    assert not h.engine.say("Yes.")
     assert await h.engine.run(1) == 1  # carries on once the user wants
     moderate = [r for r in h.claude.requests if r.tag.purpose == "moderate"][-1]
     assert QUESTION in moderate.messages[0].content  # it sees what it asked...
@@ -132,6 +135,99 @@ async def test_synthesis_lists_unanswered_questions_and_not_answered_ones(
     synthesis = next(r for r in h.claude.requests if r.tag.purpose == "synthesis")
     assert f'You already asked the user during the debate: "{QUESTION}"' in prompt_text(synthesis)
     assert f'The user never answered these questions: "{other}"' in prompt_text(synthesis)
+
+
+async def test_the_next_step_skips_questions_never_posted(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    second = "Is your job stable?"
+    decisions: list[dict[str, Any] | str] = [
+        asking([("rigor", "go")], QUESTION, second),
+        decision([("rigor", "go")]),
+    ]
+    h = Harness(tmp_path, personas, standard_responder(decisions))
+    await h.engine.run(1)
+    rt = h.engine.meta.runtime
+    assert rt.queued_questions == [second]
+    await h.engine.run(1)  # nobody answered: the timeout's way on
+    assert questions_posted(h) == [f"@User {QUESTION}"]
+    assert rt.queued_questions == []
+    assert rt.asked_questions == [QUESTION]  # never asked, so the Chair may still ask it
+    assert rt.unanswered_questions == [QUESTION, second]
+
+
+async def test_queued_questions_survive_a_resume(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    second = "Is your job stable?"
+    h = Harness(
+        tmp_path, personas, standard_responder([asking([("rigor", "go")], QUESTION, second)])
+    )
+    await h.engine.run(1)
+    assert h.store.load_meta().runtime.queued_questions == [second]
+
+
+async def test_the_moderator_judges_a_half_answered_question(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    decisions: list[dict[str, Any] | str] = [
+        asking([("rigor", "go")], QUESTION),
+        {**decision([("rigor", "go")]), "still_open": [1]},
+        decision([("rigor", "go")]),
+    ]
+    h = Harness(tmp_path, personas, standard_responder(decisions))
+    await h.engine.run(1)
+    h.engine.say("Some, I think.")
+    await h.engine.run(1)
+    update = [r for r in h.claude.requests if r.tag.purpose == "moderate"][-1]
+    assert f"1. {QUESTION}" in prompt_text(update)
+    assert h.engine.meta.runtime.unanswered_questions == [QUESTION]  # a reply isn't an answer
+    await h.engine.close()
+    synthesis = next(r for r in h.claude.requests if r.tag.purpose == "synthesis")
+    assert f'The user never answered these questions: "{QUESTION}"' in prompt_text(synthesis)
+
+
+async def test_a_later_line_does_not_clear_a_question_judged_open(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    decisions: list[dict[str, Any] | str] = [
+        asking([("rigor", "go")], QUESTION),
+        {**decision([("rigor", "go")]), "still_open": [1]},
+    ]
+    h = Harness(tmp_path, personas, standard_responder(decisions))
+    await h.engine.run(1)
+    h.engine.say("Some, I think.")
+    await h.engine.run(1)
+    h.engine.say("Thanks, wrap it up.")  # after the update that judged the question open
+    await h.engine.close()
+    synthesis = next(r for r in h.claude.requests if r.tag.purpose == "synthesis")
+    assert f'The user never answered these questions: "{QUESTION}"' in prompt_text(synthesis)
+
+
+async def test_a_question_nobody_replied_to_is_not_put_up_for_judging(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    decisions: list[dict[str, Any] | str] = [
+        asking([("rigor", "go")], QUESTION),
+        decision([("rigor", "go")]),
+    ]
+    h = Harness(tmp_path, personas, standard_responder(decisions))
+    await h.engine.run(2)
+    await h.engine.run(1)
+    update = [r for r in h.claude.requests if r.tag.purpose == "moderate"][-1]
+    assert f"1. {QUESTION}" not in prompt_text(update)
+    assert h.engine.meta.runtime.unanswered_questions == [QUESTION]
+
+
+async def test_a_reply_after_the_last_update_counts_as_an_answer(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    h = Harness(tmp_path, personas, standard_responder([asking([("rigor", "go")], QUESTION)]))
+    await h.engine.run(1)
+    h.engine.say("About 2 months.")
+    await h.engine.close()  # no update read the line
+    synthesis = next(r for r in h.claude.requests if r.tag.purpose == "synthesis")
+    assert "never answered" not in prompt_text(synthesis)
 
 
 async def test_personas_address_the_user_by_name(
