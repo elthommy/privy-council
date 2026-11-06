@@ -244,7 +244,7 @@ Current models (the persona files are the source of truth; `council personas lis
 | Sociologist | advisor | `qwen3.6:27b` | politics |
 | Contrarian | devil_advocate | `gemma4:26b` | finance, career, wellbeing, geopolitics, purchases, gacha, economics |
 | Fixer | advisor | `gemma4:26b` | purchases |
-| Skeptic | advisor | `gemma4:26b` | career |
+| Skeptic | advisor | `muse-glimmer:30b` | career |
 | Socrates | advisor | `gemma4:26b` | salon |
 | Nietzsche | advisor | `gemma4:26b` | salon |
 | Steelman | devil_advocate | `gemma4:26b` | politics |
