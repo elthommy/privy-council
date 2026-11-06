@@ -151,8 +151,8 @@ def test_cli_research_flags(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, flag: str, line: str, searched: bool
 ) -> None:
     fake = _cli_setup(tmp_path, monkeypatch)
-    # career: research is optional there (finance requires it)
-    args = ["--root", str(tmp_path), "new", "career", "Gold?", "--no-tui", flag]
+    # wellbeing: research is optional there (finance requires it)
+    args = ["--root", str(tmp_path), "new", "wellbeing", "Gold?", "--no-tui", flag]
     result = CliRunner().invoke(cli.app, args, input=line)
     assert result.exit_code == 0, result.output
     assert any(r.tag.purpose == "research" for r in fake.requests) is searched

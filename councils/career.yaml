@@ -7,3 +7,10 @@ protocol:
   max_rounds: 6
   auto_stop_on_consensus: true
   rebuttal_style: targeted
+  # Chair searches the web before framing the debate; no session runs without facts.
+  require_research: true
+# The research prompt carries the whole question: keep the searches on public facts.
+research_focus: >-
+  public facts only, never the people or events in the user's story: the labour law and
+  collective rules that apply, the employer's announced plans and results, and the job
+  market for the skills in question

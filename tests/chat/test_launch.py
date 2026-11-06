@@ -52,7 +52,7 @@ def test_chat_sessions_are_local_only_memory_off_and_apart(tmp_path: Path) -> No
 
 def test_chat_sessions_search_when_local_search_is_on(tmp_path: Path) -> None:
     on = settings(tmp_path, research={"local": {"enabled": True}})
-    engine = ChatSessions(on).new("career", "Should I change jobs?")
+    engine = ChatSessions(on).new("wellbeing", "Should I change jobs?")
     assert engine.research_mode is ResearchMode.AUTO
 
 

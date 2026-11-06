@@ -53,6 +53,8 @@ def test_example_council_loads() -> None:
     assert all(personas[slug].meta.role is Role.ADVISOR for slug in salon.members)
     purchases = councils["purchases"]
     assert purchases.memory is MemoryMode.ON and purchases.protocol.require_research
+    career = councils["career"]
+    assert career.protocol.require_research and "never the people" in (career.research_focus or "")
     assert purchases.members == [
         "specialist",
         "fixer",

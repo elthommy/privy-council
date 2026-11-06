@@ -2,8 +2,9 @@
 
 All notable changes, by milestone. Dates are when each milestone was built.
 
-## Unreleased (2026-10-25 – 2026-11-02)
+## Unreleased (2026-10-25 – 2026-11-06)
 
+- `career` requires web research, on public facts only (law, the employer's announced plans, the job market), never the people or events in your story.
 - **Fewer false "unsourced" flags on members' own arithmetic**: written operations with currencies, `k` and `%` ("€18.2k ÷ 25.2%"), computed with the precise figure a rounded operand stands for; a percentage "of" a total from the prompt, in the same sentence; a band's middle; amounts a month ↔ a year; months from a monthly amount; years ↔ months; a derived value written again.
 - **Your answers no longer fall out of the members' view mid-round**: members see the last K messages, and the debate state only records your lines at the next Chair update, so an answer given just after an update could scroll out before the round's last speaker (who then asked again). Every line of yours since the last update is now kept in their prompts.
 - **TUI `/run` no longer waits forever on the Chair's questions**: it waits up to `[engine] question_timeout_s` (600 s, as on Discord), then goes on without the answer; sending an answer resumes the run at once, a half-typed answer holds it, Esc or another command stops the wait. `0` keeps the old behaviour. The `--no-tui` REPL still waits.
