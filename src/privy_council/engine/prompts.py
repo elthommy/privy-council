@@ -12,7 +12,7 @@ from privy_council.models.session import DebateState, Message
 from privy_council.models.vote import Vote
 from privy_council.util.language import Language
 
-PROMPTS_VERSION = "55"
+PROMPTS_VERSION = "56"
 
 # Backends that accept a single user turn (the claude CLI on stdin) flatten a
 # multi-message conversation with these labels.
@@ -321,7 +321,9 @@ ones; change or drop one only when the user corrected it. Never a member's guess
 - debate_state.positions: each member's current position in one sentence, keyed by slug.
 - debate_state.agreements: points the members actually agree on.
 - debate_state.disagreements: the 1-3 sharpest disagreements; `sides` maps slug to stance.
-- debate_state.open_questions: what only the user can answer, plus your own inferences.
+- debate_state.open_questions: what only the user can answer, plus your own inferences, \
+plus evidence a member asked for that nobody has given (a source, a base rate, a \
+document), naming who asked; keep it until someone gives it.
 - consensus: "full" if every member now holds essentially the same position; "partial" \
 if most agree on the main answer but differ on important details, or one dissents; \
 else "none". Judge from what members argued, not from polite agreement.
@@ -518,7 +520,8 @@ SYNTHESIS_OPENING = """\
 Your opening said what a good answer must cover:
 {opening}
 Check the synthesis against it before you write: cover each point the debate dealt \
-with, and in the next steps name any point it never settled."""
+with, and in the next steps name any point it never settled, and any evidence a member \
+asked for that nobody gave while the advice rests on it."""
 OPENING_MAX_CHARS = 3000
 
 # The synthesis re-asked an answered question, reworded (2026-10-28 gacha run).

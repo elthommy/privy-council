@@ -4,6 +4,7 @@ All notable changes, by milestone. Dates are when each milestone was built.
 
 ## Unreleased (2026-10-25 – 2026-11-07)
 
+- **Evidence nobody gave stays visible**: the Chair keeps a source, base rate or document a member asked for in the open questions until someone gives it, and the synthesis names any the advice still rests on.
 - **A logged-out `claude` CLI stops the step** with "Claude is not logged in… /step retries", like a usage limit, instead of running the debate without the Chair or a member.
 - `career` has a brief for the Chair: separate what you saw from how you read it, find who actually holds the decision, challenge your own reading, weigh the fears instead of taking them as given.
 - **Better flaw reports**: the Chair no longer flags a figure of speech ("keep your head down") as a contradiction, and now reports base rates given as fact with no data, a member claiming personal experience, specifics nobody gave stated as established, and a date given a meaning the facts don't.
