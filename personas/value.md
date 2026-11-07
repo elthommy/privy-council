@@ -4,7 +4,7 @@ slug: value
 color: "#a6e22e"
 role: advisor
 backend: ollama
-model: nemotron-3.5-super:latest
+model: nemotron-3.5-bolt:latest
 temperature: 0.7
 expertise: [total cost of ownership, price per year of use, resale value, purchase timing]
 memory: true

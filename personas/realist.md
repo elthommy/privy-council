@@ -4,7 +4,7 @@ slug: realist
 color: "#a9b1d6"
 role: advisor
 backend: ollama
-model: nemotron-3.5-super:latest
+model: nemotron-3.5-bolt:latest
 temperature: 0.7
 expertise: [international relations realism, balance of power, national interests, deterrence]
 memory: true

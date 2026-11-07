@@ -4,7 +4,7 @@ slug: vitality
 color: "#7ee787"
 role: advisor
 backend: ollama
-model: nemotron-3.5-super:latest
+model: nemotron-3.5-bolt:latest
 temperature: 0.7
 expertise: [sleep, physical activity, nutrition basics, energy and stress physiology]
 memory: false

@@ -4,7 +4,7 @@ slug: polsci
 color: "#9ece6a"
 role: advisor
 backend: ollama
-model: nemotron-3.5-super:latest
+model: nemotron-3.5-bolt:latest
 temperature: 0.7
 expertise: [French politics, parties and elections, framing, political mobilization]
 memory: false

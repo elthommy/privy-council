@@ -4,6 +4,7 @@ All notable changes, by milestone. Dates are when each milestone was built.
 
 ## Unreleased (2026-10-25 – 2026-11-07)
 
+- **Eight more seats move from Super to `nemotron-3.5-bolt`**: Macro, Analyst (economics), Realist, Economist (geopolitics), Value (purchases), Vitality (wellbeing), Saver (gacha), PolSci (politics), after a live check of each council. Logistician (history) stays on Super for now: Bolt reversed a historical fact there. Super now serves only Logistician and the local Chair.
 - **Rigor and Skeptic move to `nemotron-3.5-bolt`** (74B MoE, ~9B active, 25 GB): in a seat bench it was about as accurate as Super at about a third of the time per turn (~30 s against 76-180 s), and good in French. Pull it with `ollama pull nemotron-3.5-bolt`.
 - **The Chair checks what members' notes say about you** before they're saved: at `/close` it reads every member's new notes against your own messages (and the questions you answered) and corrects or drops a claim you never made: a member's argument credited to you, an answer saved without the condition it was given under ("would stay" for "would stay if management improved"). One call on the Chair's model; if it fails, the notes are saved as written.
 - **A note that repeats an existing one isn't saved again**, e.g. last session's lesson copied with a new tail. A note that changes a figure counts as new.

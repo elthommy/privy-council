@@ -4,7 +4,7 @@ slug: economist
 color: "#73daca"
 role: advisor
 backend: ollama
-model: nemotron-3.5-super:latest
+model: nemotron-3.5-bolt:latest
 temperature: 0.7
 expertise: [war economies, sanctions, energy markets, public finances, foreign aid]
 memory: true

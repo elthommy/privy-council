@@ -4,7 +4,7 @@ slug: saver
 color: "#f0c674"
 role: risk_officer
 backend: ollama
-model: nemotron-3.5-super:latest
+model: nemotron-3.5-bolt:latest
 temperature: 0.6
 expertise: [pity and guarantee rules, premium currency planning, banner schedules, reruns]
 memory: true

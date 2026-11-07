@@ -4,7 +4,7 @@ slug: analyst
 color: "#ffcb6b"
 role: advisor
 backend: ollama
-model: nemotron-3.5-super:latest
+model: nemotron-3.5-bolt:latest
 temperature: 0.7
 expertise: [company balance sheets, credit analysis, cash flow, debt maturities, corporate restructuring]
 memory: true
