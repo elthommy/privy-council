@@ -55,6 +55,16 @@ def scoped(text: str, council: str) -> str:
     return "\n".join(kept)
 
 
+def split_council(text: str, council: str) -> tuple[list[str], list[str]]:
+    """Split a memory text into `council`'s tagged lines and every other line."""
+    own: list[str] = []
+    rest: list[str] = []
+    for line in text.splitlines():
+        tag = TAGGED_BULLET.match(line.strip())
+        (own if tag is not None and tag.group(1) == council else rest).append(line)
+    return own, rest
+
+
 def bullet_lines(text: str) -> list[str]:
     """Return the Markdown bullet lines of a text, without their marker."""
     lines = (line.strip() for line in text.splitlines())
@@ -99,6 +109,12 @@ class MemoryStore:
     def rewrite_private(self, slug: str, text: str) -> None:
         """Replace a persona's notes (consolidation), keeping a `.bak` copy."""
         _rewrite(self.private_path(slug), text)
+
+    def rewrite_private_council(self, slug: str, council: str, text: str) -> None:
+        """Replace only `council`'s notes of a persona, keeping a `.bak` of the file."""
+        _, rest = split_council(self.read_private(slug), council)
+        kept = "\n".join(line for line in rest if line.strip())
+        _rewrite(self.private_path(slug), f"{kept}\n{text}" if kept else text)
 
     def rewrite_shared(self, text: str) -> None:
         """Replace the shared user facts (approved consolidation), keeping a `.bak` copy."""

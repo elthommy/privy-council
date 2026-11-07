@@ -208,9 +208,24 @@ async def test_private_notes_are_merged_past_the_cap(
     store.append_private("rigor", ["- 2026-01-01 (finance): " + "old " * 30])
     await closed_session(h)
     assert store.read_private("rigor") == "- 2026-10-17 (finance): merged\n"
-    assert any(n.startswith("Rigor's notes passed 150 bytes and were merged") for n in notices(h))
+    assert any(
+        n.startswith("Rigor's finance notes passed 150 bytes and were merged") for n in notices(h)
+    )
     merge = next(r for r in h.ollama.requests if r.tag.purpose == "consolidate")
     assert merge.tag.persona == "rigor"  # on its own backend
+
+
+async def test_other_councils_notes_dont_count_toward_the_cap(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    config: dict[str, Any] = {"memory": {"private_cap_bytes": 150}}
+    h = Harness(tmp_path, personas, memory_responder(), config=config)
+    store = MemoryStore(h.settings.data_dir)
+    career = "- 2026-01-01 (career): " + " ".join(["old"] * 60)
+    store.append_private("rigor", [career])
+    await closed_session(h)
+    assert not any(r.tag.purpose == "consolidate" for r in h.ollama.requests)
+    assert store.read_private("rigor").splitlines()[0] == career
 
 
 async def test_memory_failures_never_block_the_close(

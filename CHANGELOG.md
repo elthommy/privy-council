@@ -2,8 +2,10 @@
 
 All notable changes, by milestone. Dates are when each milestone was built.
 
-## Unreleased (2026-10-25 – 2026-11-06)
+## Unreleased (2026-10-25 – 2026-11-07)
 
+- **Private notes no longer credit you with the council's advice**: a recommendation in the synthesis was written down as your decision ("the user will not escalate without proof", "the user accepted the recaps"). Notes now record only what your own messages state, and your silence isn't agreement.
+- **The private-notes cap is per council**: a persona that sits in several councils (the Chair) keeps `private_cap_bytes` of notes for each, and a merge rewrites only the council that outgrew it. An unusable merge is retried once with a lower target, and the reason is logged.
 - **The Chair asks one question at a time**: its second question comes once you answer the first, and each gets the full wait (`question_timeout_s`); a timeout skips the rest, so an absent user holds the debate no longer than before. On Discord each person gets their own sequence. The Chair's questions now ask one thing each.
 - **A reply no longer counts as an answer on its own**: at the next update the Chair judges which of its questions your lines left open, a half-answered one included, and the synthesis lists them.
 - **Your facts stay in the debate state**: the cap of 12 forced the Chair to squeeze long stories at every update and facts vanished, so it's now 30, and a fact the Chair drops comes back (a reworded or merged one is left as it is).

@@ -87,9 +87,11 @@ NOTICE_MEMORY_SILENT = "{nick} didn't speak this session; no notes written"
 NOTICE_MEMORY_READ_ONLY = "Memory is read-only for this council: nothing saved"
 NOTICE_MEMORY_OFF = "Memory is off for this council: nothing saved"
 NOTICE_MEMORY_FAILED = "{nick} couldn't write memory ({error}); skipped"
-NOTICE_MEMORY_MERGED = "{nick}'s notes passed {cap} bytes and were merged (old copy: notes.md.bak)"
+NOTICE_MEMORY_MERGED = (
+    "{nick}'s {council} notes passed {cap} bytes and were merged (old copy: notes.md.bak)"
+)
 NOTICE_MEMORY_MERGE_BAD = (
-    "{nick}'s notes are over {cap} bytes, but the merge was unusable; kept as is"
+    "{nick}'s {council} notes are over {cap} bytes, but both merges were unusable; kept as is"
 )
 NOTICE_SHARED_FAILED = "Shared memory proposal failed ({error}); nothing saved"
 NOTICE_SHARED_UNQUOTED = "Dropped {count} proposed fact(s) not backed by your own words"

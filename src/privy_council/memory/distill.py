@@ -10,6 +10,7 @@ discarded, leaving the file as it was.
 from __future__ import annotations
 
 import json
+import logging
 import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -21,7 +22,14 @@ from pydantic import BaseModel, Field, ValidationError
 from privy_council.backends.base import CompletionResult
 from privy_council.config import MemoryConfig
 from privy_council.engine import context, prompts
-from privy_council.memory.store import MemoryStore, bullet, bullet_lines, size_bytes
+from privy_council.memory.store import (
+    TAGGED_BULLET,
+    MemoryStore,
+    bullet,
+    bullet_lines,
+    size_bytes,
+    split_council,
+)
 from privy_council.models.persona import Persona
 from privy_council.models.session import Message
 from privy_council.util.language import Language
@@ -34,6 +42,8 @@ MAX_SHARED_FACTS = 5
 SHARED_MAX_OUTPUT = 800
 # Consolidation aims well under the cap, so a few sessions fit before the next pass.
 CONSOLIDATE_TARGET = 0.7
+# The one retry after an unusable merge aims lower: the first reply ran long.
+CONSOLIDATE_RETRY_TARGET = 0.5
 # A quote shorter than this matches too easily to prove the user said anything.
 MIN_QUOTE_CHARS = 4
 
@@ -43,6 +53,8 @@ _QUOTES = str.maketrans(
     {"\u2019": "'", "\u2018": "'", "\u201c": '"', "\u201d": '"', "\u00ab": '"', "\u00bb": '"'}
 )
 _EDGE_PUNCT = " \t\n\"'.,;:!?…()[]"
+
+logger = logging.getLogger(__name__)
 
 
 class MemoryOutputError(Exception):
@@ -139,18 +151,34 @@ def quoted_facts(
     return kept[:MAX_SHARED_FACTS], unquoted
 
 
-def consolidation_target(cap_bytes: int) -> int:
+def consolidation_target(cap_bytes: int, share: float = CONSOLIDATE_TARGET) -> int:
     """Return the size a consolidation should aim for."""
-    return int(cap_bytes * CONSOLIDATE_TARGET)
+    return int(cap_bytes * share)
 
 
-def parse_consolidated(text: str, cap_bytes: int) -> str | None:
-    """Return the consolidated bullets, or None if empty or still over the cap."""
+def parse_consolidated(
+    text: str, cap_bytes: int, council: str | None = None
+) -> tuple[str | None, str]:
+    """Return (the consolidated bullets, "") or (None, why the reply is unusable).
+
+    With `council`, every line must keep that council's tag, so a merge can't
+    move a note into another council's scope.
+    """
     lines = [f"- {line}" for line in bullet_lines(text)]
     merged = "\n".join(lines)
-    if not lines or size_bytes(merged) > cap_bytes:
-        return None
-    return merged
+    if not lines:
+        return None, prompts.MERGE_EMPTY
+    if size_bytes(merged) > cap_bytes:
+        return None, prompts.MERGE_OVER_CAP.format(size=size_bytes(merged), cap=cap_bytes)
+    if council is not None and any(_council_of(line) != council for line in lines):
+        return None, prompts.MERGE_LOST_TAG.format(council=council)
+    return merged, ""
+
+
+def _council_of(line: str) -> str | None:
+    """Return the council tag of a bullet line, or None if it has none."""
+    tag = TAGGED_BULLET.match(line)
+    return tag.group(1) if tag is not None else None
 
 
 def parse_selection(arg: str, count: int) -> list[int] | None:
@@ -247,24 +275,35 @@ class MemoryWriter:
         )
         return len(notes)
 
-    def private_over_cap(self, persona: Persona) -> bool:
-        """Return whether a persona's notes exceed the private cap."""
-        return size_bytes(self.store.read_private(persona.slug)) > self.cfg.private_cap_bytes
+    def council_notes(self, persona: Persona, council: str) -> str:
+        """Return the persona's notes tagged with `council` (the part the cap applies to)."""
+        own, _ = split_council(self.store.read_private(persona.slug), council)
+        return "\n".join(own)
+
+    def private_over_cap(self, persona: Persona, council: str) -> bool:
+        """Return whether a persona's notes from `council` exceed the private cap.
+
+        The cap is per council: a persona that sits in several councils keeps
+        `private_cap_bytes` of notes for each.
+        """
+        return size_bytes(self.council_notes(persona, council)) > self.cfg.private_cap_bytes
 
     def shared_over_cap(self) -> bool:
         """Return whether the shared facts exceed the shared cap."""
         return size_bytes(self.store.read_shared()) > self.cfg.shared_cap_bytes
 
-    async def consolidate(self, persona: Persona) -> bool:
-        """Merge a persona's notes on its own backend; return False if the result is bad."""
-        cap = self.cfg.private_cap_bytes
-        task = prompts.CONSOLIDATE_TASK.format(
-            target=consolidation_target(cap), notes=self.store.read_private(persona.slug)
-        )
-        merged = await self._merge(persona, persona.body, task, "consolidate", cap)
+    async def consolidate(self, persona: Persona, council: str) -> bool:
+        """Merge a persona's notes from `council` on its own backend; False if unusable."""
+        notes = self.council_notes(persona, council)
+
+        def task(target: int) -> str:
+            """Return the merge task aiming under `target` characters."""
+            return prompts.CONSOLIDATE_TASK.format(target=target, council=council, notes=notes)
+
+        merged = await self._merge(persona, persona.body, task, self.cfg.private_cap_bytes, council)
         if merged is None:
             return False
-        self.store.rewrite_private(persona.slug, merged)
+        self.store.rewrite_private_council(persona.slug, council, merged)
         return True
 
     async def propose_facts(
@@ -299,19 +338,42 @@ class MemoryWriter:
 
     async def propose_rewrite(self, moderator: Persona) -> str | None:
         """Ask the moderator for a merged shared file (to be approved), or None if bad."""
-        cap = self.cfg.shared_cap_bytes
-        task = prompts.CONSOLIDATE_SHARED_TASK.format(
-            target=consolidation_target(cap), notes=self.store.read_shared()
-        )
-        return await self._merge(moderator, prompts.SHARED_SYSTEM, task, "consolidate", cap)
+        notes = self.store.read_shared()
+
+        def task(target: int) -> str:
+            """Return the merge task aiming under `target` characters."""
+            return prompts.CONSOLIDATE_SHARED_TASK.format(target=target, notes=notes)
+
+        return await self._merge(moderator, prompts.SHARED_SYSTEM, task, self.cfg.shared_cap_bytes)
 
     async def _merge(
-        self, persona: Persona, system: str, task: str, purpose: str, cap: int
+        self,
+        persona: Persona,
+        system: str,
+        task: Callable[[int], str],
+        cap: int,
+        council: str | None = None,
     ) -> str | None:
-        """Run a consolidation call and check its output against the cap."""
+        """Run a consolidation call, retrying once lower if the reply is unusable."""
+        first = consolidation_target(cap)
+        merged, why = await self._merge_once(persona, system, task(first), cap, council)
+        if merged is not None:
+            return merged
+        logger.warning("memory merge for %s unusable, retrying: %s", persona.slug, why)
+        retry = consolidation_target(cap, CONSOLIDATE_RETRY_TARGET)
+        again = task(retry) + prompts.MERGE_RETRY.format(reason=why, target=retry)
+        merged, why = await self._merge_once(persona, system, again, cap, council)
+        if merged is None:
+            logger.warning("memory merge for %s unusable twice, kept as is: %s", persona.slug, why)
+        return merged
+
+    async def _merge_once(
+        self, persona: Persona, system: str, task: str, cap: int, council: str | None
+    ) -> tuple[str | None, str]:
+        """Run one consolidation call; return the bullets or why they are unusable."""
         prompt = context.Prompt(system=system, user=task)
         # The reply is at most ~cap bytes; tokens ≈ bytes / 4, so half the cap is generous.
-        result = await self.complete(persona, prompt, purpose, max_output=max(cap // 2, 500))
+        result = await self.complete(persona, prompt, "consolidate", max_output=max(cap // 2, 500))
         if result.truncated:
-            return None
-        return parse_consolidated(result.text, cap)
+            return None, prompts.MERGE_TRUNCATED
+        return parse_consolidated(result.text, cap, council)

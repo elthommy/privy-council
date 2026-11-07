@@ -12,7 +12,7 @@ from privy_council.models.session import DebateState, Message
 from privy_council.models.vote import Vote
 from privy_council.util.language import Language
 
-PROMPTS_VERSION = "52"
+PROMPTS_VERSION = "53"
 
 # Backends that accept a single user turn (the claude CLI on stdin) flatten a
 # multi-message conversation with these labels.
@@ -693,12 +693,15 @@ The session is over. The final synthesis:
 
 Write 1-3 private notes for your future self. Each note is one line starting with "- ", \
 at most 40 words. Cover what applies:
-- what the user decided, said or prefers (only what the user actually stated);
-- the position you argued, and how it was received: only what your own messages above \
-show, never a point you didn't make;
+- what the user said, decided or prefers: only what the user's own messages above state. \
+The synthesis and the debate state hold the council's advice, not the user's choices: \
+never record a recommendation as the user's decision or position, and never write that \
+the user accepted, agreed to or rejected advice unless the user's own words say so;
+- the position you argued, and how the members received it: only what your own messages \
+above show, never a point you didn't make. The user's silence is not agreement;
 - a lesson for the next session.
-Refer to the user as "{the_user}". Don't repeat your existing notes. No preamble. \
-If nothing is worth remembering, reply NONE."""
+Refer to the user as "{the_user}", or as "they". Don't repeat your existing notes. No \
+preamble. If nothing is worth remembering, reply NONE."""
 
 NOTES_NONE = "NONE"
 
@@ -724,17 +727,26 @@ TITLE_USER_MESSAGES = "The user's messages this session"
 TITLE_OWN_MESSAGES = "Your messages and the user's this session"
 
 CONSOLIDATE_TASK = """\
-Your private notes have outgrown their size limit. Rewrite them in under {target} \
-characters:
-- merge notes that say the same thing, but only notes from the same council;
+Your private notes from the {council} council have outgrown their size limit. Rewrite \
+them in under {target} characters in total:
+- merge notes that say the same thing;
 - drop points that are stale or superseded by a newer note;
-- keep the user's decisions and preferences, and lessons that still apply.
-Keep the "- YYYY-MM-DD (council): " prefix on each line, with the council unchanged \
-(merged notes take the newest date), and each note in the language it is written in. \
-Output only the bullet lines.
+- keep the user's decisions and preferences, and lessons that still apply;
+- one point per note, at most 60 words: several short notes, never one long one.
+Start each line with "- YYYY-MM-DD ({council}): " (merged notes take the newest date), \
+and keep each note in the language it is written in. Output only the bullet lines.
 
 The notes:
 {notes}"""
+
+MERGE_RETRY = """
+
+Your previous rewrite was unusable: {reason}. Try again, in under {target} characters \
+in total."""
+MERGE_EMPTY = "it had no bullet lines"
+MERGE_OVER_CAP = "it was {size} bytes, over the {cap}-byte limit"
+MERGE_TRUNCATED = "it was cut off by the output cap"
+MERGE_LOST_TAG = 'a line did not start with "- YYYY-MM-DD ({council}): "'
 
 CONSOLIDATE_SHARED_TASK = """\
 The shared file of facts about the user has outgrown its size limit. Rewrite it in under \

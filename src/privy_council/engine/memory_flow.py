@@ -206,11 +206,11 @@ class MemoryFlow(EngineCore):
                 if count
                 else NOTICE_MEMORY_NOTHING.format(nick=nick)
             )
-            if writer.private_over_cap(persona):
-                merged = await writer.consolidate(persona)
+            if writer.private_over_cap(persona, digest.council):
+                merged = await writer.consolidate(persona, digest.council)
                 cap = self.settings.memory.private_cap_bytes
                 notice = NOTICE_MEMORY_MERGED if merged else NOTICE_MEMORY_MERGE_BAD
-                self._notice(notice.format(nick=nick, cap=cap))
+                self._notice(notice.format(nick=nick, council=digest.council, cap=cap))
         except BackendError as exc:
             self._notice(NOTICE_MEMORY_FAILED.format(nick=nick, error=exc))
         finally:

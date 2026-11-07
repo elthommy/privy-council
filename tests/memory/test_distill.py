@@ -82,9 +82,19 @@ def test_quote_guard_skips_facts_already_on_file() -> None:
 
 
 def test_parse_consolidated() -> None:
-    assert parse_consolidated("Sure:\n- 2026-10-17 (f): a\n- b", 100) == "- 2026-10-17 (f): a\n- b"
-    assert parse_consolidated("no bullets here", 100) is None
-    assert parse_consolidated("- " + "x" * 200, 100) is None
+    merged = "- 2026-10-17 (f): a\n- b"
+    assert parse_consolidated("Sure:\n- 2026-10-17 (f): a\n- b", 100) == (merged, "")
+    assert parse_consolidated("no bullets here", 100) == (None, "it had no bullet lines")
+    over = parse_consolidated("- " + "x" * 200, 100)
+    assert over == (None, "it was 202 bytes, over the 100-byte limit")
+
+
+def test_parse_consolidated_keeps_the_council_tag() -> None:
+    ok = "- 2026-10-17 (finance): a\n- 2026-10-18 (finance): b"
+    assert parse_consolidated(ok, 100, "finance") == (ok, "")
+    for bad in ("- 2026-10-17 (finance): a\n- b", "- 2026-10-17 (career): a"):
+        merged, why = parse_consolidated(bad, 100, "finance")
+        assert merged is None and "(finance)" in why
 
 
 def test_parse_selection() -> None:
@@ -189,19 +199,60 @@ async def test_propose_facts_applies_the_quote_guard(
     assert "I rent a flat." in prompt.user and "I am cautious" not in prompt.user
 
 
+def finance_notes(count: int) -> list[str]:
+    """Return `count` finance notes of about 75 bytes each."""
+    return [f"- 2026-10-0{i} (finance): note {i} " + "x" * 50 for i in range(1, count + 1)]
+
+
 async def test_consolidate_rewrites_or_keeps(tmp_path: Path, personas: dict[str, Persona]) -> None:
+    rigor = personas["rigor"]
     rec = Recorder(
         result("- 2026-10-17 (finance): merged"),
         result("- " + "y" * 500),  # still over the cap
-        result("- fine", truncated=True),
+        result("- fine", truncated=True),  # the retry, cut off
     )
     w = writer(tmp_path, rec, private_cap_bytes=200)
-    w.store.append_private("rigor", [f"- note {i} " + "x" * 50 for i in range(5)])
-    assert w.private_over_cap(personas["rigor"])
-    assert await w.consolidate(personas["rigor"]) is True
+    w.store.append_private("rigor", finance_notes(5))
+    assert w.private_over_cap(rigor, "finance")
+    assert await w.consolidate(rigor, "finance") is True
     assert w.store.read_private("rigor") == "- 2026-10-17 (finance): merged\n"
-    assert await w.consolidate(personas["rigor"]) is False
-    assert await w.consolidate(personas["rigor"]) is False
-    assert w.store.read_private("rigor") == "- 2026-10-17 (finance): merged\n"
-    assert rec.calls[0][1] == "consolidate"
+    w.store.append_private("rigor", finance_notes(5))
+    assert await w.consolidate(rigor, "finance") is False
+    assert "merged" in w.store.read_private("rigor")  # left as it was
+    assert [c[1] for c in rec.calls] == ["consolidate"] * 3
     assert "under 140 characters" in rec.calls[0][2].user
+    assert "from the finance council" in rec.calls[0][2].user
+
+
+async def test_consolidate_retries_once_lower_with_the_reason(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    rec = Recorder(result("- " + "y" * 500), result("- 2026-10-17 (finance): short"))
+    w = writer(tmp_path, rec, private_cap_bytes=200)
+    w.store.append_private("rigor", finance_notes(5))
+    assert await w.consolidate(personas["rigor"], "finance") is True
+    retry = rec.calls[1][2].user
+    assert "unusable: it was 502 bytes, over the 200-byte limit" in retry
+    assert retry.endswith("in under 100 characters in total.")
+    assert w.store.read_private("rigor") == "- 2026-10-17 (finance): short\n"
+
+
+async def test_cap_and_merge_are_per_council(tmp_path: Path, personas: dict[str, Persona]) -> None:
+    rigor = personas["rigor"]
+    rec = Recorder(result("- 2026-10-17 (finance): merged"))
+    w = writer(tmp_path, rec, private_cap_bytes=200)
+    career = ["- 2026-10-01 (career): career note " + "z" * 50 for _ in range(2)]
+    w.store.append_private("rigor", [career[0], "- my own line", *finance_notes(2), career[1]])
+    # 2 career notes + 2 finance notes: each council is under the cap, the file isn't.
+    assert not w.private_over_cap(rigor, "finance")
+    assert not w.private_over_cap(rigor, "career")
+    w.store.append_private("rigor", finance_notes(3))
+    assert w.private_over_cap(rigor, "finance")
+    assert await w.consolidate(rigor, "finance") is True
+    assert "career note" not in rec.calls[0][2].user and "my own line" not in rec.calls[0][2].user
+    assert w.store.read_private("rigor").splitlines() == [
+        career[0],
+        "- my own line",
+        career[1],
+        "- 2026-10-17 (finance): merged",
+    ]
