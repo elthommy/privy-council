@@ -12,7 +12,7 @@ from privy_council.models.session import DebateState, Message
 from privy_council.models.vote import Vote
 from privy_council.util.language import Language
 
-PROMPTS_VERSION = "57"
+PROMPTS_VERSION = "58"
 
 # Backends that accept a single user turn (the claude CLI on stdin) flatten a
 # multi-message conversation with these labels.
@@ -341,7 +341,9 @@ actually do; false if the members now differ only on details (a slightly differe
 amount or timing) that leave the recommended course of action the same.
 - next_turns: who speaks next and on what, at most one turn per member; never empty, \
 even when you stop. `speaker` is a slug; `prompt` is your instruction, e.g. \
-"respond to @Compounder's claim that ...". A flaw you report below is put to the \
+"respond to @Compounder's claim that ...". When a prompt states something about \
+the user, take it from user_facts or the user's own words: never add a detail they \
+didn't give (a number of years, a skill, a role). A flaw you report below is put to the \
 member first, so their prompt must not repeat it: ask only what comes next. \
 Target the sharpest disagreements and make members who disagree answer each other. \
 Use the dynamics above: give the floor to members who have been quiet, and call on a \
