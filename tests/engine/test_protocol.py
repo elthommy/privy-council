@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 
 from privy_council.backends.base import (
+    BackendOutputError,
     BackendRateLimitError,
     BackendTimeoutError,
     CompletionRequest,
@@ -485,6 +486,35 @@ async def test_close_mid_debate_and_after(tmp_path: Path, personas: dict[str, Pe
     assert "closed by the user" in synthesis.messages[0].content
     await h.engine.close()
     assert h.texts("system")[-1] == "Session is already closed"
+
+
+async def test_synthesis_checks_itself_against_the_opening(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    h = Harness(tmp_path, personas, standard_responder([]))
+    await h.engine.step()
+    await h.engine.close()
+    synthesis = next(r for r in h.claude.requests if r.tag.purpose == "synthesis")
+    text = synthesis.messages[0].content
+    assert "Your opening said what a good answer must cover:\nRestating: PEA" in text
+
+
+async def test_synthesis_without_an_opening_has_no_checklist(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    base = standard_responder([])
+
+    def respond(req: CompletionRequest) -> Reply:
+        """Fail the opening, answer the rest as usual."""
+        if req.tag.purpose == "opening":
+            return BackendOutputError("garbage")
+        return base(req)
+
+    h = Harness(tmp_path, personas, respond)
+    await h.engine.step()
+    await h.engine.close()
+    synthesis = next(r for r in h.claude.requests if r.tag.purpose == "synthesis")
+    assert "Your opening said" not in synthesis.messages[0].content
 
 
 async def test_synthesis_failure_is_recoverable(

@@ -848,8 +848,16 @@ class DebateEngine(ResearchFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
         answered = {(f.member, f.excerpt) for f in flagged if self._answered(f)}
         flaws = [f for f in flagged if (f.member, f.excerpt) not in answered]
         errors = prompts.synthesis_errors(flaws, self.nick, self.meta.language)
-        parts = (task, asked, vote, errors)
+        parts = (task, self._synthesis_opening(), asked, vote, errors)
         return self._wrapup_prompt("\n\n".join(p for p in parts if p))
+
+    def _synthesis_opening(self) -> str | None:
+        """Return the opening's checklist rule for the synthesis, if the Chair opened."""
+        slug = self.moderator.slug
+        opening = next((m.text for m in self.messages if m.speaker == slug and m.round == 0), None)
+        if not opening:
+            return None
+        return prompts.SYNTHESIS_OPENING.format(opening=opening[: prompts.OPENING_MAX_CHARS])
 
     async def _synthesis_call(self, prompt: context.Prompt) -> tuple[CompletionResult, bool]:
         """Write the synthesis with synthesis_model, falling back to the usual model."""

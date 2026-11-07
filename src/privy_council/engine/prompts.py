@@ -12,7 +12,7 @@ from privy_council.models.session import DebateState, Message
 from privy_council.models.vote import Vote
 from privy_council.util.language import Language
 
-PROMPTS_VERSION = "53"
+PROMPTS_VERSION = "54"
 
 # Backends that accept a single user turn (the claude CLI on stdin) flatten a
 # multi-message conversation with these labels.
@@ -343,7 +343,12 @@ even when you stop. `speaker` is a slug; `prompt` is your instruction, e.g. \
 member first, so their prompt must not repeat it: ask only what comes next. \
 Target the sharpest disagreements and make members who disagree answer each other. \
 Use the dynamics above: give the floor to members who have been quiet, and call on a \
-member who keeps repeating themselves only to confront them with something new.
+member who keeps repeating themselves only to confront them with something new. \
+Also pursue what nobody took up: a detail in the user's own text that no member used, \
+an option no member raised, and anything named (a product, a team, a document) that \
+the debate builds on without knowing what it is: put it to a member, or ask the user \
+what it is. Don't spend turns on a dispute too small to change the advice (two weeks \
+of timing on a seven-month horizon).
 - stop / stop_reason: {stop_rule}
 - questions_for_user: at most {questions_cap} where the user's answer would change the \
 advice, rephrased for the user from what members said they need to know or from \
@@ -358,7 +363,9 @@ matters more). Leave it empty if nothing is that important. {asked_rule}
 - flaws: clear errors in this round's member messages, most serious first, at most 4. \
 `member` is a slug; `kind` is "arithmetic" (a wrong sum, conversion or unit), \
 "contradiction" (the member contradicts their own earlier statement), "logic" (a \
-conclusion that doesn't follow, or a rule turned upside down), "unsourced" (a figure \
+conclusion that doesn't follow, a rule turned upside down, or a trigger, condition or \
+signal to wait for that user_facts show has already happened or can't happen, e.g. \
+"wait for a written signal" when the user said nothing gets written), "unsourced" (a figure \
 stated as fact that neither the facts, the dossier nor the user gave; see the engine's \
 list above, if any) or "other" (another factual error); `quote` is the member's exact \
 words, short; `note` says what is wrong in one sentence, impersonally, since it is \
@@ -474,6 +481,10 @@ Return only a JSON object matching the schema, with no other text."""
 SYNTHESIS_TASK = """\
 The debate is over ({reason}). Write the final synthesis in Markdown with these sections:
 ## {h_consensus}
+(only points no member argued against. Check each point against every member's last \
+position and the disagreements below: a point any member disputed, doubted or read the \
+other way is not consensus, and neither is a point only one member made. Move it to \
+the disagreements or leave it out. A short list is fine)
 ## {h_disagreements}
 (each one: who holds which side, and why)
 ## {h_spread}
@@ -483,9 +494,24 @@ situation or preferences and that would change the answer; never a question abou
 world or the analysis (dates, prices, rules, what something is), those go in the next \
 steps, and none the fresh facts already answer; write "None." if there is none)
 ## {h_next}
+(no trigger or condition the user's facts show has already happened or can't happen)
 
+Where the members' advice leads to one course of action, state it plainly as the \
+council's recommendation, not as a menu of options; leave a choice to the user only \
+where members still disagree, and say what it hinges on. When you give the user \
+wording to use (a message, what to say), take it from the framing the members agreed \
+on, not from a dissenter's.
 Only attribute positions members actually stated. Refer to a member by nick or as \
 "they", never as "he", "his", "she" or "her". Be concise."""
+
+# The synthesis left out a recommendation, downside scenarios and the weak points in the
+# user's reading, all promised by the opening (2026-11-06 career run).
+SYNTHESIS_OPENING = """\
+Your opening said what a good answer must cover:
+{opening}
+Check the synthesis against it before you write: cover each point the debate dealt \
+with, and in the next steps name any point it never settled."""
+OPENING_MAX_CHARS = 3000
 
 # The synthesis re-asked an answered question, reworded (2026-10-28 gacha run).
 SYNTHESIS_ASKED = (
