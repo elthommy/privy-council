@@ -9,6 +9,7 @@ import httpx
 import pytest
 from pytest_httpx import HTTPXMock
 
+from privy_council.backends import ollama as ollama_module
 from privy_council.backends.base import (
     BackendError,
     BackendTimeoutError,
@@ -199,6 +200,37 @@ async def test_model_load_timeout_or_oom_is_retried_once(
     result = await backend.complete(request(), (lambda _: None) if streamed else None)
     assert result.text == "Loaded."
     assert len(httpx_mock.get_requests()) == 2
+
+
+async def test_oom_twice_gets_a_third_try_after_a_delay(
+    backend: OllamaBackend, httpx_mock: HTTPXMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    waits: list[float] = []
+
+    async def fake_sleep(seconds: float) -> None:
+        """Record the wait instead of sleeping."""
+        waits.append(seconds)
+
+    monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+    httpx_mock.add_response(url=CHAT_URL, status_code=500, text=OOM)
+    httpx_mock.add_response(url=CHAT_URL, status_code=500, text=OOM)
+    httpx_mock.add_response(url=CHAT_URL, json=chat_response("Loaded."))
+    assert (await backend.complete(request())).text == "Loaded."
+    assert len(httpx_mock.get_requests()) == 3
+    assert waits == [ollama_module.OOM_RETRY_DELAY_S]
+
+
+async def test_oom_three_times_fails(
+    backend: OllamaBackend, httpx_mock: HTTPXMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def no_sleep(seconds: float) -> None:
+        """Skip the wait."""
+
+    monkeypatch.setattr(asyncio, "sleep", no_sleep)
+    httpx_mock.add_response(url=CHAT_URL, status_code=500, text=OOM, is_reusable=True)
+    with pytest.raises(ModelLoadError, match="out of memory"):
+        await backend.complete(request())
+    assert len(httpx_mock.get_requests()) == 3
 
 
 async def test_model_load_timeout_twice_fails(

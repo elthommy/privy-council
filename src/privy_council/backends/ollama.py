@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import time
 from collections.abc import Iterable
 from typing import Any
@@ -33,11 +34,16 @@ def pull_hint(model: str) -> str:
     return f"run `ollama pull {model}`"
 
 
+logger = logging.getLogger(__name__)
+
 # Ollama's 500 bodies worth one retry: a model that didn't finish loading within its
 # load timeout, and a CUDA OOM (Ollama expires loaded models before the next request;
 # seen with gemma4, whose MTP draft model llama.cpp leaves out of its VRAM fit).
 LOAD_TIMEOUT = "timed out waiting for llama-server to start"
 OUT_OF_MEMORY = "out of memory"
+# A second OOM came 10 s after the first when ~2 GB of VRAM was held outside Ollama
+# (desktop, browser; 2026-11-07): a third try waits for that memory to be released.
+OOM_RETRY_DELAY_S = 15.0
 THINK_END = "</think>"
 
 
@@ -113,15 +119,34 @@ class OllamaBackend:
             payload["stream"] = True
         async with self._semaphore:
             start = time.monotonic()
-            try:
-                data = await self._chat(payload, req.model, timeout, on_text)
-            except ModelLoadError:
-                # A big model swap can outlast Ollama's load wait (the next try finds it
-                # loading or loaded), and an OOM frees VRAM for the next request.
-                # Retried here so it never costs a caller's own retry.
-                data = await self._chat(payload, req.model, timeout, on_text)
+            data = await self._chat_retrying(payload, req.model, timeout, on_text)
             latency = time.monotonic() - start
         return self._to_result(data, req, latency)
+
+    async def _chat_retrying(
+        self, payload: dict[str, Any], model: str, timeout: float, on_text: TextSink | None
+    ) -> dict[str, Any]:
+        """Run /api/chat, retrying a failed model load.
+
+        A big model swap can outlast Ollama's load wait (the next try finds it loading
+        or loaded), and an OOM frees VRAM for the next request: both get one retry at
+        once. An OOM that repeats gets a third try after OOM_RETRY_DELAY_S. Retried
+        here so it never costs a caller's own retry.
+        """
+        try:
+            return await self._chat(payload, model, timeout, on_text)
+        except ModelLoadError:
+            pass
+        try:
+            return await self._chat(payload, model, timeout, on_text)
+        except ModelLoadError as exc:
+            if OUT_OF_MEMORY not in str(exc):
+                raise
+            logger.warning(
+                "Ollama (%s) out of memory twice; retrying in %.0f s", model, OOM_RETRY_DELAY_S
+            )
+        await asyncio.sleep(OOM_RETRY_DELAY_S)
+        return await self._chat(payload, model, timeout, on_text)
 
     async def _chat(
         self, payload: dict[str, Any], model: str, timeout: float, on_text: TextSink | None
