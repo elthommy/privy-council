@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from typing import Literal
 
 from privy_council.backends.base import (
+    BackendAuthError,
     BackendError,
     BackendUnavailableError,
     ChatMessage,
@@ -75,6 +76,9 @@ class ResearchFlow(EngineCore):
         self.busy = True
         try:
             await self._research_safely(focus)
+        except BackendAuthError as exc:
+            # Outside a step nothing is left half done: just say why.
+            self._emit(ErrorEvent(text=NOTICE_RESEARCH_FAILED.format(error=exc)))
         finally:
             self.busy = False
 
@@ -210,6 +214,8 @@ class ResearchFlow(EngineCore):
             await self._research_turn(focus, auto=auto)
         except NoSearchHits as exc:
             self._notice(NOTICE_LOCAL_NOTHING.format(nick=self.moderator.name, queries=exc))
+        except BackendAuthError:
+            raise
         except BackendError as exc:
             self._emit(ErrorEvent(text=NOTICE_RESEARCH_FAILED.format(error=exc)))
 

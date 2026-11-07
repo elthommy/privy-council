@@ -14,6 +14,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from privy_council.backends.base import (
+    BackendAuthError,
     BackendError,
     BackendRateLimitError,
     ChatMessage,
@@ -487,7 +488,7 @@ async def decide(
     for purpose in ("moderate", "repair"):
         try:
             result = await call(messages, purpose)
-        except BackendRateLimitError:
+        except (BackendRateLimitError, BackendAuthError):
             raise
         except BackendError as exc:
             problems.append(f"{type(exc).__name__}: {exc}")

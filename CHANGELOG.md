@@ -4,6 +4,7 @@ All notable changes, by milestone. Dates are when each milestone was built.
 
 ## Unreleased (2026-10-25 – 2026-11-07)
 
+- **A logged-out `claude` CLI stops the step** with "Claude is not logged in… /step retries", like a usage limit, instead of running the debate without the Chair or a member.
 - `career` has a brief for the Chair: separate what you saw from how you read it, find who actually holds the decision, challenge your own reading, weigh the fears instead of taking them as given.
 - **Better flaw reports**: the Chair no longer flags a figure of speech ("keep your head down") as a contradiction, and now reports base rates given as fact with no data, a member claiming personal experience, specifics nobody gave stated as established, and a date given a meaning the facts don't.
 - **A sharper synthesis**: Consensus lists only points no member argued against; the synthesis checks itself against the opening's "a good answer must cover" list and names what the debate never settled; it states one recommendation where the advice leads to one, leaving you only the choices members still disagree on; wording it suggests follows the agreed framing; next steps hold no trigger that already happened.

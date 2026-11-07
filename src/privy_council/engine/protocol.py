@@ -17,6 +17,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from privy_council.backends.base import (
+    BackendAuthError,
     BackendError,
     BackendRateLimitError,
     ChatMessage,
@@ -49,6 +50,7 @@ from privy_council.engine.moderation import (
 from privy_council.engine.notices import (
     ASK_LINE,
     NOTICE_ALREADY_CLOSED,
+    NOTICE_AUTH_FAILED,
     NOTICE_BUSY,
     NOTICE_CLOSED,
     NOTICE_CONTINUED,
@@ -272,6 +274,8 @@ class DebateEngine(ResearchFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
         except BackendRateLimitError as exc:
             when = f", resets {exc.retry_at.astimezone():%a %H:%M}" if exc.retry_at else ""
             self._fail(NOTICE_RATE_LIMIT.format(when=when))
+        except BackendAuthError as exc:
+            self._fail(NOTICE_AUTH_FAILED.format(error=exc))
         except BackendError as exc:
             self._fail(NOTICE_STEP_FAILED.format(phase=phase.value.capitalize(), error=exc))
 
@@ -392,7 +396,7 @@ class DebateEngine(ResearchFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
         try:
             result, fallback = await self._complete(self.moderator, prompt, "opening", stream=True)
             self._post_result(self.moderator, result, fallback)
-        except BackendRateLimitError:
+        except (BackendRateLimitError, BackendAuthError):
             raise
         except BackendError as exc:
             self._notice(NOTICE_OPENING_FAILED.format(error=exc))
@@ -471,7 +475,7 @@ class DebateEngine(ResearchFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
             result, fallback = await self._complete(persona, prompt, "turn", stream=True)
             self._post_result(persona, result, fallback)
             self._check_turn(persona, prompt, result.text)
-        except BackendRateLimitError:
+        except (BackendRateLimitError, BackendAuthError):
             raise
         except BackendError as exc:
             self._notice(NOTICE_NO_ANSWER.format(nick=persona.name, error=exc))

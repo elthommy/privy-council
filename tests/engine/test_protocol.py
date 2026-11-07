@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 
 from privy_council.backends.base import (
+    BackendAuthError,
     BackendOutputError,
     BackendRateLimitError,
     BackendTimeoutError,
@@ -392,6 +393,48 @@ async def test_rate_limit_pauses_and_retry_skips_done_turns(
     turns = [r.tag.persona or "" for r in h.requests() if r.tag.purpose == "turn"]
     assert sorted(turns) == sorted([*MEMBERS, "compounder"])
     assert h.engine.meta.runtime.round == 1
+
+
+async def test_logged_out_opening_stops_instead_of_going_on(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    logged_out = {"left": True}
+    base = standard_responder([decision([("rigor", "x")])])
+
+    def respond(req: CompletionRequest) -> Reply:
+        """Fail the opening once, as a logged-out CLI does."""
+        if req.tag.purpose == "opening" and logged_out["left"]:
+            logged_out["left"] = False
+            return BackendAuthError("not logged in")
+        return base(req)
+
+    h = Harness(tmp_path, personas, respond)
+    await h.engine.step()
+    assert h.state() is SessionState.ERROR_RECOVERABLE
+    assert any(isinstance(e, ErrorEvent) and "not logged in" in e.text for e in h.events)
+    assert not any(r.tag.purpose == "turn" for r in h.requests())
+    await h.engine.step()  # logged in again: the opening runs
+    assert h.state() is SessionState.PAUSED
+    assert h.texts("chair")[0].startswith("Restating")
+
+
+async def test_logged_out_member_stops_the_round(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    base = standard_responder([decision([("rigor", "x")])])
+
+    def respond(req: CompletionRequest) -> Reply:
+        """Fail Compounder's turns as a logged-out CLI does."""
+        if req.tag.persona == "compounder" and req.tag.purpose == "turn":
+            return BackendAuthError("not logged in")
+        return base(req)
+
+    h = Harness(tmp_path, personas, respond)
+    await h.engine.step()
+    await h.engine.step()
+    assert h.state() is SessionState.ERROR_RECOVERABLE
+    assert "compounder" in [t.speaker for t in h.engine.meta.runtime.pending]
+    assert not any(r.tag.purpose == "moderate" for r in h.requests())
 
 
 async def test_rate_limit_with_fallback_reroutes_locally(

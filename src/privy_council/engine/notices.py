@@ -34,6 +34,8 @@ NOTICE_RATE_LIMIT = (
     "[claude] fallback_to_local = true"
 )
 NOTICE_STEP_FAILED = "{phase} failed ({error}); /step to retry"
+# A logged-out CLI fails every Claude call: carrying on would run a debate without them.
+NOTICE_AUTH_FAILED = "Claude is not logged in ({error}). Session paused: log in, then /step retries"
 NOTICE_RESEARCH_OFF = (
     "Research is off for this session (--no-research, or [research] enabled = false)"
 )
