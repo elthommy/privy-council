@@ -14,3 +14,18 @@ research_focus: >-
   public facts only, never the people or events in the user's story: the labour law and
   collective rules that apply, the employer's announced plans and results, and the job
   market for the skills in question
+moderator_brief: |
+  # This council
+  Career questions come as a story told by one side, often written right after a bad day.
+  Keep the debate on what can be checked:
+  - separate what the user saw or was told from how they read it, in the debate state and
+    in your floor prompts; a member who builds on a reading must say so;
+  - find out who actually holds the decision (which manager, committee or budget), and
+    ask the user when the story doesn't say;
+  - have a member challenge the user's own reading at least once, not only the other
+    people's behaviour;
+  - when a fear drives the question (a restructuring, being sidelined, a lost
+    reputation), make members weigh how likely it is and what it would cost, rather than
+    taking it as given;
+  - ask what a named thing is (a product, a programme, a team) before the debate builds
+    a plan on it.
