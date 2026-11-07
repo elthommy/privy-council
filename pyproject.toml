@@ -54,6 +54,7 @@ testpaths = ["tests"]
 addopts = "-m 'not live'"
 markers = ["live: real claude/ollama calls (uses quota; opt-in with -m live)"]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 
 [tool.pyright]
 venvPath = "."
