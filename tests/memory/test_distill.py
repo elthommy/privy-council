@@ -13,8 +13,12 @@ from privy_council.loaders.personas import load_personas
 from privy_council.memory.distill import (
     MemoryOutputError,
     MemoryWriter,
+    NoteChange,
     ProposedFact,
     SessionDigest,
+    _apply_changes,
+    fresh_notes,
+    parse_check,
     parse_consolidated,
     parse_notes,
     parse_selection,
@@ -256,3 +260,55 @@ async def test_cap_and_merge_are_per_council(tmp_path: Path, personas: dict[str,
         career[1],
         "- 2026-10-17 (finance): merged",
     ]
+
+
+OLD_LESSON = (
+    "- 2026-10-01 (career): Next time, confirm whether the user's notes record the budget "
+    "as agreed or only discussed."
+)
+
+
+def test_a_lesson_copied_with_a_tail_repeats_the_old_one() -> None:
+    new = (
+        "Next session, confirm whether the user's notes record the budget as agreed or only "
+        "discussed, and ask their monthly rent."
+    )
+    assert fresh_notes([new], OLD_LESSON) == []
+
+
+def test_a_note_that_changes_a_figure_or_the_subject_is_new() -> None:
+    old = "- 2026-10-01 (finance): The user has a 5k emergency fund."
+    assert fresh_notes(["The user has a 6k emergency fund."], old) == [
+        "The user has a 6k emergency fund."
+    ]
+    assert fresh_notes(["I argued for index funds; Skeptic disagreed."], OLD_LESSON) == [
+        "I argued for index funds; Skeptic disagreed."
+    ]
+
+
+def test_two_new_notes_that_say_the_same_keep_the_first() -> None:
+    notes = ["The user prefers renting over buying.", "The user prefers renting to buying."]
+    assert fresh_notes(notes, "") == notes[:1]
+
+
+def test_note_changes_fix_drop_and_ignore_bad_numbers() -> None:
+    drafts = {"rigor": ["a", "b"], "optimist": ["c"]}
+    numbered = [("rigor", 0), ("rigor", 1), ("optimist", 0)]
+    changes = [
+        NoteChange(n=1, note="- a fixed"),
+        NoteChange(n=3, note=""),
+        NoteChange(n=2, note="b"),  # unchanged: not counted
+        NoteChange(n=9, note="out of range"),
+    ]
+    revised, fixed, dropped = _apply_changes(drafts, numbered, changes)
+    assert revised == {"rigor": ["a fixed", "b"], "optimist": []}
+    assert (fixed, dropped) == (1, 1)
+    assert drafts["rigor"] == ["a", "b"]  # the input is left alone
+
+
+def test_parse_check_reads_text_or_structured_and_rejects_garbage() -> None:
+    text = result('```json\n{"changes": [{"n": 1, "note": "x"}]}\n```')
+    assert parse_check(text) == [NoteChange(n=1, note="x")]
+    assert parse_check(result(structured={"changes": []})) == []
+    with pytest.raises(MemoryOutputError):
+        parse_check(result('{"changes": [{"n": "one"}]}'))

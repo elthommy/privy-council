@@ -46,6 +46,9 @@ CONSOLIDATE_TARGET = 0.7
 CONSOLIDATE_RETRY_TARGET = 0.5
 # A quote shorter than this matches too easily to prove the user said anything.
 MIN_QUOTE_CHARS = 4
+NOTES_CHECK_MAX_OUTPUT = 1500
+# A new note whose words are mostly in an existing one only repeats it.
+REPEAT_SHARE = 0.8
 
 _FENCE = re.compile(r"^```(?:json)?\s*|\s*```$")
 # Typographic quotes (U+2018/2019, U+201C/201D, guillemets) match their ASCII forms.
@@ -53,6 +56,8 @@ _QUOTES = str.maketrans(
     {"\u2019": "'", "\u2018": "'", "\u201c": '"', "\u201d": '"', "\u00ab": '"', "\u00bb": '"'}
 )
 _EDGE_PUNCT = " \t\n\"'.,;:!?…()[]"
+# Words that carry meaning: 4+ letters, or anything with a digit (a changed figure counts).
+_WORD = re.compile(r"\w*\d\w*|\w{4,}")
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +79,19 @@ class SharedProposal(BaseModel):
     facts: list[ProposedFact] = Field(default_factory=list)
 
 
+class NoteChange(BaseModel):
+    """One member note the moderator corrects; an empty note drops it."""
+
+    n: int = Field(ge=1)
+    note: str
+
+
+class NotesCheck(BaseModel):
+    """The moderator's structured reply when checking the members' notes."""
+
+    changes: list[NoteChange] = Field(default_factory=list)
+
+
 def shared_schema() -> dict[str, Any]:
     """Return the JSON schema for shared-fact proposals."""
     fact = {
@@ -88,6 +106,77 @@ def shared_schema() -> dict[str, Any]:
         "required": ["facts"],
         "additionalProperties": False,
     }
+
+
+def notes_check_schema() -> dict[str, Any]:
+    """Return the JSON schema of the notes check reply."""
+    return {
+        "type": "object",
+        "properties": {
+            "changes": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {"n": {"type": "integer"}, "note": {"type": "string"}},
+                    "required": ["n", "note"],
+                },
+            }
+        },
+        "required": ["changes"],
+    }
+
+
+def _structured(result: CompletionResult) -> Any:
+    """Return a reply's JSON: the structured output, else the text parsed."""
+    if result.structured is not None:
+        return result.structured
+    try:
+        return json.loads(_FENCE.sub("", result.text.strip()))
+    except json.JSONDecodeError as exc:
+        raise MemoryOutputError(f"not valid JSON ({exc.msg})") from exc
+
+
+def parse_check(result: CompletionResult) -> list[NoteChange]:
+    """Return the note changes from a check reply, or raise MemoryOutputError."""
+    try:
+        return NotesCheck.model_validate(_structured(result)).changes
+    except ValidationError as exc:
+        raise MemoryOutputError(f"wrong shape ({exc.error_count()} errors)") from exc
+
+
+def _words(text: str) -> set[str]:
+    """Return the meaningful words of a note, normalized."""
+    return set(_WORD.findall(normalize(text)))
+
+
+def repeats(note: str, other: str) -> bool:
+    """Return whether two notes say the same thing.
+
+    Most of the shorter note's words are in the longer one, figures included: a
+    note that only updates a number is new, one that adds a tail to an old note
+    is not.
+    """
+    mine, theirs = _words(note), _words(other)
+    if not mine or not theirs:
+        return False
+    shorter, longer = sorted((mine, theirs), key=len)
+    if any(w not in longer for w in shorter if any(c.isdigit() for c in w)):
+        return False
+    return len(shorter & longer) >= REPEAT_SHARE * len(shorter)
+
+
+def fresh_notes(notes: Sequence[str], existing: str) -> list[str]:
+    """Drop notes that repeat an existing note or an earlier one in `notes`.
+
+    Local models copied a lesson from the last session almost word for word,
+    despite "don't repeat your existing notes" (career session, 2026-11-07).
+    """
+    seen = [line.partition("): ")[2] or line for line in bullet_lines(existing)]
+    kept: list[str] = []
+    for note in notes:
+        if not any(repeats(note, old) for old in [*seen, *kept]):
+            kept.append(note)
+    return kept
 
 
 def parse_notes(text: str) -> list[str]:
@@ -111,14 +200,8 @@ def _shorten(note: str) -> str:
 
 def parse_shared(result: CompletionResult) -> list[ProposedFact]:
     """Return the proposed facts from a structured reply, or raise MemoryOutputError."""
-    raw: Any = result.structured
-    if raw is None:
-        try:
-            raw = json.loads(_FENCE.sub("", result.text.strip()))
-        except json.JSONDecodeError as exc:
-            raise MemoryOutputError(f"not valid JSON ({exc.msg})") from exc
     try:
-        return SharedProposal.model_validate(raw).facts
+        return SharedProposal.model_validate(_structured(result)).facts
     except ValidationError as exc:
         raise MemoryOutputError(f"wrong shape ({exc.error_count()} errors)") from exc
 
@@ -196,6 +279,22 @@ def parse_selection(arg: str, count: int) -> list[int] | None:
     return sorted({int(w) - 1 for w in words})
 
 
+def _apply_changes(
+    drafts: dict[str, list[str]], numbered: list[tuple[str, int]], changes: list[NoteChange]
+) -> tuple[dict[str, list[str]], int, int]:
+    """Apply the moderator's changes to the drafts; return them, fixed and dropped counts."""
+    revised = {slug: list(notes) for slug, notes in drafts.items()}
+    fixed = dropped = 0
+    for change in {c.n: c for c in changes if c.n <= len(numbered)}.values():
+        slug, i = numbered[change.n - 1]
+        note = _shorten(change.note.strip().removeprefix("- ").strip())
+        if note == revised[slug][i]:
+            continue
+        revised[slug][i] = note
+        fixed, dropped = (fixed, dropped + 1) if not note else (fixed + 1, dropped)
+    return {slug: [n for n in notes if n] for slug, notes in revised.items()}, fixed, dropped
+
+
 class Complete(Protocol):
     """The engine's model call for a persona (routing, fallback and ledger included)."""
 
@@ -253,8 +352,16 @@ class MemoryWriter:
 
     async def write_notes(self, persona: Persona, digest: SessionDigest) -> int:
         """Have a persona distill the session into its private notes; return the count."""
+        return self.save_notes(persona, digest, await self.draft_notes(persona, digest))
+
+    def _existing(self, persona: Persona, council: str) -> str:
+        """Return the notes a persona sees when writing new ones."""
+        return self.store.read_private(persona.slug, self.cfg.notes_council(council))
+
+    async def draft_notes(self, persona: Persona, digest: SessionDigest) -> list[str]:
+        """Have a persona distill the session into notes, without saving them."""
         own = [m for m in digest.messages if m.speaker in (persona.slug, "user")]
-        existing = self.store.read_private(persona.slug, self.cfg.notes_council(digest.council))
+        existing = self._existing(persona, digest.council)
         prompt = context.build_prompt(
             system=f"{persona.body}\n\n{prompts.NOTES_SYSTEM.format(name=persona.name)}",
             topic=digest.topic,
@@ -269,11 +376,46 @@ class MemoryWriter:
             history_title=prompts.TITLE_OWN_MESSAGES,
         )
         result = await self.complete(persona, prompt, "memory", max_output=NOTES_MAX_OUTPUT)
-        notes = parse_notes(result.text)
+        return parse_notes(result.text)
+
+    def save_notes(self, persona: Persona, digest: SessionDigest, notes: Sequence[str]) -> int:
+        """Append the notes that don't repeat existing ones; return how many were saved."""
+        fresh = fresh_notes(notes, self._existing(persona, digest.council))
         self.store.append_private(
-            persona.slug, [bullet(digest.day, digest.council, n) for n in notes]
+            persona.slug, [bullet(digest.day, digest.council, n) for n in fresh]
         )
-        return len(notes)
+        return len(fresh)
+
+    async def check_notes(
+        self, moderator: Persona, digest: SessionDigest, drafts: dict[str, list[str]]
+    ) -> tuple[dict[str, list[str]], int, int]:
+        """Have the moderator check what the drafts say about the user.
+
+        Returns the corrected drafts and how many notes were fixed and dropped.
+        Local models credited a member's argument to the user, or dropped the
+        condition of an answer (career session, 2026-11-07).
+        """
+        numbered = [(slug, i) for slug, notes in drafts.items() for i in range(len(notes))]
+        if not numbered:
+            return drafts, 0, 0
+        listing = "\n".join(f"{n}. {drafts[s][i]}" for n, (s, i) in enumerate(numbered, 1))
+        asked = [m for m in digest.messages if _by_owner(m) or m.to_user]
+        prompt = context.build_prompt(
+            system=prompts.NOTES_CHECK_SYSTEM,
+            topic=digest.topic,
+            task=prompts.task(prompts.NOTES_CHECK_TASK, digest.lang, notes=listing),
+            budget_tokens=self.budget(moderator),
+            history=context.render_history(asked, digest.nick_of),
+            history_title=prompts.TITLE_USER_ANSWERS,
+        )
+        result = await self.complete(
+            moderator,
+            prompt,
+            "notes_check",
+            json_schema=notes_check_schema(),
+            max_output=NOTES_CHECK_MAX_OUTPUT,
+        )
+        return _apply_changes(drafts, numbered, parse_check(result))
 
     def council_notes(self, persona: Persona, council: str) -> str:
         """Return the persona's notes tagged with `council` (the part the cap applies to)."""

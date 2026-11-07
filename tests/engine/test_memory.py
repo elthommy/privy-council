@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -48,6 +49,8 @@ def memory_responder(**overrides: Reply) -> Responder:
             return {"facts": FACTS}
         if purpose == "consolidate":
             return "- 2026-10-17 (finance): merged"
+        if purpose == "notes_check":
+            return {"changes": []}
         return base(req)
 
     return respond
@@ -250,9 +253,10 @@ async def test_memory_failures_never_block_the_close(
     assert any(n.startswith("Shared memory proposal failed (not valid JSON") for n in lines)
     assert MemoryStore(h.settings.data_dir).personas_with_notes() == ["contrarian", "pragmatist"]
     assert not proposals(h)
-    # Every note writer's turn ends, failed or not, so no seat stays "thinking…".
+    # Every note writer's turn ends, failed or not, so no seat stays "thinking…"
+    # (Chair's twice: its notes, then the check of everyone's).
     ended = [e.speaker for e in h.events if isinstance(e, TurnEnded)]
-    assert sorted(ended) == sorted(SPEAKERS)
+    assert sorted(ended) == sorted([*SPEAKERS, "chair"])
     for slug in SPEAKERS:  # each seat ends after it started its notes
         last_start = max(
             i for i, e in enumerate(h.events) if isinstance(e, TurnStarted) and e.speaker == slug
@@ -316,14 +320,14 @@ async def test_close_estimate_and_events_on_disk(
 ) -> None:
     h = Harness(tmp_path, personas, memory_responder())
     await h.engine.step()
-    assert h.engine.estimate_close_calls() == 2  # synthesis + Chair's notes (it opened)
+    assert h.engine.estimate_close_calls() == 3  # synthesis + Chair's notes + notes check
     h.engine.say(USER_LINE)
-    assert h.engine.estimate_close_calls() == 3  # + the shared proposal
+    assert h.engine.estimate_close_calls() == 4  # + the shared proposal
     await h.engine.step()
-    assert h.engine.estimate_close_calls() == 4  # + Compounder's notes (it spoke)
+    assert h.engine.estimate_close_calls() == 5  # + Compounder's notes (it spoke)
     claude_before = len(h.claude.requests)
     await h.engine.close()
-    assert len(h.claude.requests) - claude_before == 4
+    assert len(h.claude.requests) - claude_before == 5
     assert any(isinstance(e, MemoryProposed) for e in h.store.events())
     md = (h.store.directory / "transcript.md").read_text()
     assert "**Shared memory, proposed facts:**" in md
@@ -433,3 +437,66 @@ async def test_memory_off_council_neither_reads_nor_writes(
     assert not {r.tag.purpose for r in h.requests()} & MEMORY_PURPOSES
     assert store.personas_with_notes() == ["rigor"]
     assert "Memory is off for this council: nothing saved" in notices(h)
+
+
+def check_changes(req: CompletionRequest, changes: dict[str, str]) -> Reply:
+    """Answer a notes check: change the numbered notes containing each key."""
+    found = re.findall(r"^(\d+)\. (.*)$", req.messages[-1].content, re.MULTILINE)
+    return {
+        "changes": [
+            {"n": int(n), "note": new}
+            for n, text in found
+            for key, new in changes.items()
+            if key in text
+        ]
+    }
+
+
+async def test_close_check_corrects_and_drops_notes_about_the_user(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    seen: list[CompletionRequest] = []
+    base = memory_responder()
+
+    def respond(req: CompletionRequest) -> Reply:
+        """Have the Chair fix Rigor's note and drop Contrarian's."""
+        if req.tag.purpose == "notes_check":
+            seen.append(req)
+            fixes = {"rigor argued": "The user rents in Lyon.", "contrarian argued": ""}
+            return check_changes(req, fixes)
+        return base(req)
+
+    h = Harness(tmp_path, personas, respond)
+    await closed_session(h, say=USER_LINE)
+    store = MemoryStore(h.settings.data_dir)
+    assert store.read_private("rigor").strip().endswith("(finance): The user rents in Lyon.")
+    assert "contrarian" not in store.personas_with_notes()
+    assert "Chair corrected 1 and dropped 1 member note(s) not backed by your words" in notices(h)
+    assert "Contrarian had nothing new to remember" in notices(h)
+    # One check for every writer's notes, on the moderator, with the user's own words.
+    assert len(seen) == 1 and seen[0].tag.persona == "chair"
+    assert USER_LINE in seen[0].messages[-1].content
+    assert "pragmatist argued about the PEA" in seen[0].messages[-1].content
+
+
+async def test_a_failed_check_saves_the_notes_as_written(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    h = Harness(tmp_path, personas, memory_responder(notes_check="not json"))
+    await closed_session(h)
+    store = MemoryStore(h.settings.data_dir)
+    assert store.personas_with_notes() == sorted(SPEAKERS)
+    assert any(
+        n.startswith("Chair couldn't check the members' notes (not valid JSON") for n in notices(h)
+    )
+
+
+async def test_a_note_repeating_an_existing_one_is_not_saved_again(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    for _ in range(2):
+        h = Harness(tmp_path, personas, memory_responder())
+        await closed_session(h)
+    store = MemoryStore(h.settings.data_dir)
+    assert store.read_private("rigor").count("argued about the PEA") == 1
+    assert "Rigor had nothing new to remember" in notices(h)

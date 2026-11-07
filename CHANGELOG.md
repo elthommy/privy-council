@@ -4,6 +4,9 @@ All notable changes, by milestone. Dates are when each milestone was built.
 
 ## Unreleased (2026-10-25 – 2026-11-07)
 
+- **The Chair checks what members' notes say about you** before they're saved: at `/close` it reads every member's new notes against your own messages (and the questions you answered) and corrects or drops a claim you never made: a member's argument credited to you, an answer saved without the condition it was given under ("would stay" for "would stay if management improved"). One call on the Chair's model; if it fails, the notes are saved as written.
+- **A note that repeats an existing one isn't saved again**, e.g. last session's lesson copied with a new tail. A note that changes a figure counts as new.
+- **The Chair's instructions to members no longer add details about you**: what it says about you comes from your facts or your own words.
 - **Optimist argues the upside**: its persona now makes the case for the best realistic outcome and the move that bets on it, instead of a softer copy of the cautious plan.
 - **Votes no longer all say 85 %**: members set their confidence from the objections still standing, not from an earlier number; a vote JSON followed by extra text (muse-glimmer) is no longer rejected.
 - **Evidence nobody gave stays visible**: the Chair keeps a source, base rate or document a member asked for in the open questions until someone gives it, and the synthesis names any the advice still rests on.

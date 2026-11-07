@@ -747,6 +747,34 @@ preamble. If nothing is worth remembering, reply NONE."""
 
 NOTES_NONE = "NONE"
 
+NOTES_CHECK_SYSTEM = """\
+You check the private notes an advisory council's members wrote about a session against \
+what the user actually said. You never add a claim of your own."""
+
+NOTES_CHECK_TASK = """\
+Above are the user's own messages this session, with the questions put to them. Below \
+are the notes the members wrote, numbered.
+
+Check only what each note says about the user: what the user said, decided, prefers, \
+fears or plans. Each such claim must be stated in the user's own words above. What a \
+note says about a member, the debate or the advice is not yours to check. Typical \
+failures:
+- a member's argument or the council's advice credited to the user;
+- an answer to a question that set a condition, recorded without it: asked "if your \
+rent dropped, would you stay?", the user said "yes"; the note must say "would stay if \
+the rent dropped", never "would stay";
+- an estimate, a feeling or a hedge recorded as certain.
+A note that is shorter than the user's words, or leaves a detail out, still holds: \
+never add to a note, and never change one whose claims all hold. For each note that \
+fails, give it back with only the failing claim corrected or removed, as short as it \
+was (at most 40 words), keeping the rest of the note and its language; give an empty \
+note to drop it if nothing of it stands. Return a JSON object matching the schema, \
+listing only the notes you change: {{"changes": [{{"n": 2, "note": "..."}}]}}, or \
+{{"changes": []}} if every note holds.
+
+The notes:
+{notes}"""
+
 SHARED_SYSTEM = """\
 You maintain a short file of stable facts about the user, shared by every member of an \
 advisory council. You record only what the user said about themselves; you never infer."""
@@ -767,6 +795,7 @@ Rules:
 
 TITLE_USER_MESSAGES = "The user's messages this session"
 TITLE_OWN_MESSAGES = "Your messages and the user's this session"
+TITLE_USER_ANSWERS = "The user's messages this session, with the questions put to them"
 
 CONSOLIDATE_TASK = """\
 Your private notes from the {council} council have outgrown their size limit. Rewrite \

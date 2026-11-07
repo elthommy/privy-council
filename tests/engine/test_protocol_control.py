@@ -165,7 +165,12 @@ async def test_synthesis_uses_synthesis_model(
     await h.engine.step()
     await h.engine.close()
     models = {r.tag.purpose: r.model for r in h.claude.requests}
-    assert models == {"opening": "sonnet", "synthesis": "opus", "memory": "sonnet"}
+    assert models == {
+        "opening": "sonnet",
+        "synthesis": "opus",
+        "memory": "sonnet",
+        "notes_check": "sonnet",  # the check runs on the moderator's own model
+    }
 
 
 async def test_synthesis_model_limit_falls_back_to_usual_model(

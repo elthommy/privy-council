@@ -219,7 +219,7 @@ async def test_full_session_end_to_end(tmp_path: Path, personas: dict[str, Perso
     assert "**" in (h.store.directory / "transcript.md").read_text()
 
     purposes = [r.tag.purpose for r in h.claude.requests if r.tag.persona == "chair"]
-    assert purposes == ["opening", "moderate", "moderate", "synthesis", "memory"]
+    assert purposes == ["opening", "moderate", "moderate", "synthesis", "memory", "notes_check"]
     assert all(r.tag.session == h.store.id for r in h.requests())
     moderate = next(r for r in h.claude.requests if r.tag.purpose == "moderate")
     assert moderate.json_schema is not None

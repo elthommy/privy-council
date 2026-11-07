@@ -32,6 +32,8 @@ from privy_council.engine.notices import (
     NOTICE_MEMORY_READ_ONLY,
     NOTICE_MEMORY_SAVED,
     NOTICE_MEMORY_SILENT,
+    NOTICE_NOTES_CHECK_FAILED,
+    NOTICE_NOTES_CHECKED,
     NOTICE_SHARED_FAILED,
     NOTICE_SHARED_KEPT,
     NOTICE_SHARED_MERGE_BAD,
@@ -57,12 +59,15 @@ from privy_council.models.session import (
     TurnStarted,
 )
 
+# A close-time job: the persona whose backend runs it, and the call.
+Job = tuple[Persona, Callable[[], Awaitable[None]]]
+
 
 class MemoryFlow(EngineCore):
     """Private notes, shared-fact proposals and their approval."""
 
     def estimate_close_calls(self) -> int:
-        """Estimate Claude calls for `/close`: synthesis, memory notes, shared proposal."""
+        """Estimate Claude calls for `/close`: synthesis, notes, their check, shared facts."""
 
         def on_claude(persona: Persona) -> bool:
             """Return whether the persona currently routes to Claude."""
@@ -71,8 +76,8 @@ class MemoryFlow(EngineCore):
             )
 
         writers = self._note_writers()
-        shared = self._proposes_facts()
-        return on_claude(self.moderator) * (1 + shared) + sum(on_claude(p) for p in writers)
+        moderator_calls = 1 + self._proposes_facts() + bool(writers)  # synthesis, facts, check
+        return on_claude(self.moderator) * moderator_calls + sum(on_claude(p) for p in writers)
 
     @property
     def memory_review_pending(self) -> bool:
@@ -171,17 +176,32 @@ class MemoryFlow(EngineCore):
             lang=self.meta.language,
         )
         facts: list[str] = []
+        drafts: dict[str, list[str]] = {}
         writers = self._note_writers()
         for persona in self._speakers():
             if persona.meta.memory and persona not in writers:
                 self._notice(NOTICE_MEMORY_SILENT.format(nick=persona.name))
-        jobs: list[tuple[Persona, Callable[[], Awaitable[None]]]] = [
-            (p, functools.partial(self._remember_notes, writer, p, digest)) for p in writers
+        jobs: list[Job] = [
+            (p, functools.partial(self._draft_notes, writer, p, digest, drafts)) for p in writers
         ]
         if self._proposes_facts():
             jobs.append(
                 (self.moderator, functools.partial(self._propose_facts, writer, digest, facts))
             )
+        await self._run_scheduled(jobs)
+        drafts = await self._check_notes(writer, digest, drafts)
+        await self._run_scheduled(
+            [
+                (p, functools.partial(self._save_notes, writer, p, digest, drafts[p.slug]))
+                for p in writers
+                if p.slug in drafts
+            ]
+        )
+        if facts:
+            await self._file_facts(writer, facts)
+
+    async def _run_scheduled(self, jobs: list[Job]) -> None:
+        """Run Claude jobs concurrently and local ones in sequence grouped by model."""
         plan = schedule(jobs, lambda job: self._route_placement(job[0]))
 
         async def sequential() -> None:
@@ -190,27 +210,61 @@ class MemoryFlow(EngineCore):
                 await job()
 
         await asyncio.gather(*(job() for _, job in plan.concurrent), sequential())
-        if facts:
-            await self._file_facts(writer, facts)
 
-    async def _remember_notes(
-        self, writer: MemoryWriter, persona: Persona, digest: SessionDigest
+    async def _check_notes(
+        self, writer: MemoryWriter, digest: SessionDigest, drafts: dict[str, list[str]]
+    ) -> dict[str, list[str]]:
+        """Have the moderator correct what the drafts say about the user; keep them on failure."""
+        if not any(drafts.values()):
+            return drafts
+        nick = self.moderator.name
+        self._emit(TurnStarted(speaker=self.moderator.slug, round=self.meta.runtime.round))
+        try:
+            checked, fixed, dropped = await writer.check_notes(self.moderator, digest, drafts)
+        except (BackendError, MemoryOutputError) as exc:
+            self._notice(NOTICE_NOTES_CHECK_FAILED.format(nick=nick, error=exc))
+            return drafts
+        finally:
+            self._emit(TurnEnded(speaker=self.moderator.slug))
+        if fixed or dropped:
+            self._notice(NOTICE_NOTES_CHECKED.format(nick=nick, fixed=fixed, dropped=dropped))
+        return checked
+
+    async def _draft_notes(
+        self,
+        writer: MemoryWriter,
+        persona: Persona,
+        digest: SessionDigest,
+        out: dict[str, list[str]],
     ) -> None:
-        """Write one persona's notes, merging them if they outgrew the cap."""
-        nick = persona.name
+        """Have one persona draft its notes into `out`; a failure is a notice."""
         self._emit(TurnStarted(speaker=persona.slug, round=self.meta.runtime.round))
         try:
-            count = await writer.write_notes(persona, digest)
-            self._notice(
-                NOTICE_MEMORY_SAVED.format(nick=nick, count=count)
-                if count
-                else NOTICE_MEMORY_NOTHING.format(nick=nick)
-            )
-            if writer.private_over_cap(persona, digest.council):
-                merged = await writer.consolidate(persona, digest.council)
-                cap = self.settings.memory.private_cap_bytes
-                notice = NOTICE_MEMORY_MERGED if merged else NOTICE_MEMORY_MERGE_BAD
-                self._notice(notice.format(nick=nick, council=digest.council, cap=cap))
+            out[persona.slug] = await writer.draft_notes(persona, digest)
+        except BackendError as exc:
+            self._notice(NOTICE_MEMORY_FAILED.format(nick=persona.name, error=exc))
+        finally:
+            self._emit(TurnEnded(speaker=persona.slug))
+
+    async def _save_notes(
+        self, writer: MemoryWriter, persona: Persona, digest: SessionDigest, notes: list[str]
+    ) -> None:
+        """Save one persona's checked notes, merging them if they outgrew the cap."""
+        nick = persona.name
+        count = writer.save_notes(persona, digest, notes)
+        self._notice(
+            NOTICE_MEMORY_SAVED.format(nick=nick, count=count)
+            if count
+            else NOTICE_MEMORY_NOTHING.format(nick=nick)
+        )
+        if not writer.private_over_cap(persona, digest.council):
+            return
+        self._emit(TurnStarted(speaker=persona.slug, round=self.meta.runtime.round))
+        try:
+            merged = await writer.consolidate(persona, digest.council)
+            cap = self.settings.memory.private_cap_bytes
+            notice = NOTICE_MEMORY_MERGED if merged else NOTICE_MEMORY_MERGE_BAD
+            self._notice(notice.format(nick=nick, council=digest.council, cap=cap))
         except BackendError as exc:
             self._notice(NOTICE_MEMORY_FAILED.format(nick=nick, error=exc))
         finally:
