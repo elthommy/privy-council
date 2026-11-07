@@ -4,6 +4,7 @@ All notable changes, by milestone. Dates are when each milestone was built.
 
 ## Unreleased (2026-10-25 – 2026-11-07)
 
+- **Better flaw reports**: the Chair no longer flags a figure of speech ("keep your head down") as a contradiction, and now reports base rates given as fact with no data, a member claiming personal experience, specifics nobody gave stated as established, and a date given a meaning the facts don't.
 - **A sharper synthesis**: Consensus lists only points no member argued against; the synthesis checks itself against the opening's "a good answer must cover" list and names what the debate never settled; it states one recommendation where the advice leads to one, leaving you only the choices members still disagree on; wording it suggests follows the agreed framing; next steps hold no trigger that already happened.
 - **The Chair checks triggers against your facts** (flagging one that already happened or can't happen) and pursues what nobody took up: details in your text, options nobody raised, named things the debate builds on without knowing what they are. It skips disputes too small to change the advice.
 - **Private notes no longer credit you with the council's advice**: a recommendation in the synthesis was written down as your decision ("the user will not escalate without proof", "the user accepted the recaps"). Notes now record only what your own messages state, and your silence isn't agreement.

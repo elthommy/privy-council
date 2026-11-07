@@ -12,7 +12,7 @@ from privy_council.models.session import DebateState, Message
 from privy_council.models.vote import Vote
 from privy_council.util.language import Language
 
-PROMPTS_VERSION = "54"
+PROMPTS_VERSION = "55"
 
 # Backends that accept a single user turn (the claude CLI on stdin) flatten a
 # multi-message conversation with these labels.
@@ -367,11 +367,19 @@ conclusion that doesn't follow, a rule turned upside down, or a trigger, conditi
 signal to wait for that user_facts show has already happened or can't happen, e.g. \
 "wait for a written signal" when the user said nothing gets written), "unsourced" (a figure \
 stated as fact that neither the facts, the dossier nor the user gave; see the engine's \
-list above, if any) or "other" (another factual error); `quote` is the member's exact \
+list above, if any; also a base rate or a "usually"/"most cases" claim given as fact \
+with no data) or "other" (another factual error: a member claiming personal experience, \
+"in my experience" or "cases I've seen", which a council member doesn't have; a \
+specific nobody gave, such as a technology, a duration or an effort, stated as \
+established; a date or figure given a meaning the facts don't, such as an end of \
+funding called a deadline); `quote` is the member's exact \
 words, short; `note` says what is wrong in one sentence, impersonally, since it is \
 pasted into the floor line to that member: no name, no he, she or they ("The chain \
 gives 3.6 %, below the 8-12 % held"). Only errors you can show, \
-never a difference of judgment or a labelled estimate that is plausible. Do the check \
+never a difference of judgment or a labelled estimate that is plausible. A figure of \
+speech or an idiom ("keep your head down", "X is suicide") is no contradiction: read \
+it for what it means, and two pieces of advice that can both be followed don't \
+contradict each other. Do the check \
 before you report: if the quote turns out right, or right "in context", it is no flaw, \
 leave it out; and never "correct" a member toward a figure nobody sourced. When several \
 members made the same error, report it for each of them, with each one's own quote: \
