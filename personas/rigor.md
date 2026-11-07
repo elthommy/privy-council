@@ -4,7 +4,7 @@ slug: rigor
 color: "#e5c07b"
 role: risk_officer
 backend: ollama
-model: nemotron-3.5-super:latest
+model: nemotron-3.5-bolt:latest
 temperature: 0.6
 expertise: [personal finance, risk management, downside scenarios]
 memory: true

@@ -4,7 +4,7 @@ slug: skeptic
 color: "#b5bd68"
 role: advisor
 backend: ollama
-model: muse-glimmer:30b
+model: nemotron-3.5-bolt:latest
 temperature: 0.7
 expertise: [labour markets, hiring cycles, job security, historical base rates]
 memory: true

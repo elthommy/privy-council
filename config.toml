@@ -57,8 +57,8 @@ think = "low"
 
 # muse-glimmer: Meta, dense ~30B, 18 GB, ~50/50 CPU/GPU; ~3-4 tok/s, 2-5 min turns,
 # ~17 s load. Pragmatist since 2026-10-30: the fewest invented figures in a 6-turn
-# bench against gpt-oss:120b, granite4.2, gemma4 (STATUS.md); Fan too, and Skeptic since
-# 2026-11-06 (career seat bench). Fits in RAM beside Super.
+# bench against gpt-oss:120b, granite4.2, gemma4 (STATUS.md); Fan too (Skeptic 2026-11-06 to
+# 11-07, then Bolt). Fits in RAM beside Super.
 [ollama.models."muse-glimmer:30b"]
 num_ctx = 12288
 think = false
@@ -69,6 +69,13 @@ think = false
 num_ctx = 12288
 num_batch = 4096   # prefill 3.2x faster, ~12% fewer tok/s; 8192 leaves no VRAM for layers (spike 6)
 think = false   # thinks by default
+
+# nemotron-3.5-bolt: NVIDIA's compression of Super, 74B hybrid MoE (~9B active), IQ2 experts
+# (quantization-aware distillation), 25 GB; ~13 tok/s, ~30 s turns. Rigor and Skeptic since
+# 2026-11-07: Super-like accuracy in a seat bench at ~1/3 of the time (STATUS.md).
+[ollama.models."nemotron-3.5-bolt:latest"]
+num_ctx = 12288
+think = false   # thinking via the template's enable_thinking
 
 # nemotron-3.5-lightning: 30B hybrid MoE (~3B active); ~30 tok/s, 11-22 s turns. No seat since Super replaced it.
 [ollama.models."nemotron-3.5-lightning:latest"]

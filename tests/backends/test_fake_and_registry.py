@@ -69,7 +69,7 @@ async def test_registry_routes_by_backend(tmp_path: Path, personas: dict[str, Pe
     chair = registry.route(personas["chair"])
     rigor = registry.route(personas["rigor"])
     assert isinstance(chair.backend, ClaudeCliBackend) and chair.model == "sonnet"
-    assert isinstance(rigor.backend, OllamaBackend) and rigor.model == "nemotron-3.5-super:latest"
+    assert isinstance(rigor.backend, OllamaBackend) and rigor.model == "nemotron-3.5-bolt:latest"
     assert registry.route(personas["pragmatist"]).backend is rigor.backend  # shared instance
     await registry.aclose()
 
@@ -93,6 +93,7 @@ def test_required_models_include_fallback(tmp_path: Path, personas: dict[str, Pe
         "gemma4:26b",
         "muse-glimmer:30b",
         "nemotron-3.5-super:latest",
+        "nemotron-3.5-bolt:latest",
     }
     on = BackendRegistry(_settings(tmp_path, True))
     assert on.required_ollama_models(personas.values()) == local | {"qwen3:4b"}

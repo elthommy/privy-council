@@ -233,7 +233,7 @@ def test_dossier_is_capped_at_its_share() -> None:
 async def test_trimming_is_logged_at_debug(
     tmp_path: Path, personas: dict[str, Persona], caplog: pytest.LogCaptureFixture
 ) -> None:
-    config = {"ollama": {"models": {"nemotron-3.5-super:latest": {"num_ctx": 2000}}}}
+    config = {"ollama": {"models": {"nemotron-3.5-bolt:latest": {"num_ctx": 2000}}}}
     h = Harness(
         tmp_path, personas, standard_responder([decision([("rigor", "go")])]), config=config
     )
@@ -243,7 +243,7 @@ async def test_trimming_is_logged_at_debug(
     with caplog.at_level(logging.DEBUG, logger="privy_council.engine.core"):
         await h.engine.step()
     assert any(
-        "trimmed rigor/turn (nemotron-3.5-super:latest, round 1, ollama): " in r.getMessage()
+        "trimmed rigor/turn (nemotron-3.5-bolt:latest, round 1, ollama): " in r.getMessage()
         for r in caplog.records
     )
 
