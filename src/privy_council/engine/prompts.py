@@ -12,7 +12,7 @@ from privy_council.models.session import DebateState, Message
 from privy_council.models.vote import Vote
 from privy_council.util.language import Language
 
-PROMPTS_VERSION = "56"
+PROMPTS_VERSION = "57"
 
 # Backends that accept a single user turn (the claude CLI on stdin) flatten a
 # multi-message conversation with these labels.
@@ -562,8 +562,11 @@ SYNTHESIS_VOTE_LINE = "- {nick} ({confidence}%): {position}"
 VOTE_TASK = """\
 The user calls a vote. State your current position on the question in one sentence of \
 at most 25 words, and how confident you are in it from 0 to 100. Give your own view, \
-not the group's. No greeting, no hedging, no reasons: the vote is a table row. Reply \
-with a JSON object only: {"position": "...", "confidence": 70}"""
+not the group's. Set the confidence fresh, from where the debate stands now: high only \
+if no strong objection to your position is left standing, lower for each one that is. \
+Don't reuse an earlier number, yours or another member's. No greeting, no hedging, no \
+reasons: the vote is a table row. Reply with one JSON object only, nothing after it: \
+{"position": "...", "confidence": N}, N your number."""
 # The schema's description of `position`: models read it too (claude --json-schema).
 VOTE_POSITION_RULE = "Your position in one sentence of at most 25 words; no greeting."
 

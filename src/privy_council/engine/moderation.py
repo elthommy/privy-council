@@ -178,7 +178,9 @@ def json_object(result: CompletionResult) -> dict[str, Any]:
     if result.truncated:
         raise DecisionError("the reply was cut off by the output cap; keep it shorter")
     try:
-        value = json.loads(_FENCE.sub("", result.text.strip()))
+        # A complete object followed by more text counts: muse-glimmer adds a line
+        # after its vote JSON (2026-11-07 replay), and the object is all we need.
+        value, _ = json.JSONDecoder().raw_decode(_FENCE.sub("", result.text.strip()))
     except json.JSONDecodeError as exc:
         raise DecisionError(f"not valid JSON ({exc.msg} at char {exc.pos})") from exc
     if not isinstance(value, dict):

@@ -126,6 +126,12 @@ def test_parse_vote_reads_text_json_and_flags_fallback() -> None:
     assert "cut off" in (parse_vote("rigor", cut, False).error or "")
 
 
+def test_parse_vote_ignores_text_after_the_object() -> None:
+    trailing = reply('{"position": "wait", "confidence": 40}\n{"note": "done"}')
+    assert parse_vote("fan", trailing, False).confidence == 40
+    assert "not valid JSON" in (parse_vote("fan", reply("sure: wait"), False).error or "")
+
+
 async def test_vote_and_summary_refusals(tmp_path: Path, personas: dict[str, Persona]) -> None:
     h = Harness(tmp_path, personas, reviewing([decision(stop=True, reason="done")]))
     await h.engine.step()  # opening only

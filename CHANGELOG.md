@@ -4,6 +4,8 @@ All notable changes, by milestone. Dates are when each milestone was built.
 
 ## Unreleased (2026-10-25 – 2026-11-07)
 
+- **Optimist argues the upside**: its persona now makes the case for the best realistic outcome and the move that bets on it, instead of a softer copy of the cautious plan.
+- **Votes no longer all say 85 %**: members set their confidence from the objections still standing, not from an earlier number; a vote JSON followed by extra text (muse-glimmer) is no longer rejected.
 - **Evidence nobody gave stays visible**: the Chair keeps a source, base rate or document a member asked for in the open questions until someone gives it, and the synthesis names any the advice still rests on.
 - **A logged-out `claude` CLI stops the step** with "Claude is not logged in… /step retries", like a usage limit, instead of running the debate without the Chair or a member.
 - `career` has a brief for the Chair: separate what you saw from how you read it, find who actually holds the decision, challenge your own reading, weigh the fears instead of taking them as given.
