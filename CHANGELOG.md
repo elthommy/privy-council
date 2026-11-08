@@ -4,6 +4,7 @@ All notable changes, by milestone. Dates are when each milestone was built.
 
 ## Unreleased (2026-10-25 – 2026-11-08)
 
+- **Skeptic goes back to `gemma4:26b`**: with Rigor and Skeptic both on `nemotron-3.5-bolt`, Skeptic gave Rigor's reasons, assumption included. A different model family keeps the career seats apart.
 - **The Chair's notes check no longer deletes notes**: it can only rewrite the part of a member's note that misstates you. With a local Chair, the check had emptied most notes about the members' own arguments and lessons.
 - **A local model that runs out of GPU memory twice gets a third try 15 s later**, once memory held by other programs (desktop, browser) may be free; a gemma4 turn failed this way while the second try came only 10 s after the first.
 - **Eight more seats move from Super to `nemotron-3.5-bolt`**: Macro, Analyst (economics), Realist, Economist (geopolitics), Value (purchases), Vitality (wellbeing), Saver (gacha), PolSci (politics), after a live check of each council. Logistician (history) stays on Super for now: Bolt reversed a historical fact there. Super now serves only Logistician and the local Chair.
