@@ -291,18 +291,18 @@ def test_two_new_notes_that_say_the_same_keep_the_first() -> None:
     assert fresh_notes(notes, "") == notes[:1]
 
 
-def test_note_changes_fix_drop_and_ignore_bad_numbers() -> None:
+def test_note_changes_rewrite_and_never_drop() -> None:
     drafts = {"rigor": ["a", "b"], "optimist": ["c"]}
     numbered = [("rigor", 0), ("rigor", 1), ("optimist", 0)]
     changes = [
         NoteChange(n=1, note="- a fixed"),
-        NoteChange(n=3, note=""),
+        NoteChange(n=3, note=""),  # a local Chair emptied correct notes: never a drop
         NoteChange(n=2, note="b"),  # unchanged: not counted
         NoteChange(n=9, note="out of range"),
     ]
-    revised, fixed, dropped = _apply_changes(drafts, numbered, changes)
-    assert revised == {"rigor": ["a fixed", "b"], "optimist": []}
-    assert (fixed, dropped) == (1, 1)
+    revised, fixed = _apply_changes(drafts, numbered, changes)
+    assert revised == {"rigor": ["a fixed", "b"], "optimist": ["c"]}
+    assert fixed == 1
     assert drafts["rigor"] == ["a", "b"]  # the input is left alone
 
 

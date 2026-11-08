@@ -12,7 +12,7 @@ from privy_council.models.session import DebateState, Message
 from privy_council.models.vote import Vote
 from privy_council.util.language import Language
 
-PROMPTS_VERSION = "58"
+PROMPTS_VERSION = "59"
 
 # Backends that accept a single user turn (the claude CLI on stdin) flatten a
 # multi-message conversation with these labels.
@@ -767,8 +767,9 @@ the rent dropped", never "would stay";
 A note that is shorter than the user's words, or leaves a detail out, still holds: \
 never add to a note, and never change one whose claims all hold. For each note that \
 fails, give it back with only the failing claim corrected or removed, as short as it \
-was (at most 40 words), keeping the rest of the note and its language; give an empty \
-note to drop it if nothing of it stands. Return a JSON object matching the schema, \
+was (at most 40 words), keeping the rest of the note and its language. Never return an \
+empty note: if nothing about the user stands, give back only what the note says about \
+the member or the debate. Return a JSON object matching the schema, \
 listing only the notes you change: {{"changes": [{{"n": 2, "note": "..."}}]}}, or \
 {{"changes": []}} if every note holds.
 

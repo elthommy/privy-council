@@ -220,14 +220,14 @@ class MemoryFlow(EngineCore):
         nick = self.moderator.name
         self._emit(TurnStarted(speaker=self.moderator.slug, round=self.meta.runtime.round))
         try:
-            checked, fixed, dropped = await writer.check_notes(self.moderator, digest, drafts)
+            checked, fixed = await writer.check_notes(self.moderator, digest, drafts)
         except (BackendError, MemoryOutputError) as exc:
             self._notice(NOTICE_NOTES_CHECK_FAILED.format(nick=nick, error=exc))
             return drafts
         finally:
             self._emit(TurnEnded(speaker=self.moderator.slug))
-        if fixed or dropped:
-            self._notice(NOTICE_NOTES_CHECKED.format(nick=nick, fixed=fixed, dropped=dropped))
+        if fixed:
+            self._notice(NOTICE_NOTES_CHECKED.format(nick=nick, fixed=fixed))
         return checked
 
     async def _draft_notes(

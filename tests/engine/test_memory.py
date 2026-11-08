@@ -452,14 +452,14 @@ def check_changes(req: CompletionRequest, changes: dict[str, str]) -> Reply:
     }
 
 
-async def test_close_check_corrects_and_drops_notes_about_the_user(
+async def test_close_check_corrects_notes_about_the_user_and_never_drops_one(
     tmp_path: Path, personas: dict[str, Persona]
 ) -> None:
     seen: list[CompletionRequest] = []
     base = memory_responder()
 
     def respond(req: CompletionRequest) -> Reply:
-        """Have the Chair fix Rigor's note and drop Contrarian's."""
+        """Have the Chair fix Rigor's note and empty Contrarian's (ignored)."""
         if req.tag.purpose == "notes_check":
             seen.append(req)
             fixes = {"rigor argued": "The user rents in Lyon.", "contrarian argued": ""}
@@ -470,9 +470,8 @@ async def test_close_check_corrects_and_drops_notes_about_the_user(
     await closed_session(h, say=USER_LINE)
     store = MemoryStore(h.settings.data_dir)
     assert store.read_private("rigor").strip().endswith("(finance): The user rents in Lyon.")
-    assert "contrarian" not in store.personas_with_notes()
-    assert "Chair corrected 1 and dropped 1 member note(s) not backed by your words" in notices(h)
-    assert "Contrarian had nothing new to remember" in notices(h)
+    assert "contrarian" in store.personas_with_notes()
+    assert "Chair corrected 1 member note(s) not backed by your words" in notices(h)
     # One check for every writer's notes, on the moderator, with the user's own words.
     assert len(seen) == 1 and seen[0].tag.persona == "chair"
     assert USER_LINE in seen[0].messages[-1].content

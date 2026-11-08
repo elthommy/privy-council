@@ -281,18 +281,23 @@ def parse_selection(arg: str, count: int) -> list[int] | None:
 
 def _apply_changes(
     drafts: dict[str, list[str]], numbered: list[tuple[str, int]], changes: list[NoteChange]
-) -> tuple[dict[str, list[str]], int, int]:
-    """Apply the moderator's changes to the drafts; return them, fixed and dropped counts."""
+) -> tuple[dict[str, list[str]], int]:
+    """Apply the moderator's rewrites to the drafts; return them and how many changed.
+
+    An empty note is ignored, never a drop: a local Chair (Super) emptied most
+    notes about members and the debate, which the check must leave alone
+    (2026-11-08 bench). A rewrite is the only change applied.
+    """
     revised = {slug: list(notes) for slug, notes in drafts.items()}
-    fixed = dropped = 0
+    fixed = 0
     for change in {c.n: c for c in changes if c.n <= len(numbered)}.values():
         slug, i = numbered[change.n - 1]
         note = _shorten(change.note.strip().removeprefix("- ").strip())
-        if note == revised[slug][i]:
+        if not note or note == revised[slug][i]:
             continue
         revised[slug][i] = note
-        fixed, dropped = (fixed, dropped + 1) if not note else (fixed + 1, dropped)
-    return {slug: [n for n in notes if n] for slug, notes in revised.items()}, fixed, dropped
+        fixed += 1
+    return revised, fixed
 
 
 class Complete(Protocol):
@@ -388,16 +393,16 @@ class MemoryWriter:
 
     async def check_notes(
         self, moderator: Persona, digest: SessionDigest, drafts: dict[str, list[str]]
-    ) -> tuple[dict[str, list[str]], int, int]:
+    ) -> tuple[dict[str, list[str]], int]:
         """Have the moderator check what the drafts say about the user.
 
-        Returns the corrected drafts and how many notes were fixed and dropped.
+        Returns the corrected drafts and how many notes were rewritten.
         Local models credited a member's argument to the user, or dropped the
         condition of an answer (career session, 2026-11-07).
         """
         numbered = [(slug, i) for slug, notes in drafts.items() for i in range(len(notes))]
         if not numbered:
-            return drafts, 0, 0
+            return drafts, 0
         listing = "\n".join(f"{n}. {drafts[s][i]}" for n, (s, i) in enumerate(numbered, 1))
         asked = [m for m in digest.messages if _by_owner(m) or m.to_user]
         prompt = context.build_prompt(

@@ -85,9 +85,7 @@ NOTICE_BUSY = "Busy: wait for the current turn, or /pause"
 NOTICE_UNKNOWN_MEMBER = "No member called {who!r} in this channel"
 NOTICE_MEMORY_SAVED = "{nick} saved {count} memory note(s)"
 NOTICE_MEMORY_NOTHING = "{nick} had nothing new to remember"
-NOTICE_NOTES_CHECKED = (
-    "{nick} corrected {fixed} and dropped {dropped} member note(s) not backed by your words"
-)
+NOTICE_NOTES_CHECKED = "{nick} corrected {fixed} member note(s) not backed by your words"
 NOTICE_NOTES_CHECK_FAILED = "{nick} couldn't check the members' notes ({error}); saved as written"
 NOTICE_MEMORY_SILENT = "{nick} didn't speak this session; no notes written"
 NOTICE_MEMORY_READ_ONLY = "Memory is read-only for this council: nothing saved"
