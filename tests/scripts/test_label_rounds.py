@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from tests.conftest import REPO_ROOT
 
 
@@ -146,3 +148,38 @@ def test_check_sheet_sample_keeps_every_section(tmp_path: Path) -> None:
     sheet = lr.check_sheet(labels, tmp_path, sample=3)
     assert sheet.count("- you:") == 4  # 3 of 6 flags, and the one turn (at least 1)
     assert "- **Fable**: repeat: repeats r1" in sheet
+
+
+def test_quota_stop_projects_the_next_call() -> None:
+    lr = labeller()
+    caps = (0.85, 0.6)
+    assert lr.quota_stop({}, (0.07, 0.01), caps) is None  # no ledger yet
+    assert lr.quota_stop({"status": "allowed", "five_hour": 0.7}, (0.07, 0.01), caps) is None
+    why = lr.quota_stop({"status": "allowed", "five_hour": 0.8}, (0.07, 0.01), caps)
+    assert why is not None and "87%" in why
+    why = lr.quota_stop({"status": "allowed", "seven_day": 0.595}, (0.07, 0.01), caps)
+    assert why is not None and "7-day" in why
+    why = lr.quota_stop({"status": "allowed_warning", "five_hour": 0.1}, (0.07, 0.01), caps)
+    assert why is not None and "allowed_warning" in why
+
+
+def test_next_step_keeps_the_largest_cost_with_a_margin() -> None:
+    lr = labeller()
+    step = lr.next_step(
+        (0.07, 0.01), {"five_hour": 0.3, "seven_day": 0.3}, {"five_hour": 0.36, "seven_day": 0.31}
+    )
+    assert step == pytest.approx((0.09, 0.015))  # 6 % seen x 1.5; the 7-day share likewise
+    assert lr.next_step(step, {}, {"five_hour": 0.5}) == step
+
+
+def test_last_quota_reads_the_last_ledger_row(tmp_path: Path) -> None:
+    lr = labeller()
+    ledger = tmp_path / "usage.jsonl"
+    assert lr.last_quota(ledger) == {}
+    ledger.write_text(
+        json.dumps({"quota": {"five_hour": 0.1}})
+        + "\n"
+        + json.dumps({"quota": {"five_hour": 0.2}})
+        + "\n"
+    )
+    assert lr.last_quota(ledger) == {"five_hour": 0.2}

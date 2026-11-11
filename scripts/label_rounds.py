@@ -34,7 +34,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from privy_council.backends.base import CallTag, ChatMessage, CompletionRequest
+from privy_council.backends.base import (
+    BackendRateLimitError,
+    CallTag,
+    ChatMessage,
+    CompletionRequest,
+)
 from privy_council.backends.registry import BackendRegistry
 from privy_council.config import load_settings
 from privy_council.engine.budget import Ledger
@@ -54,6 +59,11 @@ SINCE = "2026-10-22"  # the flaw checks (M11) exist from this date on
 TIMEOUT_S = 900.0
 MAX_OUTPUT = 16_000
 NOVELTY = ("mostly_new", "partly_new", "repeat")
+# Quota guard. Measured 2026-11-10/11: 2.8-4.7 % of the 5-hour window and ~0.6 % of
+# the 7-day one per Fable call; start from the worst case, with a margin.
+FIRST_STEP_5H = 0.07
+FIRST_STEP_7D = 0.01
+STEP_MARGIN = 1.5
 
 SYSTEM = """\
 You review one round of a debate between AI council members advising a user. \
@@ -222,11 +232,11 @@ def council(r: Round) -> str:
     return r.session.name.split("_")[1]
 
 
-def candidate_rounds(sessions_dir: Path) -> list[Round]:
-    """Return every round with member turns, from sessions since SINCE, newest first."""
+def candidate_rounds(sessions_dir: Path, since: str = SINCE) -> list[Round]:
+    """Return every round with member turns, from sessions since a date, newest first."""
     out: list[Round] = []
     for s in sorted(sessions_dir.iterdir(), reverse=True):
-        if s.is_symlink() or not (s / "transcript.jsonl").is_file() or s.name[:10] < SINCE:
+        if s.is_symlink() or not (s / "transcript.jsonl").is_file() or s.name[:10] < since:
             continue
         rounds = {
             json.loads(line)["message"]["round"]
@@ -286,6 +296,50 @@ async def label(registry: BackendRegistry, model: str, r: Round) -> dict[str, An
     }
 
 
+def last_quota(ledger: Path) -> dict[str, Any]:
+    """Return the quota of the last ledger row ({} if none)."""
+    rows = ledger.read_text().splitlines() if ledger.exists() else []
+    quota: dict[str, Any] = (json.loads(rows[-1]).get("quota") or {}) if rows else {}
+    return quota
+
+
+def quota_stop(
+    quota: dict[str, Any], step: tuple[float, float], caps: tuple[float, float]
+) -> str | None:
+    """Return why not to make the next call, or None to go on.
+
+    step is the projected cost of the next call (5-hour, 7-day share): the most a call
+    has cost so far, with a margin, since rounds vary 2-3x in size and other sessions
+    draw on the same quota meanwhile.
+    """
+    if not quota:
+        return None
+    if quota.get("status") not in (None, "allowed"):
+        return f"quota status {quota['status']}"
+    for name, used, add, cap in (
+        ("5-hour", quota.get("five_hour") or 0, step[0], caps[0]),
+        ("7-day", quota.get("seven_day") or 0, step[1], caps[1]),
+    ):
+        if used + add > cap:
+            return (
+                f"{name} window at {used:.0%}, next call may reach {used + add:.0%} (cap {cap:.0%})"
+            )
+    return None
+
+
+def next_step(
+    step: tuple[float, float], before: dict[str, Any], after: dict[str, Any]
+) -> tuple[float, float]:
+    """Return the projected next-call cost: the largest seen so far, times STEP_MARGIN."""
+    if not before or not after:
+        return step
+    seen = [
+        STEP_MARGIN * ((after.get(k) or 0) - (before.get(k) or 0))
+        for k in ("five_hour", "seven_day")
+    ]
+    return (max(step[0], seen[0]), max(step[1], seen[1]))
+
+
 async def run(args: argparse.Namespace, rounds: list[Round]) -> None:
     """Label each round not yet in --out, appending rows as they arrive."""
     settings = load_settings()
@@ -298,11 +352,23 @@ async def run(args: argparse.Namespace, rounds: list[Round]) -> None:
     registry = BackendRegistry(settings, Ledger.in_data_dir(settings.data_dir))
     args.out.parent.mkdir(parents=True, exist_ok=True)
     try:
+        ledger = settings.data_dir / "usage.jsonl"
+        step = (FIRST_STEP_5H, FIRST_STEP_7D)
         for i, r in enumerate(todo, 1):
-            row = await label(registry, args.model, r)
+            before = last_quota(ledger)
+            why = quota_stop(before, step, (args.max_5h, args.max_7d))
+            if why:
+                print(f"stopped before {r.key}: {why}; rerun the same command to go on", flush=True)
+                return
+            try:
+                row = await label(registry, args.model, r)
+            except BackendRateLimitError as exc:
+                print(f"stopped before {r.key}: usage limit ({exc})", flush=True)
+                return
             with args.out.open("a") as f:
                 f.write(json.dumps(row, ensure_ascii=False) + "\n")
             print(f"[{i}/{len(todo)}] {brief(row)}", flush=True)
+            step = next_step(step, before, last_quota(ledger))
     finally:
         await registry.aclose()
 
@@ -445,8 +511,18 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Label saved debate rounds with a strong Claude model.")
     p.add_argument("--items", nargs="*", default=[], help="SESSION_DIR:ROUND ...")
     p.add_argument("--pick", type=int, default=0, help="pick N flagged rounds from data/sessions")
-    p.add_argument("--all", action="store_true", help="every round 2+ since SINCE, flagged or not")
+    p.add_argument("--all", action="store_true", help="every round 2+, flagged or not")
     p.add_argument("--councils", nargs="*", default=[], help="only these councils (--pick/--all)")
+    p.add_argument("--since", default=SINCE, help="--pick/--all: sessions from this date on")
+    p.add_argument(
+        "--max-5h",
+        type=float,
+        default=0.85,
+        help="no call that may take the 5-hour window past this",
+    )
+    p.add_argument(
+        "--max-7d", type=float, default=0.6, help="no call that may take the 7-day window past this"
+    )
     p.add_argument("--limit", type=int, default=0, help="label at most N rounds not yet done")
     p.add_argument("--model", default="fable")
     p.add_argument("--out", type=Path, default=Path("data/bench/labels/labels.jsonl"))
@@ -468,7 +544,7 @@ def main() -> None:
         return
     rounds = [load_round(Path(s), int(n)) for s, n in (i.rsplit(":", 1) for i in args.items)]
     if args.pick or args.all:
-        found = candidate_rounds(load_settings().data_dir / "sessions")
+        found = candidate_rounds(load_settings().data_dir / "sessions", args.since)
         found = [r for r in found if not args.councils or council(r) in args.councils]
         rounds += pick(found, 10**6 if args.all else args.pick, flagged=not args.all)
     if args.dry_run:
