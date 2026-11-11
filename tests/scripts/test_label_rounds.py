@@ -159,8 +159,11 @@ def test_quota_stop_projects_the_next_call() -> None:
     assert why is not None and "87%" in why
     why = lr.quota_stop({"status": "allowed", "seven_day": 0.595}, (0.07, 0.01), caps)
     assert why is not None and "7-day" in why
-    why = lr.quota_stop({"status": "allowed_warning", "five_hour": 0.1}, (0.07, 0.01), caps)
-    assert why is not None and "allowed_warning" in why
+    assert (
+        lr.quota_stop({"status": "allowed_warning", "five_hour": 0.1}, (0.07, 0.01), caps) is None
+    )
+    why = lr.quota_stop({"status": "rejected", "five_hour": 0.1}, (0.07, 0.01), caps)
+    assert why is not None and "rejected" in why
 
 
 def test_next_step_keeps_the_largest_cost_with_a_margin() -> None:

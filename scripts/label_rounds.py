@@ -314,7 +314,8 @@ def quota_stop(
     """
     if not quota:
         return None
-    if quota.get("status") not in (None, "allowed"):
+    # "allowed_warning" only says a window passed ~90 %: the caps below decide.
+    if quota.get("status") not in (None, "allowed", "allowed_warning"):
         return f"quota status {quota['status']}"
     for name, used, add, cap in (
         ("5-hour", quota.get("five_hour") or 0, step[0], caps[0]),
