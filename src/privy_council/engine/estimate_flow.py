@@ -42,6 +42,22 @@ class EstimateFlow(FlawFlow):
             text = ledger.blank_lines(text)
         super()._check_turn(persona, prompt, text)
 
+    def _user_spoke_since(self, slug: str) -> bool:
+        """Whether the user wrote between the member's turn just posted and its previous one.
+
+        An answer to the moderator often redefines the question, and members then
+        move their numbers for that reason (2026-11-14 run).
+        """
+        own = 0
+        for message in reversed(self.messages):
+            if message.speaker == slug:
+                own += 1
+                if own == 2:
+                    return False
+            elif message.speaker == "user" and own == 1:
+                return True
+        return False
+
     def _track_estimate(self, persona: Persona, text: str, *, check: bool = True) -> None:
         """Read a member turn's estimate lines into the ledger; flag them if `check`.
 
@@ -57,6 +73,7 @@ class EstimateFlow(FlawFlow):
             round_=rt.round,
             previous=own[-1] if own else None,
             split_set=rt.split is not None,
+            reframed=self._user_spoke_since(persona.slug),
         )
         if record is not None:
             rt.estimates[persona.slug] = [*own, record]

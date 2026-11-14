@@ -9,6 +9,7 @@ All notable changes, by milestone. Dates are when each milestone was built.
 - **The devil's advocate gives no probability** in forecast councils: it names the link it thinks the others misprice. Its arguments go under the disagreements, not into the confidence spread as a dissenting number.
 - Estimate-line flags are logged and listed by `/flaws`; they reach the Chair only with `[engine] estimate_flaws_to_moderator = true` (off until a bench shows they are precise enough).
 - A member's own range on its estimate line is no longer flagged as an unsourced figure.
+- **A moved estimate is flagged only when no reason is given**: a change explained in other words ("I correct myself", "my 30% was…", "from 9% to 12%", or a turn that names its old number) counts as explained, and the round after you speak to the council isn't checked, since your answer may have changed the question.
 - **`gemma4:26b` prefills with `num_batch = 512`** (was 2048): its larger buffer left it short of GPU memory when another program took some, and the Contrarian then missed every round of a debate. About 10 s more per gemma turn.
 - **A repeated out-of-memory error logs who holds the GPU memory** (`nvidia-smi`, in `data/logs/council.log`), so the next one shows which program took it.
 

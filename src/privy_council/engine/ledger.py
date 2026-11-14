@@ -40,6 +40,16 @@ _SPLIT = re.compile(_LINE.format(words=_label_words("split")), re.IGNORECASE | r
 _NUM = r"(\d{1,3}(?:[.,]\d+)?)"
 _PERCENT = re.compile(_NUM + r"\s*%")
 _RANGE = re.compile(_NUM + r"\s*%?\s*(?:-|\u2013|\u2014|to|\u00e0)\s*" + _NUM + r"\s*%")
+# A change stated in other words than the update label, English and French.
+_STATED_CHANGE = re.compile(
+    r"\bfrom (?:about |roughly |around )?\d[\d.,]*\s*%? to (?:about |roughly |around )?\d"
+    r"|\bde \d[\d.,]*\s*%? \u00e0 \d"
+    r"|\bI (?:correct|revise|lower|raise|cut|move) (?:myself|my\b)"
+    r"|\bje (?:me corrige|corrige|r\u00e9vise|baisse|rel\u00e8ve) "
+    r"|\bmy (?:earlier |previous |first )?\d[\d.,]*\s*% (?:was|is|answered|meant)\b"
+    r"|\bmon \d[\d.,]*\s*% (?:\u00e9tait|est|valait)\b",
+    re.IGNORECASE,
+)
 
 
 def _number(raw: str) -> float:
@@ -143,11 +153,37 @@ def _split_flaw(est: Estimate, split: Split) -> str | None:
     )
 
 
-def _unmarked(text: str, est: Estimate, previous: EstimateRecord | None) -> str | None:
-    """Return the note when the value moved without the update marker, or None."""
-    if previous is None or abs(est.value - previous.estimate.value) < CHANGE_POINTS:
+def _mentions(text: str, value: float) -> bool:
+    """Whether the prose (estimate and split lines left out) names `value` as a percent."""
+    number = re.escape(prompts.percent(value).rstrip("%")).replace(r"\.", "[.,]")
+    pattern = rf"(?<![\d.,]){number}(?:[.,]0+)?\s*%"
+    return re.search(pattern, blank_lines(text)) is not None
+
+
+def _explained(text: str, previous: float) -> bool:
+    """Whether the turn says its number changed, in the marker's words or its own.
+
+    Members explain a move without the marker: "I correct myself", "my 45% was the
+    ban's probability", "from 13% to 16%", or a worked chain that sets the old
+    number aside (all four seen 2026-11-14, every one flagged). Naming the old
+    number shows the member addressed it.
+    """
+    return marks_update(text) or bool(_STATED_CHANGE.search(text)) or _mentions(text, previous)
+
+
+def _unmarked(
+    text: str, est: Estimate, previous: EstimateRecord | None, reframed: bool
+) -> str | None:
+    """Return the note when the value moved with no stated reason, or None.
+
+    `reframed`: the user spoke since the member's last estimate, so the question
+    itself may have changed (an answer to the moderator often redefines it).
+    """
+    if previous is None or reframed:
         return None
-    if marks_update(text):
+    if abs(est.value - previous.estimate.value) < CHANGE_POINTS:
+        return None
+    if _explained(text, previous.estimate.value):
         return None
     return prompts.ESTIMATE_NOTE_UNMARKED.format(
         before=prompts.percent(previous.estimate.value),
@@ -163,12 +199,14 @@ def read_turn(
     round_: int,
     previous: EstimateRecord | None,
     split_set: bool,
+    reframed: bool = False,
 ) -> tuple[EstimateRecord | None, list[Flaw]]:
     """Parse a member turn's estimate lines and check them.
 
     Returns the record to keep (None when the turn has no readable estimate) and the
     flaws: a missing line, a range or split that doesn't fit the estimate, or a value
-    moved by CHANGE_POINTS or more since `previous` without the update marker.
+    moved by CHANGE_POINTS or more since `previous` with no stated reason (not
+    checked when `reframed`: the user spoke since that estimate).
     """
     est = parse_estimate(text)
     if est is None:
@@ -184,7 +222,7 @@ def read_turn(
     checks = [
         (_range_flaw(est), FlawKind.ESTIMATE_INCOHERENT, est_line),
         (split and _split_flaw(est, split), FlawKind.ESTIMATE_INCOHERENT, split_line),
-        (_unmarked(text, est, previous), FlawKind.UNMARKED_CHANGE, est_line),
+        (_unmarked(text, est, previous, reframed), FlawKind.UNMARKED_CHANGE, est_line),
     ]
     flaws += [_flaw(kind, line, note, member, round_) for note, kind, line in checks if note]
     return EstimateRecord(round=round_, estimate=est, split=split), flaws

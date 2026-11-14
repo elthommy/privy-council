@@ -131,6 +131,19 @@ async def test_estimate_lines_run_through_a_session(
     assert saved.split == SPLIT and len(saved.estimates["rigor"]) == 2
 
 
+async def test_no_unmarked_change_after_the_user_spoke(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    h = harness(tmp_path, personas)
+    for _ in range(2):  # opening, round 1 + update
+        await h.engine.step()
+    h.engine.say("Any default counts, whatever the cause.")  # the question may have changed
+    await h.engine.step()  # round 2: Rigor moves 12 -> 6 with no marker
+    kinds = {(f.member, f.kind) for f in h.engine.meta.runtime.flaws}
+    assert ("rigor", FlawKind.UNMARKED_CHANGE) not in kinds
+    assert ("compounder", FlawKind.ESTIMATE_INCOHERENT) in kinds  # other checks still run
+
+
 async def test_estimate_flaws_reach_the_moderator_when_enabled(
     tmp_path: Path, personas: dict[str, Persona]
 ) -> None:

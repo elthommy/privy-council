@@ -102,6 +102,39 @@ def test_a_moved_estimate_needs_the_update_marker() -> None:
     assert read("**Estimate:** 10% (3-12%)", previous=before(12)) == []  # under 3 points
 
 
+@pytest.mark.parametrize(
+    "prose",
+    [
+        "I correct myself: that figure was the total, not the share.",
+        "My 30% was always the odds of the rule, not of a default.",
+        "The longer window pushes my number from 9% to about 12%.",
+        "The joint event is not the earlier 30%: 0.4 x 0.5 = 20%, and less with timing.",
+        "Je me corrige : ce chiffre était le total.",
+        "Je passe de 30 % à 12 % : la règle est moins probable.",
+    ],
+)
+def test_a_change_explained_in_other_words_is_not_flagged(prose: str) -> None:
+    assert read(f"{prose}\n\n**Estimate:** 12% (6-20%)", previous=before(30)) == []
+
+
+def test_a_bare_move_is_still_flagged() -> None:
+    # The old number only in the new range doesn't count as naming it.
+    text = "The covenant test is the signal to watch.\n\n**Estimate:** 12% (6-30%)"
+    assert [n.split(":")[0] for n in read(text, previous=before(30))] == ["unmarked_change"]
+
+
+def test_no_change_check_after_the_user_spoke() -> None:
+    _, flaws = ledger.read_turn(
+        "**Estimate:** 7% (3-12%)",
+        member="m",
+        round_=2,
+        previous=before(30),
+        split_set=False,
+        reframed=True,
+    )
+    assert flaws == []
+
+
 def test_blank_lines_hides_only_the_estimate_and_split_numbers() -> None:
     text = "Debt 124% of GDP.\n**Split:** P(event) 40%; if it happens 20%; if it doesn't 5%\n"
     text += "**Estimate:** 22% (12-32%)"
