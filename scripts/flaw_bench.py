@@ -56,6 +56,8 @@ COLUMNS = [
             FlawKind.UNKNOWN_MENTION,
             FlawKind.NICK_LITERAL,
             FlawKind.MISSING_DEVIL_LINE,
+            FlawKind.MISSING_ESTIMATE,
+            FlawKind.ESTIMATE_INCOHERENT,
         )
     ),
     MARKER,
