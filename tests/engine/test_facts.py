@@ -130,3 +130,22 @@ def test_the_export_shows_tags_and_keeps_the_missing_line() -> None:
     assert text.startswith("- [F1] **Debt:**")
     assert text.endswith("- Missing: the lenders' names")
     assert Report.research_text(report, research[1]).startswith("[F3] Rates rose")
+
+
+@pytest.mark.parametrize(
+    ("turn", "source", "flagged"),
+    [
+        ("Acme owes $9.2B.", "Acme owes $9.2bn.", False),
+        ("Acme owes $9.2bn.", "Acme owes $9.2 billion.", False),
+        ("A $1.2T market.", "a $1.2 trillion market", False),
+        ("Acme owes $9.2B.", "Acme owes $7.1bn.", True),
+        ("Capex of $40-45B.", "capex of $40-45B", False),
+        ("Capex of $45bn.", "capex of $40-45B", False),
+        # A bare "70B" is a model's size: it neither counts as a figure nor sources one.
+        ("Llama 70B is enough.", "", False),
+        ("A $70 billion deal.", "Llama 70B runs locally.", True),
+    ],
+)
+def test_billions_written_with_b(turn: str, source: str, flagged: bool) -> None:
+    flaws = checks.figure_flaws(turn, source, source, "m")
+    assert bool([f for f in flaws if f.kind.value == "unsourced"]) == flagged

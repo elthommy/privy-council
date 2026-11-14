@@ -213,9 +213,11 @@ September and November" when the fact says the reverse) passes. Say so in STATUS
 - The new kinds stay out of `FIGURE_KINDS` (`CITATION_KINDS`): logged and in
   `/flaws` only. `MODERATE_TASK` is unchanged until the gate passes.
 - `flaw_bench.py` counts both kinds and the tagged sentences per answer (`tagged`).
-- Known limit, found while testing: the figure parser reads "$9.2B" as "$9.2" (it
+- Fixed right after (2026-11-14): the figure parser read "$9.2B" as "$9.2" (it
   knows "bn" and "billion", not "B"), so "$9.2B" and "$9.2bn" don't match. Older
-  than M18; not fixed here.
+  than M18. "B" and "T" now scale with a currency or a unit; a bare "70B" stays a
+  model size. Still open: the arithmetic check does not follow a range times a
+  number ("$410-450M x 4 = $1.64-1.8B" is flagged).
 
 ### Step 2 (after the gate) — own-estimate exemption
 Most false engine flags are a member's own probability or an estimate labelled in

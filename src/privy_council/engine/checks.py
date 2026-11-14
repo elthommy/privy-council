@@ -43,22 +43,25 @@ from privy_council.models.flaw import Flaw, FlawKind
 
 # A number: 1500, 1,500, 1 500 (also with the French thin spaces), 1.5, 1,5.
 _NUM = r"(?:\d{1,3}(?:[ \u00a0\u202f]\d{3})+(?!\d)|\d+)(?:[.,]\d+)*"
-_MULT = r"(?:k|K|M|bn|tn|thousand|million|billion|trillion|milliards?|millions?)"
+# "B" and "T" for billion and trillion, uppercase only: "$9.2B" (not a lowercase "b").
+_MULT = r"(?:k|K|M|B|T|bn|tn|thousand|million|billion|trillion|milliards?|millions?)"
 _CURRENCY = r"[€$£]"
+_CURRENCY_BEFORE = re.compile(r"[€$£]\s?$")
 # Units that make a number a figure worth checking (M11).
 _UNIT = (
     r"(?:%|€|\$|£|\u00d7"
     r"|(?:EUR|USD|euros?|dollars?|GB|Go|TB|To|MB|Mo"
     r"|years?|yrs?|ans|années?|months?|mois|km|miles?|x)(?!\w))"
 )
+_UNIT_AFTER = re.compile(rf"\s?{_UNIT}")
 _FIGURE = re.compile(
     rf"(?<![\w.,/-])(?P<cur>{_CURRENCY}\s?)?(?P<a>{_NUM})(?:\s?(?P<am>{_MULT})(?!\w))?"
     rf"(?:\s?(?:\u2013|\u2014|-|to|à)\s?{_CURRENCY}?\s?(?P<b>{_NUM})(?:\s?(?P<bm>{_MULT})(?!\w))?)?"
     rf"(?:\s?(?P<unit>{_UNIT}))?"
 )
 _ANY_NUMBER = re.compile(rf"(?<![\w.,])(?P<n>{_NUM})(?:\s?(?P<m>{_MULT})(?!\w))?")
-_MULTIPLIERS = {"k": 1e3, "thousand": 1e3, "m": 1e6, "million": 1e6, "bn": 1e9}
-_MULTIPLIERS |= {"billion": 1e9, "milliard": 1e9, "tn": 1e12, "trillion": 1e12}
+_MULTIPLIERS = {"k": 1e3, "thousand": 1e3, "m": 1e6, "million": 1e6, "b": 1e9, "bn": 1e9}
+_MULTIPLIERS |= {"billion": 1e9, "milliard": 1e9, "t": 1e12, "tn": 1e12, "trillion": 1e12}
 # The members' estimate label (prompts.MEMBER_PROTOCOL), also translated; it may
 # follow a few words later ("€60 a year (estimate, from memory)").
 _LABEL = re.compile(
@@ -211,6 +214,15 @@ def _model_number(m: re.Match[str]) -> bool:
     return not m["cur"] and not m["unit"] and parse_number(m["a"])[0] >= 1000
 
 
+def _model_size(m: re.Match[str]) -> bool:
+    """Whether a bare "B" or "T" figure is a model's size ("Llama 70B"), not money.
+
+    "B" and "T" count as billion and trillion only with a currency or a unit ("$9.2B").
+    """
+    short = {m["am"], m["bm"]} & {"B", "T"}
+    return bool(short) and not (m["cur"] or m["unit"])
+
+
 def _multiplier(word: str | None) -> float:
     """Return the factor of a k / M / billion suffix (1 without one)."""
     if not word:
@@ -278,6 +290,8 @@ def figures(text: str, extra: Collection[str] = (), named: Collection[str] = ())
         if not any(values) or (m["unit"] == "%" and set(values) <= _TRIVIAL_PERCENT):
             continue  # "€0", "100% sure": nothing to source
         if _model_number(m) and not word:
+            continue
+        if _model_size(m):
             continue
         if m["unit"] in (_TIMES, "x") and _NUMBER_NEXT.match(blanked, m.end()):
             continue  # "0.3\u00d735%": a multiplication sign, not a "3x" multiple
@@ -357,11 +371,20 @@ def numbers(text: str) -> list[float]:
     for m in _ANY_NUMBER.finditer(text):
         value, _ = parse_number(m["n"])
         out.append(value)
-        if m["m"]:
+        # A bare "70B" is a model's size, not billions: only "$70B" scales (`_model_size`).
+        bare = (
+            m["m"] in ("B", "T")
+            and not _CURRENCY_BEFORE.search(text, 0, m.start())
+            and not _UNIT_AFTER.match(text, m.end())
+        )
+        if m["m"] and not bare:
             out.append(value * _multiplier(m["m"]))
     for m in _FIGURE.finditer(text):
-        if m["b"] and m["bm"] and not m["am"]:
-            out.append(parse_number(m["a"])[0] * _multiplier(m["bm"]))
+        if m["b"] and m["bm"] and not _model_size(m):
+            factor = _multiplier(m["bm"])
+            if not m["am"]:
+                out.append(parse_number(m["a"])[0] * factor)
+            out.append(parse_number(m["b"])[0] * factor)  # "$40-45B": the currency is on 40
     return out
 
 
