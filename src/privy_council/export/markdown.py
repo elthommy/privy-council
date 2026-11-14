@@ -122,7 +122,10 @@ def _event(report: Report, event: ShownEvent, labels: dict[str, str]) -> str:
         note = event.note
         lines = [f"> **{labels['research']} {note.focus}**"]
         lines.append(f"> *{research_meta(note, labels)}*")
-        lines += [">", *(f"> {line}" for line in demote(note.text, 4).splitlines())]
+        lines += [
+            ">",
+            *(f"> {line}" for line in demote(report.research_text(note), 4).splitlines()),
+        ]
         return "\n".join(lines) + "\n"
     if isinstance(event, DossierAdded):
         f = event.file

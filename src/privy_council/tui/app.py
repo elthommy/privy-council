@@ -45,6 +45,7 @@ from privy_council.tui.commands import (
     Command,
     Judgment,
     export_command,
+    facts_list_text,
     flaws_text,
     parse,
     parse_count,
@@ -289,6 +290,7 @@ class CouncilApp(App[None]):
             "flaws": lambda _: self.chat.notice(
                 flaws_text(self.engine.meta.runtime.flaws, self.engine.nick)
             ),
+            "facts": lambda _: self.chat.notice(facts_list_text(self.engine.meta.runtime.research)),
             "export": lambda arg: self.chat.notice(export_command(self.engine, arg)),
             "lang": self.cmd_lang,
             "budget": lambda _: self.cmd_budget(),

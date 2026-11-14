@@ -17,6 +17,7 @@ from pydantic import ValidationError
 from privy_council.backends.base import BackendOutputError, CompletionResult
 from privy_council.engine import prompts
 from privy_council.engine.checks import figure_flaws
+from privy_council.engine.facts import BULLET, blocks
 from privy_council.engine.moderation import DecisionError, json_object
 from privy_council.models.flaw import FlawKind
 from privy_council.models.research import ResearchQueries
@@ -80,7 +81,6 @@ def shorter_queries(queries: Sequence[str]) -> list[str]:
 
 QUERIES_SCHEMA: dict[str, Any] = ResearchQueries.model_json_schema()
 _URL = re.compile(r"https?://[^\s<>\"')\]]+")
-_BULLET = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+")
 _URL_TAIL = ".,;:!?*_`"
 
 
@@ -147,19 +147,6 @@ def render_results(results: Sequence[SearchResult]) -> str:
     )
 
 
-def _blocks(text: str) -> list[str]:
-    """Split a summary into bullets, each with its continuation lines."""
-    blocks: list[str] = []
-    for line in text.strip().splitlines():
-        if not line.strip():
-            continue
-        if _BULLET.match(line) or not blocks:
-            blocks.append(line)
-        else:
-            blocks[-1] += "\n" + line
-    return blocks
-
-
 def _backed(block: str, urls: set[str], sources: str) -> bool:
     """Whether a bullet cites only known URLs and only figures found in the sources."""
     if any(normalize_url(u) not in urls for u in _URL.findall(block)):
@@ -181,7 +168,7 @@ def check_summary(
     sources = "\n".join([context, *(f"{r.title}\n{r.snippet}" for r in results)])
     kept: list[str] = []
     dropped: list[str] = []
-    for block in _with_missing_prefix(_blocks(text)):
+    for block in _with_missing_prefix(blocks(text)):
         if _copies_example(block):
             continue
         missing = _MISSING.match(block) is not None  # not a fact: never dropped
@@ -205,5 +192,5 @@ def _with_missing_prefix(blocks: list[str]) -> list[str]:
     """
     if len(blocks) < 2 or any(_MISSING.match(b) for b in blocks) or _URL.search(blocks[-1]):
         return blocks
-    facts = " ".join(_BULLET.sub("", blocks[-1]).split()).rstrip(".")
+    facts = " ".join(BULLET.sub("", blocks[-1]).split()).rstrip(".")
     return [*blocks[:-1], f"- Missing: {facts}"]

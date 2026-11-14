@@ -372,3 +372,24 @@ async def test_seeded_research_replaces_the_first_search(
 
     h.engine.seed_research([note.model_copy(update={"focus": "late"})])  # after the opening
     assert h.engine.meta.runtime.research == [note]
+
+
+async def test_members_see_fact_tags_and_a_wrong_citation_is_logged(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    base = responder([decision([("rigor", "x")])])
+
+    def respond(req: CompletionRequest) -> Reply:
+        """Rigor cites the fact with a price it doesn't give."""
+        if req.tag.purpose == "turn" and req.tag.persona == "rigor":
+            return "Gold is near $3,900/oz [F1]."
+        return base(req)
+
+    h = Harness(tmp_path, personas, respond, research=ResearchMode.AUTO)
+    await h.engine.step()  # research, then the opening
+    await h.engine.step()  # blind round
+    turn = next(r for r in h.requests() if r.tag.purpose == "turn")
+    assert "- [F1] Gold is about $4,170/oz" in turn.messages[0].content
+    assert "put its tag right after it" in turn.system
+    [flaw] = [f for f in h.engine.meta.runtime.flaws if f.member == "rigor"]
+    assert (flaw.kind.value, flaw.note) == ("miscited", "$3,900 is not in [F1].")

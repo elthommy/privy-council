@@ -54,8 +54,8 @@ change an entry point (a command, a front end, a network call, a file read);
     IPs, re-checked after redirects, size and time caps).
   - *Discord* (`council chat discord`): the only input reachable from outside the
     PC, through an outbound connection only (no open port). Friends are allowlisted
-    by **user ID**; they can only speak, answer the Chair, and read `/status` and
-    `/flaws`. The owner may `/handover` the open debate to one or more of them:
+    by **user ID**; they can only speak, answer the Chair, and read `/status`,
+    `/flaws` and `/facts` (the research the channel already saw, with its tags). The owner may `/handover` the open debate to one or more of them:
     those friends can also `/run`, `/pause`, `/vote`, `/close` and `/offline` it,
     never `/ask`, `/resume` or hand it on. The handover ends with that debate,
     `/takeback` or a restart (never saved). The bot's commands are a fixed table

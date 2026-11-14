@@ -13,7 +13,7 @@ from privy_council.models.session import DebateState, Message
 from privy_council.models.vote import Vote
 from privy_council.util.language import Language
 
-PROMPTS_VERSION = "60"
+PROMPTS_VERSION = "61"
 
 # Backends that accept a single user turn (the claude CLI on stdin) flatten a
 # multi-message conversation with these labels.
@@ -149,12 +149,17 @@ reinforce.
 followed by your new position. If it didn't change, don't use those words.
 - Don't invent facts about the user. When the answer depends on something only the user \
 knows, say what you would need to know.
+- Fresh facts: each one starts with a tag such as [F7]. When you state a fact or a \
+figure from the fresh facts, put its tag right after it: "debt was $9.2B [F7]". Tag \
+only what that fact says; never tag a sentence it doesn't support. A sentence with no \
+tag and no named source is your own judgment, so word it as one ("I think", "my \
+estimate").
 - Figures: a number from the fresh facts, the dossier or the user's messages is \
-sourced. Quote it as written and name its source in a few words ("$233 at Pangoly"), \
-even when the source is undated or the sources disagree. "(estimate, from memory)" is \
-only for a number found nowhere there; then prefer a range. If another member labelled \
-a sourced figure, quote it without the label. If you can't give a number honestly, \
-argue without one.
+sourced. Quote it as written; tag a fresh fact's, and name the source of any other in a \
+few words ("$233 in your file"), even when the source is undated or the sources \
+disagree. "(estimate, from memory)" is only for a number found nowhere there; then \
+prefer a range. If another member labelled a sourced figure, quote it without the \
+label. If you can't give a number honestly, argue without one.
 - Don't claim what sources say, or that none say something, beyond the facts in front \
 of you."""
 
@@ -757,6 +762,12 @@ TITLE_FACTS = (
     "Fresh facts (web search by the moderator; may contain errors, say so when you rely on them)"
 )
 RESEARCH_ENTRY = "{focus} (searched {date}):\n{text}"
+# A fresh fact's tag (M18), put before each research bullet and after a cited claim.
+FACT_TAG = "[{id}]"
+# Engine notes on citations (flaws UNKNOWN_CITATION and MISCITED).
+CITATION_NOTE_UNKNOWN = "{tag} is not a fact in the prompt."
+CITATION_NOTE_ELSEWHERE = "{figure} is in {found}, not in {cited}."
+CITATION_NOTE_ABSENT = "{figure} is not in {cited}."
 
 # --- Dossier (files the user attaches) --------------------------------------------
 

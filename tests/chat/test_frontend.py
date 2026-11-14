@@ -415,8 +415,8 @@ async def test_resume_without_a_session(tmp_path: Path, personas: dict[str, Pers
     assert await chat.fe.command(OWNER, "resume") == "No unfinished chat session to resume."
 
 
-@pytest.mark.parametrize("name", ["status", "flaws"])
-async def test_friends_can_read_status_and_flaws(
+@pytest.mark.parametrize("name", ["status", "flaws", "facts"])
+async def test_friends_can_read_status_flaws_and_facts(
     tmp_path: Path, personas: dict[str, Persona], name: str
 ) -> None:
     chat = Chat(tmp_path, personas)

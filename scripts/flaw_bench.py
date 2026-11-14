@@ -37,12 +37,14 @@ from typing import Any, TextIO
 from replay_turn import ReplayTurn, _run, build_turn, model_think
 
 from privy_council.config import Settings, load_settings
-from privy_council.engine import checks, context, dynamics, ledger, prompts
+from privy_council.engine import checks, context, dynamics, facts, ledger, prompts
 from privy_council.models.flaw import Flaw, FlawKind
 
 ORIGINAL = "original"
-# Counted beside the flaws: the update marker (true or false is read by hand).
+# Counted beside the flaws: the update marker (true or false is read by hand), and
+# the sentences citing a fact tag (M18 compliance; the untagged ones are read by hand).
 MARKER = "marker"
+TAGGED = "tagged"
 # The kinds the engine finds (the moderator's need a debate), then the markers.
 COLUMNS = [
     *(
@@ -58,9 +60,12 @@ COLUMNS = [
             FlawKind.MISSING_DEVIL_LINE,
             FlawKind.MISSING_ESTIMATE,
             FlawKind.ESTIMATE_INCOHERENT,
+            FlawKind.UNKNOWN_CITATION,
+            FlawKind.MISCITED,
         )
     ),
     MARKER,
+    TAGGED,
 ]
 
 
@@ -99,9 +104,10 @@ def _check(turn: ReplayTurn, text: str) -> list[Flaw]:
 
 
 def _counts(flaws: list[Flaw], text: str) -> Counter[str]:
-    """Count one answer's flaws by kind, plus its update markers."""
+    """Count one answer's flaws by kind, plus its update markers and tagged sentences."""
     counts = Counter(f.kind.value for f in flaws)
     counts[MARKER] += int(dynamics.marks_update(text))
+    counts[TAGGED] += len(facts.tagged_sentences(text))
     return counts
 
 

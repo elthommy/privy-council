@@ -28,14 +28,14 @@ from privy_council.engine.notices import NOTICE_QUESTIONS_PAUSE
 from privy_council.engine.protocol import DebateEngine
 from privy_council.models.persona import Role
 from privy_council.models.session import Event, MessageEvent, Phase, RoundStarted, TurnStarted
-from privy_council.tui.commands import flaws_text, parse_count
+from privy_council.tui.commands import facts_list_text, flaws_text, parse_count
 
 log = logging.getLogger(__name__)
 
 # A friend the owner hands the open debate over to may run these too.
 HANDOVER_COMMANDS = {"run", "pause", "vote", "close", "offline"}
 OWNER_COMMANDS = {"ask", "resume", "handover", "takeback"} | HANDOVER_COMMANDS
-OPEN_COMMANDS = {"status", "flaws"}
+OPEN_COMMANDS = {"status", "flaws", "facts"}
 NOT_ALLOWED = "Only the council's owner can do that."
 NOT_HANDED = "Only the owner, or a friend they hand the debate over to, can do that."
 HANDED = (
@@ -333,7 +333,7 @@ class ChatFrontend:
         """Run one slash command; return the private reply for the person who sent it.
 
         Each command is logged (name, user ID, role, reply), never its argument: a
-        question is personal. /status and /flaws replies are debate content: not logged.
+        question is personal. /status, /flaws and /facts replies are debate content: not logged.
         `/handover` takes the friend's user ID as `arg` and their `username`.
         """
         role = self.role(user_id)
@@ -374,6 +374,8 @@ class ChatFrontend:
             return self._status(engine)
         if name == "flaws":
             return flaws_text(engine.meta.runtime.flaws, engine.nick)[:1900]
+        if name == "facts":
+            return facts_list_text(engine.meta.runtime.research)[:1900]
         if name == "pause":
             engine.request_pause()
             return "Pausing at the next turn boundary."

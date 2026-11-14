@@ -7,6 +7,8 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
+from privy_council.engine.facts import tagged_notes
+from privy_council.engine.local_research import missing_facts, without_missing
 from privy_council.models.flaw import FIGURE_KINDS, Flaw
 from privy_council.models.persona import Persona
 from privy_council.models.session import (
@@ -16,6 +18,7 @@ from privy_council.models.session import (
     MessageEvent,
     Phase,
     ResearchAdded,
+    ResearchNote,
     RoundStarted,
     SessionMeta,
     SessionState,
@@ -59,6 +62,15 @@ class Report(BaseModel):
     events: list[ShownEvent]
     flaws: list[Flaw]
     final_vote: VoteTaken | None
+
+    def research_text(self, note: ResearchNote) -> str:
+        """Return a research note as the members saw it, fact tags included."""
+        notes = self.meta.runtime.research
+        if note not in notes:
+            return note.text
+        text = tagged_notes([without_missing(n.text) for n in notes])[notes.index(note)]
+        missing = missing_facts(note.text)
+        return f"{text}\n- Missing: {missing}" if missing else text
 
     def seat(self, slug: str) -> Seat | None:
         """Return the participant with this slug, if any."""

@@ -151,3 +151,11 @@ def test_estimate_lines_are_checked_only_where_asked() -> None:
         **{k: v for k, v in turn_record("skeptic:2").items() if k not in ("type", "session")}
     )
     assert not [f for f in module._check(plain, "No number.") if "estimate" in f.kind.value]
+
+
+def test_tagged_sentences_and_citation_flags_are_counted() -> None:
+    module = bench()
+    flaw = module.Flaw(member="m", kind=module.FlawKind.MISCITED, excerpt="x", note="y")
+    counts = module._counts([flaw], "Debt is $9bn [F1]. Rates rose [F2].\nI think so.")
+    assert counts["tagged"] == 2 and counts["miscited"] == 1
+    assert {"tagged", "miscited", "unknown_citation"} <= set(module.COLUMNS)

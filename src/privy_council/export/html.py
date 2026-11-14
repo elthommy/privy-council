@@ -176,7 +176,7 @@ def _event(report: Report, event: ShownEvent, labels: dict[str, str]) -> str:
         note = event.note
         meta = f'<p class="note">{escape(research_meta(note, labels))}</p>'
         summary = f"<summary>{escape(labels['research'])} {escape(note.focus)}</summary>"
-        return f"<details>{summary}{meta}{markdown_html(note.text, 3)}</details>"
+        return f"<details>{summary}{meta}{markdown_html(report.research_text(note), 3)}</details>"
     if isinstance(event, DossierAdded):
         text = labels["attached"].format(name=event.file.name, tokens=event.file.tokens)
         return f'<p class="system">{escape(text)}</p>'

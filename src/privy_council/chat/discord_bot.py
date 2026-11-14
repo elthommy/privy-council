@@ -296,6 +296,7 @@ def register_commands(
         "takeback": "End the handover: only you run the debate again (owner).",
         "status": "Where the debate is, and who it waits for.",
         "flaws": "The errors caught so far.",
+        "facts": "The fresh facts from web research, with their tags.",
     }
     for name, description in simple.items():
         tree.command(name=name, description=description, guild=guild)(_simple(reply, name))

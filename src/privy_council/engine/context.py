@@ -16,6 +16,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 from privy_council.config import Settings
+from privy_council.engine import facts as fact_tags
 from privy_council.engine import prompts
 from privy_council.engine.local_research import without_missing
 from privy_council.models.persona import BackendKind
@@ -234,8 +235,17 @@ def facts_text(notes: Sequence[ResearchNote]) -> str | None:
     """Render the session's research for prompts (newest first), or None if there is none."""
     if not notes:
         return None
-    entries = [(n.focus, f"{n.ts.astimezone():%Y-%m-%d}", without_missing(n.text)) for n in notes]
+    texts = fact_tags.tagged_notes([without_missing(n.text) for n in notes])
+    entries = [
+        (n.focus, f"{n.ts.astimezone():%Y-%m-%d}", text)
+        for n, text in zip(notes, texts, strict=True)
+    ]
     return prompts.render_research(entries)
+
+
+def research_facts(notes: Sequence[ResearchNote]) -> list[fact_tags.Fact]:
+    """Return the session's facts with the tags the prompts give them (for /facts)."""
+    return fact_tags.numbered([without_missing(n.text) for n in notes])
 
 
 def dossier_text(files: Sequence[DossierFile]) -> str | None:

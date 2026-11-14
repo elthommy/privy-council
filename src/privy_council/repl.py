@@ -38,6 +38,7 @@ from privy_council.tui.commands import (
     Judgment,
     dossier_title,
     export_command,
+    facts_list_text,
     flaws_text,
     parse,
     parse_count,
@@ -197,6 +198,8 @@ async def dispatch(engine: DebateEngine, cmd: Command, out: Output) -> bool:
         out(state_text(rt.debate_state, judged, engine.nick), None)
     elif cmd.name == "flaws":
         out(flaws_text(engine.meta.runtime.flaws, engine.nick), None)
+    elif cmd.name == "facts":
+        out(facts_list_text(engine.meta.runtime.research), None)
     elif cmd.name == "export":
         out(export_command(engine, cmd.arg), None)
     elif cmd.name == "lang":

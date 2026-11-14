@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from privy_council.engine import prompts
+from privy_council.engine import context, prompts
+from privy_council.engine.facts import tag_block
 from privy_council.export import EXPORTS_DIR, ExportError, ExportFormat, export_session
-from privy_council.models.flaw import Flaw
-from privy_council.models.session import Consensus, DebateState
+from privy_council.models.flaw import NOTE_KINDS, Flaw
+from privy_council.models.session import Consensus, DebateState, ResearchNote
 from privy_council.models.vote import Vote
 
 if TYPE_CHECKING:
@@ -33,6 +34,7 @@ COMMANDS = {
     "summary": "the moderator writes an interim synthesis; the debate continues",
     "state": "show the debate state",
     "flaws": "errors the engine and the moderator caught in members' messages",
+    "facts": "the fresh facts from web research, with the tags members cite ([F7])",
     "export": "/export [md|html|all]: write a readable report of the session (data/exports/)",
     "lang": "/lang [en|fr]: show the debate language, or change it before round 1",
     "budget": "Claude calls and tokens used this session and today",
@@ -115,7 +117,8 @@ def flaws_text(flaws: list[Flaw], nick_of: Callable[[str], str]) -> str:
     lines = [FLAWS_TITLE]
     for f in flaws:
         text = f'"{f.excerpt}"' + (f" ({f.note})" if f.note else "")
-        if f.by == "engine" and f.note:  # the engine's note is the figure in question
+        # The engine's note is mostly the figure in question; some kinds explain instead.
+        if f.by == "engine" and f.note and f.kind not in NOTE_KINDS:
             text = f'{f.note} in "{f.excerpt}"'
         lines.append(
             FLAW_LINE.format(
@@ -123,6 +126,18 @@ def flaws_text(flaws: list[Flaw], nick_of: Callable[[str], str]) -> str:
             )
         )
     return "\n".join(lines)
+
+
+FACTS_TITLE = "-- fresh facts (members cite them by tag) --"
+NO_FACTS = "No fresh facts yet: /research searches the web."
+
+
+def facts_list_text(notes: Sequence[ResearchNote]) -> str:
+    """Render the session's research facts with their tags for `/facts`."""
+    found = context.research_facts(notes)
+    if not found:
+        return NO_FACTS
+    return "\n".join([FACTS_TITLE, *(tag_block(f) for f in found)])
 
 
 def dossier_title(name: str, tokens: int, summarized: bool) -> str:

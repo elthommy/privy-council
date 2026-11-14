@@ -34,10 +34,11 @@ from __future__ import annotations
 
 import math
 import re
-from collections.abc import Collection, Iterable
+from collections.abc import Collection, Iterable, Sequence
 from dataclasses import dataclass, replace
 from itertools import combinations, permutations
 
+from privy_council.engine import facts, prompts
 from privy_council.models.flaw import Flaw, FlawKind
 
 # A number: 1500, 1,500, 1 500 (also with the French thin spaces), 1.5, 1,5.
@@ -705,7 +706,14 @@ def _sourced(fig: Figure, known: Collection[float], by_family: dict[str, set[flo
     return all(_matches(v, p, pool) for v, p in zip(fig.values, fig.precisions, strict=True))
 
 
-def figure_flaws(text: str, sources: str, given: str, member: str, round_: int = 0) -> list[Flaw]:
+def figure_flaws(
+    text: str,
+    sources: str,
+    given: str,
+    member: str,
+    round_: int = 0,
+    skip: Sequence[tuple[int, int]] = (),
+) -> list[Flaw]:
     """Flag unsourced figures, figures in the wrong unit, and misplaced estimate labels.
 
     Unsourced: a value found nowhere in `sources`, even as a bare number.
@@ -715,6 +723,8 @@ def figure_flaws(text: str, sources: str, given: str, member: str, round_: int =
     small number is almost always somewhere in a long prompt, and an estimate in
     another currency is the member's own conversion. The facts' own units count too
     ("Astrite", "pulls"), and so do conversions at the rates they state.
+    `skip`: spans whose figures aren't reported (sentences that cite a fact, checked
+    against that fact instead); they still count for the turn's own arithmetic.
     """
     known = numbers(sources)
     named = turn_units(text, given)
@@ -750,10 +760,29 @@ def figure_flaws(text: str, sources: str, given: str, member: str, round_: int =
             for v, p in zip(fig.values, fig.precisions, strict=True)
         )
         checked.append((fig, arithmetic, own))
+    shown = [c for c in checked if not any(s <= c[0].start < e for s, e in skip)]
+    return _reported(text, checked, shown, (known, occurrences, quoted), member, round_)
+
+
+# What a figure is checked against: the sources' numbers, their occurrences by unit
+# (`_occurrences`) and the given figures by unit (`_by_unit`).
+_Sources = tuple[list[float], tuple[dict[str, set[float]], set[float]], dict[str, set[float]]]
+
+
+def _reported(
+    text: str,
+    checked: list[tuple[Figure, bool, set[float]]],
+    shown: list[tuple[Figure, bool, set[float]]],
+    sources: _Sources,
+    member: str,
+    round_: int,
+) -> list[Flaw]:
+    """Return the flaws of the `shown` figures; `checked` holds every figure of the turn."""
+    known, occurrences, quoted = sources
     # A result the turn derived once may come back later on its own ("at 28.5%").
     derived = {(f.family, v) for f, ok, _ in checked if ok for v in f.values}
     out: list[Flaw] = []
-    for fig, arithmetic, own in checked:
+    for fig, arithmetic, own in shown:
         sourced = _sourced(fig, known, occurrences[0])
         again = not fig.spelled and all((fig.family, v) in derived for v in fig.values)
         if not sourced and (arithmetic or again):
@@ -871,4 +900,75 @@ def check_turn(
     flaws = format_flaws(text, member, nick, known, round_)
     if devil_line is not None:
         flaws += devil_line_flaw(text, member, devil_line, round_)
-    return flaws + figure_flaws(text, sources, given, member, round_)
+    tagged = facts.tagged_sentences(text)
+    flaws += citation_flaws(text, tagged, sources, given, member, round_)
+    spans = [(start, end) for start, end, _ in tagged]
+    return flaws + figure_flaws(text, sources, given, member, round_, skip=spans)
+
+
+def citation_flaws(
+    text: str,
+    tagged: Sequence[tuple[int, int, list[str]]],
+    sources: str,
+    given: str,
+    member: str,
+    round_: int = 0,
+) -> list[Flaw]:
+    """Check each sentence that cites facts against the facts it cites (M18).
+
+    Unknown citation: a tag that isn't in the member's prompt (trimmed, or invented).
+    Miscited: a figure that none of the cited facts holds and that isn't in the rest
+    of the prompt (the user's messages, the dossier) nor the turn's own arithmetic;
+    the note names another fact that holds it, if one does.
+    """
+    section = facts.facts_section(given)
+    shown = facts.in_prompt(section)
+    others = sources.replace(section, "") if section else sources
+    out: list[Flaw] = []
+    for start, end, ids in tagged:
+        excerpt = _excerpt(text, start, start)
+        for tag in (i for i in ids if i not in shown):
+            note = prompts.CITATION_NOTE_UNKNOWN.format(tag=prompts.FACT_TAG.format(id=tag))
+            out.append(_citation(member, FlawKind.UNKNOWN_CITATION, excerpt, note, round_))
+        cited = [i for i in ids if i in shown]
+        if cited:
+            out += _miscited(text[start:end], cited, shown, others, member, round_)
+    return out
+
+
+def _citation(member: str, kind: FlawKind, excerpt: str, note: str, round_: int) -> Flaw:
+    """Build one citation flaw."""
+    return Flaw(member=member, kind=kind, excerpt=excerpt, note=note, round=round_)
+
+
+def _miscited(
+    sentence: str,
+    cited: list[str],
+    shown: dict[str, str],
+    others: str,
+    member: str,
+    round_: int,
+) -> list[Flaw]:
+    """Return a MISCITED flaw for each figure the cited facts don't hold."""
+    held = "\n".join(shown[i] for i in cited)
+    tags = ", ".join(prompts.FACT_TAG.format(id=i) for i in cited)
+    out: list[Flaw] = []
+    for flaw in figure_flaws(sentence, f"{held}\n{others}", held, member, round_):
+        if flaw.kind not in (FlawKind.UNSOURCED, FlawKind.WRONG_UNIT):
+            continue
+        found = [i for i, fact in shown.items() if i not in cited and _holds(fact, flaw.note)]
+        note = (
+            prompts.CITATION_NOTE_ELSEWHERE.format(
+                figure=flaw.note, found=prompts.FACT_TAG.format(id=found[0]), cited=tags
+            )
+            if found
+            else prompts.CITATION_NOTE_ABSENT.format(figure=flaw.note, cited=tags)
+        )
+        out.append(_citation(member, FlawKind.MISCITED, flaw.excerpt, note, round_))
+    return out
+
+
+def _holds(fact: str, figure: str) -> bool:
+    """Whether a fact gives a figure, in its unit."""
+    flaws = figure_flaws(figure, fact, fact, "")
+    return not any(f.kind in (FlawKind.UNSOURCED, FlawKind.WRONG_UNIT) for f in flaws)

@@ -201,6 +201,22 @@ claim against one bullet instead of guessing where a number came from.
 A sentence that pairs two right figures the wrong way round ("5.0 and 5.5 mature in
 September and November" when the fact says the reverse) passes. Say so in STATUS.md.
 
+### As built (differences from the text above)
+- `engine/facts.py` holds the numbering, the tags and the sentence spans; the bullet
+  splitter moved there from `local_research`. The facts are numbered after
+  `without_missing`, so a "Missing:" line is no fact.
+- `checks.citation_flaws` runs inside `check_turn`. A figure in a tagged sentence
+  passes when the cited facts hold it, or when it is in the rest of the prompt (the
+  user's messages, the dossier, other members' turns) or the sentence's own
+  arithmetic; tagged sentences are then skipped by the figure check
+  (`figure_flaws(skip=...)`), so a wrong figure is MISCITED, never also UNSOURCED.
+- The new kinds stay out of `FIGURE_KINDS` (`CITATION_KINDS`): logged and in
+  `/flaws` only. `MODERATE_TASK` is unchanged until the gate passes.
+- `flaw_bench.py` counts both kinds and the tagged sentences per answer (`tagged`).
+- Known limit, found while testing: the figure parser reads "$9.2B" as "$9.2" (it
+  knows "bn" and "billion", not "B"), so "$9.2B" and "$9.2bn" don't match. Older
+  than M18; not fixed here.
+
 ### Step 2 (after the gate) — own-estimate exemption
 Most false engine flags are a member's own probability or an estimate labelled in
 other words. With M17, probabilities live in the estimate and split lines: exempt
