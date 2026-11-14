@@ -2,7 +2,12 @@
 
 All notable changes, by milestone. Dates are when each milestone was built.
 
-## Unreleased (2026-10-25 – 2026-11-08)
+## Unreleased (2026-10-25 – 2026-11-14)
+
+- **Forecast councils give numbers the engine can read** (`economics`, `geopolitics`; council option `estimate: probability`): each member ends every turn with `**Estimate:** N% (low–high%)`. The engine keeps each member's numbers, flags a value outside its own range and a number moved without "I update:", and shows the Chair and the synthesis the parsed numbers, so neither re-reads them from the prose. The synthesis gets the council's median and range from the engine.
+- **The Chair can split a forecast on one event** the members weigh differently (say, whether lenders extend a loan). Members then also write their probability of the event and of the outcome with and without it, and the engine checks that these add up to their estimate.
+- **The devil's advocate gives no probability** in forecast councils: it names the link it thinks the others misprice. Its arguments go under the disagreements, not into the confidence spread as a dissenting number.
+- Estimate-line flags are logged and listed by `/flaws`; they reach the Chair only with `[engine] estimate_flaws_to_moderator = true` (off until a bench shows they are precise enough).
 
 - **Skeptic goes back to `gemma4:26b`**: with Rigor and Skeptic both on `nemotron-3.5-bolt`, Skeptic gave Rigor's reasons, assumption included. A different model family keeps the career seats apart.
 - **The Chair's notes check no longer deletes notes**: it can only rewrite the part of a member's note that misstates you. With a local Chair, the check had emptied most notes about the members' own arguments and lessons.

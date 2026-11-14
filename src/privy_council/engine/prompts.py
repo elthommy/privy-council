@@ -6,13 +6,14 @@ from collections.abc import Callable, Sequence
 
 from privy_council.backends.base import ChatMessage
 from privy_council.engine.dynamics import REPEAT_THRESHOLD, MemberStats
+from privy_council.models.estimate import Estimate, EstimateRecord
 from privy_council.models.flaw import Flaw, FlawKind
 from privy_council.models.persona import Persona, Role
 from privy_council.models.session import DebateState, Message
 from privy_council.models.vote import Vote
 from privy_council.util.language import Language
 
-PROMPTS_VERSION = "59"
+PROMPTS_VERSION = "60"
 
 # Backends that accept a single user turn (the claude CLI on stdin) flatten a
 # multi-message conversation with these labels.
@@ -60,6 +61,11 @@ LABELS: dict[Language, dict[str, str]] = {
         "assumption": "Key assumption:",
         "update": "I update:",
         "devil": "Playing devil's advocate:",
+        "estimate": "Estimate:",
+        "split": "Split:",
+        "split_event": "P(event)",
+        "if_yes": "if it happens",
+        "if_no": "if it doesn't",
         "the_user": "the user",
         "fact_start": "The user ...",
         "h_consensus": "Consensus",
@@ -80,6 +86,11 @@ LABELS: dict[Language, dict[str, str]] = {
         "assumption": "Hypothèse clé :",
         "update": "Je change d'avis :",
         "devil": "Je joue l'avocat du diable :",
+        "estimate": "Estimation :",
+        "split": "Décomposition :",
+        "split_event": "P(événement)",
+        "if_yes": "s'il arrive",
+        "if_no": "sinon",
         "the_user": "l'utilisateur",
         "fact_start": "L'utilisateur ...",
         "h_consensus": "Consensus",
@@ -260,6 +271,81 @@ ASK_TASK = """\
 The user asks you directly, outside the rounds: {question}
 Answer in a few sentences, as yourself."""
 
+# --- Estimate lines (M17, councils with `estimate: probability`) ---------------
+# Appended to every member task, so the engine can read each member's number instead
+# of the moderator re-reading it from the prose (2026-11-14 economics run: a 30-40 %
+# held for five rounds on three different justifications).
+ESTIMATE_RULE = """\
+End with this line, alone: **{estimate}** N% (low-high%), where N is your probability \
+for the question as the moderator framed it and low-high your range."""
+# Once the moderator split the question on one event (ModeratorDecision.split).
+ESTIMATE_SPLIT_RULE = """\
+The moderator split the question on this event: {event}
+End with these two lines, alone:
+**{split}** {split_event} A%; {if_yes} B%; {if_no} C%
+**{estimate}** N% (low-high%)
+A is your probability that the event happens, B your probability for the question if it \
+happens, C if it doesn't. N is your probability for the question as the moderator \
+framed it, so it should be close to A x B + (1 - A) x C; low-high is your range."""
+# A devil's advocate argues a role, so its number is noise (same run).
+ESTIMATE_DEVIL_RULE = """\
+Don't give your own probability: you are arguing a role. Instead, name the one link or \
+mechanism you think the others misprice, and say which way and why."""
+
+# What the moderator may set as the split.
+SPLIT_RULE_ON = (
+    "null, unless the members disagree mainly because they weigh one intermediate event "
+    "differently (e.g. whether lenders extend a loan): then name that event in at most "
+    "15 words, as something that does or doesn't happen by the question's deadline. "
+    "Members then give their numbers with and without it. Set it once: it can't change."
+)
+SPLIT_RULE_SET = "always null: the split is already set ({event})."
+SPLIT_RULE_OFF = "always null."
+SPLIT_MAX_CHARS = 200
+
+# Notes on the engine's estimate flaws (engine/ledger.py): impersonal, as the
+# moderator's are, since they may reach the member's floor line.
+ESTIMATE_NOTE_MISSING = "No estimate line."
+ESTIMATE_NOTE_NO_SPLIT = "No split line, though the moderator split the question."
+ESTIMATE_NOTE_REVERSED = "The range {low}-{high}% is reversed."
+ESTIMATE_NOTE_OUTSIDE = "{value}% lies outside its own range {low}-{high}%."
+ESTIMATE_NOTE_SPLIT = (
+    "{event}% x {if_yes}% + {not_event}% x {if_no}% = {implied}%, but the estimate says {value}%."
+)
+ESTIMATE_NOTE_UNMARKED = (
+    'The estimate moved from {before}% to {after}% without "{update}" or a reason for the change.'
+)
+
+# The engine's table of estimates, added to the moderator's debate dynamics.
+ESTIMATES_HEAD = (
+    "Estimates, parsed by the engine from each member's estimate line, oldest to newest. "
+    "Use these numbers for members' positions; don't re-read them from the prose."
+)
+ESTIMATES_SPLIT_EVENT = "Split event: {event}"
+ESTIMATES_MEMBER = "- @{nick}: {history}"
+ESTIMATES_NONE = "no estimate line yet"
+ESTIMATES_DEVIL = "devil's advocate: gives no estimate"
+ESTIMATES_FLAGS = "Engine flags on estimate lines (members may have to explain them):"
+ESTIMATES_FLAG = "- @{nick}: {note}"
+ESTIMATE_TEXT = "{value}%"
+ESTIMATE_RANGE = "{value}% ({low}-{high}%)"
+ESTIMATE_WITH_SPLIT = "{estimate}; split {event}% / {if_yes}% / {if_no}%, implies {implied}%"
+ESTIMATES_HISTORY = 3  # records shown per member
+
+# The same table for the synthesis, with the engine's aggregate.
+SYNTHESIS_ESTIMATES = """\
+Members' last estimates, parsed by the engine from their estimate lines:
+{lines}
+Council estimate (engine): median {median}%, members' estimates from {low}% to {high}%.
+Report these numbers as they are in the confidence spread; the council estimate is the \
+median, with that range. Don't re-read other numbers from the prose."""
+SYNTHESIS_ESTIMATE_LINE = "- @{nick} (round {round}): {estimate}"
+SYNTHESIS_DEVIL = (
+    "@{nick} argued a devil's advocate role: report their arguments under the "
+    "disagreements, never as a dissenting estimate, and give them no number in the "
+    "confidence spread."
+)
+
 # Floor prompts the engine writes itself, so per language: they show in the chat
 # the members read, and an English line amid French ones invites drift.
 FALLBACK_TURN_PROMPT: dict[Language, str] = {
@@ -364,6 +450,7 @@ matters more). Leave it empty if nothing is that important. {asked_rule}
 - still_open: {still_open_rule}
 - research: {research_rule}
 - summon: {summon_rule}
+- split: {split_rule}
 - flaws: clear errors in this round's member messages, most serious first, at most 4. \
 `member` is a slug; `kind` is "arithmetic" (a wrong sum, conversion or unit), \
 "contradiction" (the member contradicts their own earlier statement), "logic" (a \
@@ -1193,3 +1280,98 @@ COMPARE_JUDGE_SYNTHESIS = """<variant letter="{letter}">
 </variant>"""
 
 COMPARE_JUDGE_NO_FACTS = "(no web research in this comparison)"
+
+
+# --- Estimate lines (M17) ----------------------------------------------------------
+
+
+def percent(value: float) -> str:
+    """Format a percentage without a trailing ".0" (12, 12.5)."""
+    return f"{round(value, 1):g}"
+
+
+def estimate_rule(lang: Language, devil: bool, split: str | None) -> str:
+    """Return the estimate instruction appended to a member's task."""
+    if devil:
+        return ESTIMATE_DEVIL_RULE
+    if split:
+        return task(ESTIMATE_SPLIT_RULE, lang, event=split)
+    return task(ESTIMATE_RULE, lang)
+
+
+def split_rule(enabled: bool, split: str | None) -> str:
+    """Tell the moderator whether it may set the split event."""
+    if not enabled:
+        return SPLIT_RULE_OFF
+    if split:
+        return SPLIT_RULE_SET.format(event=split)
+    return SPLIT_RULE_ON
+
+
+def _estimate_text(est: Estimate) -> str:
+    """Render "12% (7-20%)" or "12%"."""
+    if est.low is None or est.high is None:
+        return ESTIMATE_TEXT.format(value=percent(est.value))
+    return ESTIMATE_RANGE.format(
+        value=percent(est.value), low=percent(est.low), high=percent(est.high)
+    )
+
+
+def record_text(record: EstimateRecord) -> str:
+    """Render one parsed estimate, with its split and the value the split implies."""
+    text = _estimate_text(record.estimate)
+    if record.split is None:
+        return text
+    sp = record.split
+    return ESTIMATE_WITH_SPLIT.format(
+        estimate=text,
+        event=percent(sp.event),
+        if_yes=percent(sp.if_yes),
+        if_no=percent(sp.if_no),
+        implied=percent(sp.implied),
+    )
+
+
+def render_estimates(
+    records: dict[str, list[EstimateRecord]],
+    members: Sequence[str],
+    devils: Sequence[str],
+    nick_of: Callable[[str], str],
+    split: str | None,
+    flaws: Sequence[Flaw] = (),
+) -> str:
+    """Render the engine's estimate table for the moderator's debate dynamics."""
+    lines = [ESTIMATES_HEAD]
+    if split:
+        lines.append(ESTIMATES_SPLIT_EVENT.format(event=split))
+    for slug in members:
+        own = records.get(slug, [])[-ESTIMATES_HISTORY:]
+        if slug in devils:
+            history = ESTIMATES_DEVIL
+        else:
+            history = " → ".join(record_text(r) for r in own) or ESTIMATES_NONE
+        lines.append(ESTIMATES_MEMBER.format(nick=nick_of(slug), history=history))
+    if flaws:
+        lines += ["", ESTIMATES_FLAGS]
+        lines += [ESTIMATES_FLAG.format(nick=nick_of(f.member), note=f.note) for f in flaws]
+    return "\n".join(lines)
+
+
+def synthesis_estimates(
+    records: dict[str, list[EstimateRecord]],
+    members: Sequence[str],
+    nick_of: Callable[[str], str],
+    aggregate: tuple[float, float, float] | None,
+) -> str | None:
+    """Render members' last estimates and the engine's aggregate; None without any."""
+    last = [(slug, records[slug][-1]) for slug in members if records.get(slug)]
+    if not last or aggregate is None:
+        return None
+    lines = [
+        SYNTHESIS_ESTIMATE_LINE.format(nick=nick_of(slug), round=r.round, estimate=record_text(r))
+        for slug, r in last
+    ]
+    median, low, high = aggregate
+    return SYNTHESIS_ESTIMATES.format(
+        lines="\n".join(lines), median=percent(median), low=percent(low), high=percent(high)
+    )

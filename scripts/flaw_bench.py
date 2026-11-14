@@ -37,7 +37,7 @@ from typing import Any, TextIO
 from replay_turn import ReplayTurn, _run, build_turn, model_think
 
 from privy_council.config import Settings, load_settings
-from privy_council.engine import checks, context, dynamics
+from privy_council.engine import checks, context, dynamics, ledger, prompts
 from privy_council.models.flaw import Flaw, FlawKind
 
 ORIGINAL = "original"
@@ -62,9 +62,28 @@ COLUMNS = [
 ]
 
 
+def _estimating(turn: ReplayTurn) -> bool:
+    """Whether the turn's task asks for an estimate line (M17 councils, not a devil)."""
+    return any(f"**{labels['estimate']}** N%" in turn.user for labels in prompts.LABELS.values())
+
+
 def _check(turn: ReplayTurn, text: str) -> list[Flaw]:
-    """Run the engine's checks on one answer to a turn."""
-    return checks.check_turn(
+    """Run the engine's checks on one answer to a turn, its estimate line included.
+
+    A replayed turn has no earlier estimate and no split: only a missing or
+    incoherent line can show here, never an unmarked change.
+    """
+    round_ = int(turn.spec.partition(":")[2])
+    estimate: list[Flaw] = []
+    if _estimating(turn):
+        _, estimate = ledger.read_turn(
+            text,
+            member=turn.spec.partition(":")[0],
+            round_=round_,
+            previous=None,
+            split_set=False,
+        )
+    return estimate + checks.check_turn(
         text,
         member=turn.spec.partition(":")[0],
         nick=turn.nick,
@@ -72,7 +91,7 @@ def _check(turn: ReplayTurn, text: str) -> list[Flaw]:
         given=context.given_text(turn.user),
         known=turn.known,
         devil_line=turn.devil_line,
-        round_=int(turn.spec.partition(":")[2]),
+        round_=round_,
     )
 
 

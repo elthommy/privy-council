@@ -24,6 +24,9 @@ NOTICE_REASON_LOOPING = "no new arguments in the last {count} rounds"
 NOTICE_REASON_SETTLED = "the remaining disagreements wouldn't change the decision"
 NOTICE_CONTINUED = "Debate continues. Next round: {speakers}"
 NOTICE_SILENT_ADDED = "{nick} gets the floor too: quiet for {count} rounds"
+NOTICE_SPLIT = (
+    "{nick} split the question on: {event}. Members now give their numbers with and without it"
+)
 NOTICE_FLAW_ANSWERED = "{nick}'s figure flagged as unsourced is in the new research; flag dropped"
 NOTICE_SUMMON_PROPOSAL_IGNORED = "Moderator proposed summoning {who!r}, who can't join; ignored"
 NOTICE_CLOSED = "Session closed; synthesis saved"

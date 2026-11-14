@@ -56,7 +56,12 @@ Read the 102 "contradiction" items in `full.jsonl` (`missed[].kind`) and tally b
 or the user. Record the tally in STATUS.md. If (a) is under about a quarter, build
 only parts B to D and tell the user.
 
-### Part A — position ledger (all councils)
+**Step 0 result (2026-11-14):** of the 102 missed contradictions, about 22 are
+against the member's own earlier turn, 21 inside one turn (10 of them probability
+arithmetic) and 59 against the facts or the user. (a) is under a quarter, so Part A
+was not built; parts B to D were. Part E was not built either (optional).
+
+### Part A — position ledger (all councils) — not built, see step 0
 - New `engine/ledger.py` (pure):
   - `position_line(text, lang) -> str | None`: the text after the `position` label,
     up to the next label or blank line, 300 chars at most.
@@ -133,6 +138,19 @@ computed value in the note (`checks._written` already evaluates the operation).
 value; each flaw kind fires and stays silent on a marked change. Engine integration
 with `FakeBackend`: a 3-round session where one member changes its number without
 the label and one writes an incoherent split; resume from disk keeps the ledger.
+
+### As built (differences from the text above)
+- Module `engine/ledger.py` (parsing, checks, aggregate), mixin
+  `engine/estimate_flow.py`, models in `models/estimate.py`.
+- The estimate flaws stay out of `FIGURE_KINDS`; they reach the moderator through
+  `[engine] estimate_flaws_to_moderator` (default false), listed under the estimate
+  table. Turn it on after the gate passes.
+- `/ask` answers are read into the ledger but never flagged.
+- The split is ignored in the last round's update and after the first one is set.
+- `scripts/flaw_bench.py` runs the estimate checks on turns whose task asks for the
+  line. A replayed turn has no earlier estimate and no split, so the bench measures
+  parse rate and range coherence only; unmarked changes and split coherence need a
+  live session.
 
 ### Bench and gate (GPU about 20 min, 0 Claude)
 Manifest of about 12 turns from saved economics and geopolitics sessions, rounds 1 to

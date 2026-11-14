@@ -56,6 +56,9 @@ def test_example_council_loads() -> None:
     career = councils["career"]
     assert career.protocol.require_research and "never the people" in (career.research_focus or "")
     assert "who actually holds the decision" in career.moderator_brief
+    # Estimate lines (M17): the two forecast councils only, for now.
+    estimating = {name for name, c in councils.items() if c.protocol.estimate == "probability"}
+    assert estimating == {"economics", "geopolitics"}
     assert purchases.members == [
         "specialist",
         "fixer",

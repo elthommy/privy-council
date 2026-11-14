@@ -9,6 +9,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from privy_council.models.estimate import EstimateRecord
 from privy_council.models.flaw import Flaw
 from privy_council.models.persona import Persona
 from privy_council.models.vote import Vote
@@ -178,6 +179,10 @@ class EngineRuntime(BaseModel):
     extra_rounds: int = Field(default=0, ge=0)
     # Flaws found in member turns (M11), by the engine's checks and by the moderator.
     flaws: list[Flaw] = Field(default_factory=list)
+    # Members' parsed estimate lines, oldest first (M17, `estimate: probability` councils),
+    # and the event the moderator split the question on (set once).
+    estimates: dict[str, list[EstimateRecord]] = Field(default_factory=dict)
+    split: str | None = None
 
 
 class SessionMeta(BaseModel):

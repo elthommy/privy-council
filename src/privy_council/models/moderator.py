@@ -70,6 +70,9 @@ class ModeratorDecision(BaseModel):
     # Clear errors in this round's messages, most serious first (M11); a reply
     # without the field reports none.
     flaws: list[ReportedFlaw] = Field(default_factory=list)
+    # The one event members weigh differently, to split their estimates on (M17); the
+    # engine keeps the first one set, in councils with estimate lines only.
+    split: str | None = None
 
     @model_validator(mode="after")
     def _check_stop(self) -> ModeratorDecision:

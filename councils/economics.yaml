@@ -9,6 +9,8 @@ protocol:
   rebuttal_style: targeted
   # Chair searches the web before framing the debate; no session runs without facts.
   require_research: true
+  # Members end each turn with a parsable probability line (M17).
+  estimate: probability
 # Chair's context for this council: Chair stays one persona everywhere.
 research_focus: >-
   the latest facts on the state, company or market the question names: ratings and

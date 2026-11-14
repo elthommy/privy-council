@@ -135,3 +135,19 @@ def test_fresh_starts_over(setup: tuple[Any, list[str]], tmp_path: Path) -> None
     module._bench(args(tmp_path, fresh=True))
     assert calls == ["m1", "m1", "m2", "m2"]
     assert len(records(tmp_path / "out.jsonl", "answer")) == 4
+
+
+def test_estimate_lines_are_checked_only_where_asked() -> None:
+    module = bench()
+    asked = module.ReplayTurn(
+        **{k: v for k, v in turn_record("skeptic:2").items() if k not in ("type", "session")}
+        | {"user": "Will it happen?\n\n# Your task\nEnd with **Estimate:** N% (low-high%)."}
+    )
+    kinds = {f.kind.value for f in module._check(asked, "No number.")}
+    assert "missing_estimate" in kinds
+    clean = module._check(asked, "**Estimate:** 12% (7-20%)")
+    assert not [f for f in clean if "estimate" in f.kind.value]
+    plain = module.ReplayTurn(
+        **{k: v for k, v in turn_record("skeptic:2").items() if k not in ("type", "session")}
+    )
+    assert not [f for f in module._check(plain, "No number.") if "estimate" in f.kind.value]

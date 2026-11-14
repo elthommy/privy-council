@@ -27,7 +27,7 @@ from privy_council.backends.registry import BackendRegistry
 from privy_council.config import Settings
 from privy_council.engine import context, dynamics, prompts
 from privy_council.engine.dossier_flow import DossierFlow
-from privy_council.engine.flaw_flow import FlawFlow
+from privy_council.engine.estimate_flow import EstimateFlow
 from privy_council.engine.memory_flow import MemoryFlow
 from privy_council.engine.moderation import (
     asked_of,
@@ -120,7 +120,7 @@ PHASE_STATES = {
 }
 
 
-class DebateEngine(ResearchFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow, FlawFlow):
+class DebateEngine(ResearchFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow, EstimateFlow):
     """Runs one council session; see the module docstring."""
 
     @classmethod
@@ -475,6 +475,7 @@ class DebateEngine(ResearchFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
             result, fallback = await self._complete(persona, prompt, "turn", stream=True)
             self._post_result(persona, result, fallback)
             self._check_turn(persona, prompt, result.text)
+            self._track_estimate(persona, result.text)
         except (BackendRateLimitError, BackendAuthError):
             raise
         except BackendError as exc:
@@ -509,6 +510,7 @@ class DebateEngine(ResearchFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
                 if turn.prompt
                 else prompts.task(prompts.OPEN_ROUND_TASK, lang, round=rt.round)
             )
+        task += self._estimate_task(persona)
         return context.build_prompt(
             system=self._member_system(persona),
             topic=self.meta.topic,
@@ -567,25 +569,34 @@ class DebateEngine(ResearchFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
             self._record_flaws(self._moderator_flaws(decision))
         planned = self._apply_decision(decision, stats, last_round)
         if decision is not None:
-            # Once the debate ends, new facts would reach only the synthesis, with no
-            # member left to challenge them (an early stop's research too: rare to resume).
-            ending = rt.phase is Phase.SYNTHESIS
-            searched = len(rt.research)
-            relayed = [] if ending else await self._auto_research(decision.research)
-            if self._drop_answered_flaws(rt.research[searched:]):
-                rt.pending = self._with_flaw_turns(planned)
-                self._notice(NOTICE_NEXT.format(speakers=self._speaker_list(rt.pending)))
-            summon = self._summon_ask(decision.summon)
-            # Once the debate ends no member could use an answer (2026-11-01 run): the
-            # synthesis lists the questions instead.
-            questions = [] if ending else decision.questions_for_user
-            first, later = split_questions(questions, self.user_name, self.guests)
-            self._forward_questions([*first, *relayed, *summon])
-            if later:
-                self._notice(NOTICE_NEXT_QUESTION)
-            rt.asked_questions.extend(questions)
-            rt.queued_questions = later
-            rt.unanswered_questions.extend(decision.questions_for_user)
+            await self._follow_decision(decision, planned)
+
+    async def _follow_decision(
+        self, decision: ModeratorDecision, planned: list[PendingTurn]
+    ) -> None:
+        """Act on an update: split, research, the user's questions and a summon proposal."""
+        rt = self.meta.runtime
+        # Once the debate ends, new facts would reach only the synthesis, with no
+        # member left to challenge them (an early stop's research too: rare to resume).
+        ending = rt.phase is Phase.SYNTHESIS
+        if not ending:
+            self._set_split(decision)
+        searched = len(rt.research)
+        relayed = [] if ending else await self._auto_research(decision.research)
+        if self._drop_answered_flaws(rt.research[searched:]):
+            rt.pending = self._with_flaw_turns(planned)
+            self._notice(NOTICE_NEXT.format(speakers=self._speaker_list(rt.pending)))
+        summon = self._summon_ask(decision.summon)
+        # Once the debate ends no member could use an answer (2026-11-01 run): the
+        # synthesis lists the questions instead.
+        questions = [] if ending else decision.questions_for_user
+        first, later = split_questions(questions, self.user_name, self.guests)
+        self._forward_questions([*first, *relayed, *summon])
+        if later:
+            self._notice(NOTICE_NEXT_QUESTION)
+        rt.asked_questions.extend(questions)
+        rt.queued_questions = later
+        rt.unanswered_questions.extend(decision.questions_for_user)
 
     def _moderate_request(
         self, stats: list[dynamics.MemberStats], last_round: bool, judged: Sequence[str] = ()
@@ -622,7 +633,8 @@ class DebateEngine(ResearchFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
             else prompts.QUESTIONS_CAP_ONE,
             dynamics=prompts.render_dynamics(
                 stats, self.nick, rt.stalled_rounds, stall_limit, self._round_figure_flaws()
-            ),
+            )
+            + self._estimates_block(),
             round=rt.round,
             max_rounds=self.max_rounds,
             stop_rule=prompts.stop_rule(
@@ -636,6 +648,7 @@ class DebateEngine(ResearchFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
                 else prompts.RESEARCH_RULE_ON
             ),
             summon_rule=prompts.summon_rule([] if last_round else self._summon_candidates()),
+            split_rule=prompts.split_rule(self._estimating() and not last_round, rt.split),
             asked_rule=prompts.asked_rule(rt.asked_questions, last_round),
             still_open_rule=prompts.still_open_rule(judged),
             flaw_rule=prompts.flaw_rule(
@@ -852,7 +865,8 @@ class DebateEngine(ResearchFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
         answered = {(f.member, f.excerpt) for f in flagged if self._answered(f)}
         flaws = [f for f in flagged if (f.member, f.excerpt) not in answered]
         errors = prompts.synthesis_errors(flaws, self.nick, self.meta.language)
-        parts = (task, self._synthesis_opening(), asked, vote, errors)
+        estimates = self._synthesis_estimates()
+        parts = (task, self._synthesis_opening(), asked, vote, *estimates, errors)
         return self._wrapup_prompt("\n\n".join(p for p in parts if p))
 
     def _synthesis_opening(self) -> str | None:
@@ -903,7 +917,7 @@ class DebateEngine(ResearchFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
             facts_share=self.settings.research.context_share,
             dossier=self._dossier(),
             dossier_share=self.settings.dossier.context_share,
-            task=prompts.ASK_TASK.format(question=question),
+            task=prompts.ASK_TASK.format(question=question) + self._estimate_task(persona),
             budget_tokens=self._budget(persona),
             memory=self._memory(persona),
             memory_share=self.settings.memory.context_share,
@@ -912,3 +926,4 @@ class DebateEngine(ResearchFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
         )
         result, fallback = await self._complete(persona, prompt, "ask", stream=True)
         self._post_result(persona, result, fallback)
+        self._track_estimate(persona, result.text, check=False)

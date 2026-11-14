@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -41,6 +42,8 @@ class ProtocolSettings(BaseModel):
     stall_rounds: int = Field(default=2, ge=0, le=20)
     # Give the floor to a member left out of this many rounds in a row (0: never).
     max_silent_rounds: int = Field(default=2, ge=0, le=20)
+    # Members end each turn with a parsable probability line (M17): forecast councils.
+    estimate: Literal["none", "probability"] = "none"
 
 
 class CouncilPreset(BaseModel):
