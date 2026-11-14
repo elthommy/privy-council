@@ -163,9 +163,9 @@ def _mentions(text: str, value: float) -> bool:
 def _explained(text: str, previous: float) -> bool:
     """Whether the turn says its number changed, in the marker's words or its own.
 
-    Members explain a move without the marker: "I correct myself", "my 45% was the
-    ban's probability", "from 13% to 16%", or a worked chain that sets the old
-    number aside (all four seen 2026-11-14, every one flagged). Naming the old
+    Members explain a move without the marker: "I correct myself", "my 30% was the
+    odds of the rule", "from 9% to 12%", or a worked chain that sets the old number
+    aside (four such turns in one live run, every one flagged). Naming the old
     number shows the member addressed it.
     """
     return marks_update(text) or bool(_STATED_CHANGE.search(text)) or _mentions(text, previous)
