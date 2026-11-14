@@ -109,6 +109,8 @@ async def test_estimate_lines_run_through_a_session(
     assert not any(
         f.member == "contrarian" and f.kind is FlawKind.MISSING_ESTIMATE for f in rt.flaws
     )
+    # The estimate and split numbers are the members' own: never flagged as unsourced.
+    assert not any(f.kind is FlawKind.UNSOURCED for f in rt.flaws)
     moderate = [r for r in h.requests() if r.tag.purpose == "moderate"]
     first_update = moderate[0].messages[0].content
     assert "- @Rigor: 12% (7-20%)" in first_update

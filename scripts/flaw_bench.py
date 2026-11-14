@@ -85,6 +85,7 @@ def _check(turn: ReplayTurn, text: str) -> list[Flaw]:
             previous=None,
             split_set=False,
         )
+        text = ledger.blank_lines(text)  # as the engine does: no figure check there
     return estimate + checks.check_turn(
         text,
         member=turn.spec.partition(":")[0],

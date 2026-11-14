@@ -102,6 +102,15 @@ def test_a_moved_estimate_needs_the_update_marker() -> None:
     assert read("**Estimate:** 10% (3-12%)", previous=before(12)) == []  # under 3 points
 
 
+def test_blank_lines_hides_only_the_estimate_and_split_numbers() -> None:
+    text = "Debt 124% of GDP.\n**Split:** P(event) 40%; if it happens 20%; if it doesn't 5%\n"
+    text += "**Estimate:** 22% (12-32%)"
+    blanked = ledger.blank_lines(text)
+    assert len(blanked) == len(text)
+    assert "124%" in blanked
+    assert not any(n in blanked for n in ("40%", "22%", "12-32%"))
+
+
 def test_aggregate() -> None:
     assert ledger.aggregate([]) is None
     assert ledger.aggregate([12, 8, 30]) == (12, 8, 30)

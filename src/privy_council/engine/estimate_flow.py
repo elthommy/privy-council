@@ -9,7 +9,7 @@ and gives no estimate.
 
 from __future__ import annotations
 
-from privy_council.engine import ledger, prompts
+from privy_council.engine import context, ledger, prompts
 from privy_council.engine.flaw_flow import FlawFlow
 from privy_council.engine.notices import NOTICE_SPLIT
 from privy_council.models.flaw import ESTIMATE_KINDS, Flaw
@@ -35,6 +35,12 @@ class EstimateFlow(FlawFlow):
         devil = persona.meta.role is Role.DEVIL_ADVOCATE
         rule = prompts.estimate_rule(self.meta.language, devil, self.meta.runtime.split)
         return f"\n\n{rule}"
+
+    def _check_turn(self, persona: Persona, prompt: context.Prompt, text: str) -> None:
+        """Run the engine's checks, minus the figure check on the estimate lines."""
+        if self._estimating():
+            text = ledger.blank_lines(text)
+        super()._check_turn(persona, prompt, text)
 
     def _track_estimate(self, persona: Persona, text: str, *, check: bool = True) -> None:
         """Read a member turn's estimate lines into the ledger; flag them if `check`.

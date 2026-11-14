@@ -190,6 +190,19 @@ def read_turn(
     return EstimateRecord(round=round_, estimate=est, split=split), flaws
 
 
+def blank_lines(text: str) -> str:
+    """Return `text` with its estimate and split lines blanked, offsets kept.
+
+    Their numbers are the member's own judgment, checked here by arithmetic: the
+    figure check would flag a range like "12-32%" as unsourced (2026-11-14 run).
+    """
+    chars = list(text)
+    for pattern in (_ESTIMATE, _SPLIT):
+        for match in pattern.finditer(text):
+            chars[match.start() : match.end()] = " " * (match.end() - match.start())
+    return "".join(chars)
+
+
 def aggregate(values: Sequence[float]) -> tuple[float, float, float] | None:
     """Return the median, lowest and highest of the members' estimates, or None if none."""
     if not values:
