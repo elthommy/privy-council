@@ -211,10 +211,23 @@ stop and report before M19.
 
 ## M19 — Repair before posting
 
-### Decision needed first
+### Decision (user, 2026-11-14): yes, build it, off by default
 Decision 26 says a flawed turn's text is never changed. Here the member itself
-rewrites its draft before it is posted, and the draft is kept in the transcript. Get
-the user's explicit yes before building.
+rewrites its draft before it is posted, and the draft is kept in the transcript. The
+user accepted this exception knowing the side effects:
+- the chat shows the repaired text, the raw draft only through `/flaws`;
+- no typing effect for local members while repair is on;
+- a flagged turn costs one more local call;
+- a rewrite can drop a right claim or add a new one the checks can't see;
+- a false flag now changes the text, so only precise checks may trigger a repair;
+- the Chair and the synthesis see fewer errors than the seat really made.
+
+It ships with `repair_turns = "off"`. After the bench, show the user the results per
+model and let them turn it on; don't change the default yourself. `/flaws` must show
+how many turns each member had repaired, so a seat that needs it on most turns is
+visible and can be replaced. The alternative "post the draft, then a correction
+message" was considered and not chosen: the error stays in the chat for other
+members to read.
 
 ### Design
 - Config: `[engine] repair_turns: Literal["off", "local"] = "off"`. Ollama members
