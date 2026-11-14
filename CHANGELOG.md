@@ -8,6 +8,9 @@ All notable changes, by milestone. Dates are when each milestone was built.
 - **The Chair can split a forecast on one event** the members weigh differently (say, whether lenders extend a loan). Members then also write their probability of the event and of the outcome with and without it, and the engine checks that these add up to their estimate.
 - **The devil's advocate gives no probability** in forecast councils: it names the link it thinks the others misprice. Its arguments go under the disagreements, not into the confidence spread as a dissenting number.
 - Estimate-line flags are logged and listed by `/flaws`; they reach the Chair only with `[engine] estimate_flaws_to_moderator = true` (off until a bench shows they are precise enough).
+- A member's own range on its estimate line is no longer flagged as an unsourced figure.
+- **`gemma4:26b` prefills with `num_batch = 512`** (was 2048): its larger buffer left it short of GPU memory when another program took some, and the Contrarian then missed every round of a debate. About 10 s more per gemma turn.
+- **A repeated out-of-memory error logs who holds the GPU memory** (`nvidia-smi`, in `data/logs/council.log`), so the next one shows which program took it.
 
 - **Skeptic goes back to `gemma4:26b`**: with Rigor and Skeptic both on `nemotron-3.5-bolt`, Skeptic gave Rigor's reasons, assumption included. A different model family keeps the career seats apart.
 - **The Chair's notes check no longer deletes notes**: it can only rewrite the part of a member's note that misstates you. With a local Chair, the check had emptied most notes about the members' own arguments and lessons.

@@ -202,8 +202,25 @@ async def test_model_load_timeout_or_oom_is_retried_once(
     assert len(httpx_mock.get_requests()) == 2
 
 
+REAL_SNAPSHOT = ollama_module.gpu_snapshot  # before the autouse patch
+
+
+@pytest.fixture(autouse=True)
+def no_nvidia_smi(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Never run the real nvidia-smi from a test."""
+
+    async def snapshot() -> str:
+        """A fixed GPU snapshot."""
+        return "11500 MiB, 11922 MiB; 42, /usr/bin/other-app, 3000 MiB"
+
+    monkeypatch.setattr(ollama_module, "gpu_snapshot", snapshot)
+
+
 async def test_oom_twice_gets_a_third_try_after_a_delay(
-    backend: OllamaBackend, httpx_mock: HTTPXMock, monkeypatch: pytest.MonkeyPatch
+    backend: OllamaBackend,
+    httpx_mock: HTTPXMock,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     waits: list[float] = []
 
@@ -218,6 +235,40 @@ async def test_oom_twice_gets_a_third_try_after_a_delay(
     assert (await backend.complete(request())).text == "Loaded."
     assert len(httpx_mock.get_requests()) == 3
     assert waits == [ollama_module.OOM_RETRY_DELAY_S]
+    # Who held the VRAM goes to the log.
+    assert "/usr/bin/other-app, 3000 MiB" in caplog.text
+
+
+async def test_gpu_snapshot_reads_nvidia_smi(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, ...]] = []
+
+    class Proc:
+        """A finished nvidia-smi."""
+
+        def __init__(self, out: bytes) -> None:
+            """Keep the output."""
+            self.out = out
+
+        async def communicate(self) -> tuple[bytes, bytes]:
+            """Return the output."""
+            return self.out, b""
+
+    async def fake_exec(*argv: str, **_: object) -> Proc:
+        """Answer each query with one line, or fail like a missing binary."""
+        calls.append(argv)
+        return Proc(b"9000 MiB, 11922 MiB\n" if len(calls) == 1 else b"7, " + b"x" * 300 + b"\n")
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+    text = await REAL_SNAPSHOT()
+    assert text.startswith("9000 MiB, 11922 MiB; 7, x")
+    assert len(text) < 160 and all(a[0] == "nvidia-smi" for a in calls)
+
+    async def missing(*argv: str, **_: object) -> Proc:
+        """No nvidia-smi on this machine."""
+        raise FileNotFoundError(argv[0])
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", missing)
+    assert await REAL_SNAPSHOT() == ""
 
 
 async def test_oom_three_times_fails(

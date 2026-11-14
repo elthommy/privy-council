@@ -41,7 +41,9 @@ think = false   # thinks by default; on, turns ran 36-40 s (target: <= ~30 s)
 # and qwen3.6 costs ~11-13 s per GPU swap (benchmarked 2026-10-16).
 [ollama.models."gemma4:26b"]
 num_ctx = 12288   # 8k dropped every recent message once a file was attached (spike 5)
-num_batch = 2048   # prefill 2.4x faster, same tok/s; 4096 costs 13% tok/s (spike 6)
+# 2048 prefilled 2.4x faster (spike 6), but its ~0.5 GB larger compute buffer left
+# gemma short of VRAM in two evenings of runtime OOMs (2026-11-11, 11-14): ~+10 s a turn.
+num_batch = 512
 think = false   # thinks by default; on, the draft eats the 1500-token cap (empty answers)
 
 # Third families (2026-10-18), chosen with scripts/replay_turn.py: in replayed turns

@@ -44,7 +44,35 @@ OUT_OF_MEMORY = "out of memory"
 # A second OOM came 10 s after the first when ~2 GB of VRAM was held outside Ollama
 # (desktop, browser; 2026-11-07): a third try waits for that memory to be released.
 OOM_RETRY_DELAY_S = 15.0
+# OOMs came in windows where every gemma call failed and none did outside them
+# (2026-11-11, 11-14), with as much VRAM free at load as in passing runs: something
+# grabbed memory after Ollama's reading. Its snapshot goes to the log to name it.
+GPU_QUERY = (
+    ["nvidia-smi", "--query-gpu=memory.used,memory.total", "--format=csv,noheader"],
+    [
+        "nvidia-smi",
+        "--query-compute-apps=pid,process_name,used_memory",
+        "--format=csv,noheader",
+    ],
+)
+GPU_QUERY_TIMEOUT_S = 5.0
+GPU_LINE_CHARS = 120  # process names can be whole command lines
 THINK_END = "</think>"
+
+
+async def gpu_snapshot() -> str:
+    """Return nvidia-smi's VRAM use and the processes holding it ("" if unavailable)."""
+    lines: list[str] = []
+    for argv in GPU_QUERY:
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *argv, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL
+            )
+            out, _ = await asyncio.wait_for(proc.communicate(), GPU_QUERY_TIMEOUT_S)
+        except (OSError, TimeoutError):
+            return ""
+        lines += [line[:GPU_LINE_CHARS] for line in out.decode(errors="replace").splitlines()]
+    return "; ".join(line.strip() for line in lines if line.strip())
 
 
 def strip_reasoning(text: str) -> str:
@@ -143,7 +171,10 @@ class OllamaBackend:
             if OUT_OF_MEMORY not in str(exc):
                 raise
             logger.warning(
-                "Ollama (%s) out of memory twice; retrying in %.0f s", model, OOM_RETRY_DELAY_S
+                "Ollama (%s) out of memory twice; retrying in %.0f s. GPU: %s",
+                model,
+                OOM_RETRY_DELAY_S,
+                await gpu_snapshot() or "nvidia-smi unavailable",
             )
         await asyncio.sleep(OOM_RETRY_DELAY_S)
         return await self._chat(payload, model, timeout, on_text)
