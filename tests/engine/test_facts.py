@@ -92,6 +92,16 @@ def test_a_figure_from_another_fact_is_miscited() -> None:
     ]
 
 
+def test_a_value_inside_the_cited_range_passes() -> None:
+    sources, given = prompt_parts("- Used parts sell for about $40-$75.")
+    turn = "A used part is ~$60 [F1], a new one more."
+    flaws = checks.check_turn(turn, member="m", nick="M", sources=sources, given=given, known=[])
+    assert flaws == []
+    outside = turn.replace("$60", "$90")
+    flaws = checks.check_turn(outside, member="m", nick="M", sources=sources, given=given, known=[])
+    assert [f.note for f in flaws] == ["$90 is not in [F1]."]
+
+
 def test_a_figure_no_fact_holds_is_miscited_not_unsourced() -> None:
     assert cite("Acme owes $7.1bn [F1].") == ["miscited: $7.1bn is not in [F1]."]
 

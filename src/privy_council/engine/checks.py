@@ -979,6 +979,8 @@ def _miscited(
     for flaw in figure_flaws(sentence, f"{held}\n{others}", held, member, round_):
         if flaw.kind not in (FlawKind.UNSOURCED, FlawKind.WRONG_UNIT):
             continue
+        if _within_range(flaw.note, held):
+            continue  # "~$60 for a used part [F7]" where F7 says "$40-$75"
         found = [i for i, fact in shown.items() if i not in cited and _holds(fact, flaw.note)]
         note = (
             prompts.CITATION_NOTE_ELSEWHERE.format(
@@ -989,6 +991,20 @@ def _miscited(
         )
         out.append(_citation(member, FlawKind.MISCITED, flaw.excerpt, note, round_))
     return out
+
+
+def _within_range(figure: str, held: str) -> bool:
+    """Whether every value of a figure lies in a range the cited facts give, same unit.
+
+    A member's estimate inside the fact's own range is honest (bench 2026-11-14).
+    """
+    figs = figures(figure)
+    ranges = [(f.family, min(f.values), max(f.values)) for f in figures(held) if len(f.values) == 2]
+    return bool(figs) and all(
+        any(fam == fig.family and lo <= v <= hi for fam, lo, hi in ranges)
+        for fig in figs
+        for v in fig.values
+    )
 
 
 def _holds(fact: str, figure: str) -> bool:

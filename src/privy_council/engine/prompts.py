@@ -13,7 +13,7 @@ from privy_council.models.session import DebateState, Message
 from privy_council.models.vote import Vote
 from privy_council.util.language import Language
 
-PROMPTS_VERSION = "61"
+PROMPTS_VERSION = "62"
 
 # Backends that accept a single user turn (the claude CLI on stdin) flatten a
 # multi-message conversation with these labels.
@@ -280,6 +280,12 @@ Answer in a few sentences, as yourself."""
 # Appended to every member task, so the engine can read each member's number instead
 # of the moderator re-reading it from the prose (2026-11-14 economics run: a 30-40 %
 # held for five rounds on three different justifications).
+# Appended to a member's task when the session has fresh facts (M18): the rule in
+# MEMBER_PROTOCOL alone was followed in 30 % (gemma4) and 4 % (Bolt) of the sentences
+# using a fact's figure (bench 2026-11-14); the task's own rules are followed best.
+FACT_TAG_RULE = """\
+Fresh facts: when you state a fact or a figure from them, put its tag right after it, \
+as in "debt was $9.2bn [F7]". Tag only what that fact says."""
 ESTIMATE_RULE = """\
 End with this line, alone: **{estimate}** N% (low-high%), where N is your probability \
 for the question as the moderator framed it and low-high your range."""

@@ -510,7 +510,7 @@ class DebateEngine(ResearchFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
                 if turn.prompt
                 else prompts.task(prompts.OPEN_ROUND_TASK, lang, round=rt.round)
             )
-        task += self._estimate_task(persona)
+        task += self._facts_task() + self._estimate_task(persona)
         return context.build_prompt(
             system=self._member_system(persona),
             topic=self.meta.topic,
@@ -917,7 +917,9 @@ class DebateEngine(ResearchFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
             facts_share=self.settings.research.context_share,
             dossier=self._dossier(),
             dossier_share=self.settings.dossier.context_share,
-            task=prompts.ASK_TASK.format(question=question) + self._estimate_task(persona),
+            task=prompts.ASK_TASK.format(question=question)
+            + self._facts_task()
+            + self._estimate_task(persona),
             budget_tokens=self._budget(persona),
             memory=self._memory(persona),
             memory_share=self.settings.memory.context_share,

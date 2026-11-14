@@ -15,6 +15,7 @@ from privy_council.backends.base import (
 )
 from privy_council.backends.fake import Reply
 from privy_council.config import Settings
+from privy_council.engine import prompts
 from privy_council.engine.research import (
     ResearchMode,
     ResearchRequiredError,
@@ -391,5 +392,6 @@ async def test_members_see_fact_tags_and_a_wrong_citation_is_logged(
     turn = next(r for r in h.requests() if r.tag.purpose == "turn")
     assert "- [F1] Gold is about $4,170/oz" in turn.messages[0].content
     assert "put its tag right after it" in turn.system
+    assert prompts.FACT_TAG_RULE in turn.messages[-1].content.split("# Your task")[-1]
     [flaw] = [f for f in h.engine.meta.runtime.flaws if f.member == "rigor"]
     assert (flaw.kind.value, flaw.note) == ("miscited", "$3,900 is not in [F1].")

@@ -364,6 +364,10 @@ class EngineCore:
         """Return the session's web research for prompts, or None."""
         return context.facts_text(self.meta.runtime.research)
 
+    def _facts_task(self) -> str:
+        """Return the fact-tag rule to append to a member's task ("" with no facts)."""
+        return f"\n\n{prompts.FACT_TAG_RULE}" if self.meta.runtime.research else ""
+
     def _dossier(self) -> str | None:
         """Return the files the user attached, for prompts, or None."""
         return context.dossier_text(self.meta.runtime.dossier)

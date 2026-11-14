@@ -168,6 +168,7 @@ async def test_councils_without_estimates_are_unchanged(
     for _ in range(3):
         await h.engine.step()
     assert "Estimate:" not in turn_task(h, "rigor", 0)
+    assert "Fresh facts:" not in turn_task(h, "rigor", 0)  # no research, no tag rule
     moderate = next(r for r in h.requests() if r.tag.purpose == "moderate")
     assert "- split: always null." in moderate.messages[0].content
     rt = h.engine.meta.runtime
