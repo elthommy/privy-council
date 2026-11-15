@@ -16,7 +16,7 @@ from privy_council.engine import prompts
 
 BULLET = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+")
 # "[F7]", "[F7, F9]", "[F7; F9]", and a tier after the ids ("[F7, primary]", M20).
-TAG = re.compile(r"\[(F\d+(?:\s*[,;]\s*F\d+)*)(?:\s*,\s*[a-z]+)?\]")
+TAG = re.compile(r"\[(F\d+(?:\s*[,;/]\s*F\d+)*)(?:\s*,\s*[a-z]+)?\]")
 _ID = re.compile(r"F\d+")
 # A fact's tag at the start of its line, after the bullet, as `tag_block` writes it.
 _TAGGED_LINE = re.compile(r"^\s*(?:(?:[-*•]|\d+[.)])\s+)?\[(F\d+)\] ?", re.MULTILINE)

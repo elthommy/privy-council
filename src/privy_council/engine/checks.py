@@ -88,6 +88,11 @@ _EXPRESSION = re.compile(
 _PER_MONTH = re.compile(r"\s?(?:a|per|each|/|par)\s?(?:months?|mois)\b", re.IGNORECASE)
 _PER_YEAR = re.compile(r"\s?(?:a|per|each|/|par)\s?(?:years?|an|année)\b", re.IGNORECASE)
 _MONTHS_A_YEAR = 12
+# The figures a fact tag vouches for (`vouched`): sizes, counts and years before a
+# tag describe the thing, they aren't what the fact is cited for.
+_VOUCHED_FAMILIES = frozenset({"money", "%", "x", _TIMES})
+_CLAUSE_BREAK = re.compile(r";|\s(?:or|and|but|while|whereas|ou|et|mais)\s", re.IGNORECASE)
+_VOUCH_WORDS = 8  # the cited figure sits right before its tag: 0-5 words in benches
 # A percentage written as a share of something: "28.5% of savings", "12 % de l'épargne".
 _SHARE_OF = re.compile(r"\s?(?:of|de|du|des|d')(?=[\s'])", re.IGNORECASE)
 # A weighted sum written out: "0.3\u00d735% + 0.7\u00d720%", "30% x 35% + 70% x 20%".
@@ -925,7 +930,7 @@ def check_turn(
         flaws += devil_line_flaw(text, member, devil_line, round_)
     tagged = facts.tagged_sentences(text)
     flaws += citation_flaws(text, tagged, sources, given, member, round_)
-    spans = [(start, end) for start, end, _ in tagged]
+    spans = [(start, end) for start, end, _ in vouched(text, tagged)]
     return flaws + figure_flaws(text, sources, given, member, round_, skip=spans)
 
 
@@ -940,22 +945,52 @@ def citation_flaws(
     """Check each sentence that cites facts against the facts it cites (M18).
 
     Unknown citation: a tag that isn't in the member's prompt (trimmed, or invented).
-    Miscited: a figure that none of the cited facts holds and that isn't in the rest
-    of the prompt (the user's messages, the dossier) nor the turn's own arithmetic;
-    the note names another fact that holds it, if one does.
+    Miscited: a figure a tag vouches for (`vouched`) that none of its facts holds,
+    even if the rest of the prompt has it: "$90 for a 16GB kit [F5]" where F5
+    says €310 (bench 2026-11-14: the price was elsewhere in the prompt). The note names
+    another fact that holds it, if one does. `sources` is unused, kept for symmetry
+    with `figure_flaws`: the sentence's other figures get the ordinary check.
     """
-    section = facts.facts_section(given)
-    shown = facts.in_prompt(section)
-    others = sources.replace(section, "") if section else sources
+    del sources
+    shown = facts.in_prompt(facts.facts_section(given))
     out: list[Flaw] = []
-    for start, end, ids in tagged:
+    for start, _end, ids in tagged:
         excerpt = _excerpt(text, start, start)
         for tag in (i for i in ids if i not in shown):
             note = prompts.CITATION_NOTE_UNKNOWN.format(tag=prompts.FACT_TAG.format(id=tag))
             out.append(_citation(member, FlawKind.UNKNOWN_CITATION, excerpt, note, round_))
+    for fig_start, fig_end, ids in vouched(text, tagged):
         cited = [i for i in ids if i in shown]
         if cited:
-            out += _miscited(text[start:end], cited, shown, others, member, round_)
+            out += _miscited(text, (fig_start, fig_end), cited, shown, member, round_)
+    return out
+
+
+def vouched(
+    text: str, tagged: Sequence[tuple[int, int, list[str]]]
+) -> list[tuple[int, int, list[str]]]:
+    """Return the figures the tags vouch for, as (start, end, ids) spans in `text`.
+
+    A tag vouches for the last money, percentage or multiple figure before it, after
+    the previous tag of its sentence: in "$230 for a CPU + $90 for a 16GB kit [F5]"
+    it is the $90, not the CPU's estimate nor the kit's size (bench 2026-11-14).
+    A tag with no such figure before it, or one across a clause break ("pass 6% or
+    the firm cuts jobs [F4]") or many words away ("a 30% cut is unlikely, since it
+    rests on ... the filings report [F1]"), vouches for nothing.
+    """
+    out: list[tuple[int, int, list[str]]] = []
+    for start, end, _ids in tagged:
+        sentence = text[start:end]
+        lo = 0
+        for match in facts.TAG.finditer(sentence):
+            figs = [
+                f for f in figures(sentence[lo : match.start()]) if f.family in _VOUCHED_FAMILIES
+            ]
+            gap = sentence[lo + figs[-1].end : match.start()] if figs else ""
+            if figs and len(gap.split()) <= _VOUCH_WORDS and not _CLAUSE_BREAK.search(gap):
+                ids = facts.tags(match.group())
+                out.append((start + lo + figs[-1].start, start + lo + figs[-1].end, ids))
+            lo = match.end()
     return out
 
 
@@ -965,18 +1000,28 @@ def _citation(member: str, kind: FlawKind, excerpt: str, note: str, round_: int)
 
 
 def _miscited(
-    sentence: str,
+    text: str,
+    span: tuple[int, int],
     cited: list[str],
     shown: dict[str, str],
-    others: str,
     member: str,
     round_: int,
 ) -> list[Flaw]:
-    """Return a MISCITED flaw for each figure the cited facts don't hold."""
+    """Return a MISCITED flaw if the cited facts don't hold the vouched figure.
+
+    The figure is checked in its sentence, so the sentence's own arithmetic still
+    counts ("$3.7bn left after $5.5bn [F1]").
+    """
+    lo = max((m.end() for m in _SENTENCE_END.finditer(text, 0, span[0])), default=0)
+    after = _SENTENCE_END.search(text, span[1])
+    hi = after.start() if after else len(text)
+    sentence = text[lo:hi]
+    rel = (span[0] - lo, span[1] - lo)
     held = "\n".join(shown[i] for i in cited)
     tags = ", ".join(prompts.FACT_TAG.format(id=i) for i in cited)
+    skip = [(0, rel[0]), (rel[1], len(sentence) + 1)]
     out: list[Flaw] = []
-    for flaw in figure_flaws(sentence, f"{held}\n{others}", held, member, round_):
+    for flaw in figure_flaws(sentence, held, held, member, round_, skip=skip):
         if flaw.kind not in (FlawKind.UNSOURCED, FlawKind.WRONG_UNIT):
             continue
         if _within_range(flaw.note, held):

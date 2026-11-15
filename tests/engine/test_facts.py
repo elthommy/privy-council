@@ -159,3 +159,47 @@ def test_the_export_shows_tags_and_keeps_the_missing_line() -> None:
 def test_billions_written_with_b(turn: str, source: str, flagged: bool) -> None:
     flaws = checks.figure_flaws(turn, source, source, "m")
     assert bool([f for f in flaws if f.kind.value == "unsourced"]) == flagged
+
+
+def test_the_tag_vouches_for_the_last_amount_before_it() -> None:
+    sources, given = prompt_parts("- A 16GB kit was €310 at the second-cheapest shop.")
+    turn = "Path B is ~$470: $230 for a CPU + $150 for a board + $90 for a 16GB kit [F1]."
+    flaws = checks.check_turn(turn, member="m", nick="M", sources=sources, given=given, known=[])
+    assert [f"{f.kind.value}: {f.note}" for f in flaws if f.kind.value == "miscited"] == [
+        "miscited: $90 is not in [F1]."
+    ]
+
+
+def test_an_amount_found_elsewhere_in_the_prompt_is_still_miscited() -> None:
+    assert cite("Acme owes $5.5bn [F3].", user="<Ana> what about the $5.5bn?") == [
+        "miscited: $5.5bn is in [F1], not in [F3]."
+    ]
+
+
+def test_sizes_before_a_tag_are_not_vouched_for() -> None:
+    turn = "I assume you keep 48GB, since 96GB of new memory costs too much [F1]."
+    assert cite(turn, user="<Ana> I have 96GB and maybe 48GB") == []
+
+
+def test_each_tag_vouches_for_its_own_amount() -> None:
+    assert cite("Acme owes $9.2bn [F1] while rates are 4.5% [F3].") == []
+    assert cite("Acme owes $9.2bn [F3] while rates are 4.5% [F1].") == [
+        "miscited: $9.2bn is in [F1], not in [F3].",
+        "miscited: 4.5% is in [F3], not in [F1].",
+    ]
+
+
+def test_a_tag_does_not_vouch_across_a_clause_break() -> None:
+    assert cite("If rates pass 6% or Acme cuts more jobs [F4], sell.") == []
+
+
+def test_tags_joined_by_a_slash() -> None:
+    assert facts.tags("Acme owes $9.2bn [F3/F1].") == ["F3", "F1"]
+    assert cite("Acme owes $9.2bn [F3/F1].") == []
+
+
+def test_a_tag_does_not_vouch_for_a_figure_many_words_back() -> None:
+    turn = (
+        "A 30% cut is unlikely, since it rests on the strong cash position the filings report [F1]."
+    )
+    assert cite(turn) == ["unsourced: 30%"]  # the ordinary check, not a miscitation
