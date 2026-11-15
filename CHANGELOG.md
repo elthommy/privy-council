@@ -2,13 +2,14 @@
 
 All notable changes, by milestone. Dates are when each milestone was built.
 
-## Unreleased (2026-10-25 – 2026-11-14)
+## Unreleased (2026-10-25 – 2026-11-15)
 
 - **Forecast councils give numbers the engine can read** (`economics`, `geopolitics`; council option `estimate: probability`): each member ends every turn with `**Estimate:** N% (low–high%)`. The engine keeps each member's numbers, flags a value outside its own range and a number moved without "I update:", and shows the Chair and the synthesis the parsed numbers, so neither re-reads them from the prose. The synthesis gets the council's median and range from the engine.
 - **The Chair can split a forecast on one event** the members weigh differently (say, whether lenders extend a loan). Members then also write their probability of the event and of the outcome with and without it, and the engine checks that these add up to their estimate.
 - **The devil's advocate gives no probability** in forecast councils: it names the link it thinks the others misprice. Its arguments go under the disagreements, not into the confidence spread as a dissenting number.
 - Estimate-line flags are logged and listed by `/flaws`; they reach the Chair only with `[engine] estimate_flaws_to_moderator = true` (off until a bench shows they are precise enough).
 - **Fresh facts carry tags such as [F7]**, and members put the tag after a fact they use ("debt was $9.2bn [F7]"). The engine checks a tagged claim against that one fact: a figure the fact doesn't give, or a tag that is no fact, is flagged (with the fact that does hold the figure, if one does). These flags show in `/flaws` only, until a bench shows they are precise enough for the Chair.
+- Fact tags written as a span (`[F3-F5]`) are read, a figure a tagged sentence quotes from its facts is no longer flagged for a different word after the number ("5 months" for "five months"), and a range times a number ("$310-350M x 4") counts as the member's own arithmetic.
 - **`/facts`** lists the fresh facts with their tags (TUI, REPL, and Discord for everyone); the exports show the tags too.
 - A member's own range on its estimate line is no longer flagged as an unsourced figure.
 - **A moved estimate is flagged only when no reason is given**: a change explained in other words ("I correct myself", "my 30% was…", "from 9% to 12%", or a turn that names its old number) counts as explained, and the round after you speak to the council isn't checked, since your answer may have changed the question.

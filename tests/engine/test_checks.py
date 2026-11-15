@@ -242,6 +242,32 @@ def test_wrong_operands_and_rounded_prices_stay_unsourced(text: str, note: str) 
     assert note in [f.note for f in checks.figure_flaws(text, PULLS, PULLS, "saver")]
 
 
+QUARTER = "# Fresh facts\n- Quarterly revenue of $310-350M (https://x)"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "A year is $310-350M x 4, so $1.24-1.4B.",  # a range times a letter x
+        "A year is $310-350M \u00d7 4 = $1.24-1.4B.",
+        "At the top, $350M x 4 gives $1.4B a year.",
+    ],
+)
+def test_a_range_times_a_number_is_the_members_math(text: str) -> None:
+    assert checks.figure_flaws(text, QUARTER, "", "analyst") == []
+
+
+def test_a_range_before_a_times_sign_stays_a_figure() -> None:
+    figs = checks.figures("A year is $310-350M x 4, so $1.9B.")
+    assert [f.text for f in figs] == ["$310-350M", "$1.9B"]
+    assert figs[0].family == "money"
+    notes = [
+        f.note
+        for f in checks.figure_flaws("A year is $310-350M x 4, so $1.9B.", QUARTER, "", "analyst")
+    ]
+    assert notes == ["$1.9B"]
+
+
 def test_prices_in_euros_excuse_nothing() -> None:
     sources = "<Thomas> a blade costs €10; I shave 3 times a week"
     flaws = checks.figure_flaws("A starter razor is about €30.", sources, sources, "fixer")

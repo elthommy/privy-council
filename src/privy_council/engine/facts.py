@@ -15,9 +15,13 @@ from dataclasses import dataclass
 from privy_council.engine import prompts
 
 BULLET = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+")
-# "[F7]", "[F7, F9]", "[F7; F9]", and a tier after the ids ("[F7, primary]", M20).
-TAG = re.compile(r"\[(F\d+(?:\s*[,;/]\s*F\d+)*)(?:\s*,\s*[a-z]+)?\]")
+# "[F7]", "[F7, F9]", "[F7; F9]", a span "[F7-F9]", and a tier after the ids
+# ("[F7, primary]", M20).
+TAG = re.compile(r"\[(F\d+(?:\s*[,;/\-\u2013]\s*F\d+)*)(?:\s*,\s*[a-z]+)?\]")
 _ID = re.compile(r"F\d+")
+# A span of ids, "F12-F15" or "F12\u2013F15" (bench 2026-11-15); a longer one is a typo.
+_SPAN = re.compile(r"F(\d+)\s*[\-\u2013]\s*F(\d+)")
+_MAX_SPAN = 10
 # A fact's tag at the start of its line, after the bullet, as `tag_block` writes it.
 _TAGGED_LINE = re.compile(r"^\s*(?:(?:[-*•]|\d+[.)])\s+)?\[(F\d+)\] ?", re.MULTILINE)
 # Where a sentence ends: after . ! or ? (and any tags right after it) before a space,
@@ -102,8 +106,17 @@ def tags(sentence: str) -> list[str]:
     """Return the fact ids a sentence cites, in order, without repeats."""
     ids: list[str] = []
     for match in TAG.finditer(sentence):
-        ids += [i for i in _ID.findall(match.group(1)) if i not in ids]
+        inside = _SPAN.sub(_spelled_span, match.group(1))
+        ids += [i for i in _ID.findall(inside) if i not in ids]
     return ids
+
+
+def _spelled_span(span: re.Match[str]) -> str:
+    """Write a span of ids out in full: "F3-F5" gives "F3 F4 F5"."""
+    lo, hi = int(span[1]), int(span[2])
+    if not 0 <= hi - lo <= _MAX_SPAN:
+        return f"F{lo} F{hi}"
+    return " ".join(f"F{n}" for n in range(lo, hi + 1))
 
 
 def sentences(text: str) -> list[tuple[int, int]]:

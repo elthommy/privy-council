@@ -69,9 +69,9 @@ _LABEL = re.compile(
 )
 _TIMES = "\u00d7"  # the multiplication sign, as in "3\u00d7"
 _NUMBER_NEXT = re.compile(r"\s?\d")
-# A number written as the right side of an operation: "/ 3", "* 12", "divided by 455".
+# A number written as the right side of an operation: "/ 3", "* 12", " x 4", "divided by 455".
 _OPERAND = re.compile(
-    r"(?:[/\u00f7*\u00d7]|\b(?:divided by|times|divisés? par|fois)\b)"
+    r"(?:[/\u00f7*\u00d7]|(?<=\s)x(?=\s?\d)|\b(?:divided by|times|divisés? par|fois)\b)"
     rf"\s?(?P<n>{_NUM})(?![\d.,]*\s?%)",
     re.IGNORECASE,
 )
@@ -298,9 +298,16 @@ def figures(text: str, extra: Collection[str] = (), named: Collection[str] = ())
             continue
         if _model_size(m):
             continue
-        if m["unit"] in (_TIMES, "x") and _NUMBER_NEXT.match(blanked, m.end()):
-            continue  # "0.3\u00d735%": a multiplication sign, not a "3x" multiple
-        unit, end = word if word else (m["unit"], m.end())
+        end = m.end()
+        unit = m["unit"]
+        if unit in (_TIMES, "x") and _NUMBER_NEXT.match(blanked, end):
+            # "0.3\u00d735%": a multiplication sign, not a "3x" multiple; "$310-350M x 4"
+            # is still money, times an operand (`_OPERAND`).
+            if not (m["cur"] or m["am"] or m["bm"]):
+                continue
+            unit, end = None, m.start("unit")
+        if word:
+            unit, end = word
         out.append(
             Figure(
                 text=blanked[m.start() : end].strip(),
@@ -931,7 +938,35 @@ def check_turn(
     tagged = facts.tagged_sentences(text)
     flaws += citation_flaws(text, tagged, sources, given, member, round_)
     spans = [(start, end) for start, end, _ in vouched(text, tagged)]
+    spans += quoted_from_cited(text, tagged, given)
     return flaws + figure_flaws(text, sources, given, member, round_, skip=spans)
+
+
+def quoted_from_cited(
+    text: str, tagged: Sequence[tuple[int, int, list[str]]], given: str
+) -> list[tuple[int, int]]:
+    """Return the spans of figures a tagged sentence takes from the facts it cites.
+
+    Only the figure right before a tag is vouched for (and checked against the
+    facts); the sentence's other figures get the ordinary check, whose unit test
+    reads the word after the number. A figure whose every value its cited facts
+    hold, in digits or in words, is quoted from them: "48,000 widgets a month [F3]"
+    for "48,000 blue widgets", "in 5 months [F4]" for "five months" (bench 2026-11-15:
+    both shapes were WRONG_UNIT).
+    """
+    shown = facts.in_prompt(facts.facts_section(given))
+    named = turn_units(text, given)  # as in `figure_flaws`: "widgets" is a unit there
+    figs = figures(text, topic_units(given) | named, named)
+    out: list[tuple[int, int]] = []
+    for start, end, ids in tagged:
+        cited = " ".join(shown[i] for i in ids if i in shown)
+        if not cited:
+            continue
+        held = numbers(cited) + [float(_SPELLED_VALUES[w.lower()]) for w in _SPELLED.findall(cited)]
+        for fig in (f for f in figs if start <= f.start < end):
+            if all(_matches(v, p, held) for v, p in zip(fig.values, fig.precisions, strict=True)):
+                out.append((fig.start, fig.end))
+    return out
 
 
 def citation_flaws(

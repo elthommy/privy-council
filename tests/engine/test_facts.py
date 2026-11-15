@@ -203,3 +203,36 @@ def test_a_tag_does_not_vouch_for_a_figure_many_words_back() -> None:
         "A 30% cut is unlikely, since it rests on the strong cash position the filings report [F1]."
     )
     assert cite(turn) == ["unsourced: 30%"]  # the ordinary check, not a miscitation
+
+
+def test_figures_quoted_from_the_cited_fact_pass_whatever_word_follows() -> None:
+    sources, given = prompt_parts(
+        "- Output should reach about 48,000-52,000 blue widgets a month.",
+        "- About $6B of deposits is expected in the next five months.",
+    )
+    turn = (
+        "Output is 48,000-52,000 widgets a month [F1]. "
+        "Deposits (~$6B expected in 5 months [F2]) give a buffer."
+    )
+    flaws = checks.check_turn(turn, member="m", nick="M", sources=sources, given=given, known=[])
+    assert flaws == []
+
+
+def test_a_figure_the_cited_fact_lacks_keeps_the_unit_check() -> None:
+    sources, given = prompt_parts(
+        "- Output should reach about 48,000 blue widgets a month.",
+        "- Each tool has a 25 GB cache.",
+    )
+    turn = "Output is 48,000 widgets, fed by 25 km of track [F1]."
+    flaws = checks.check_turn(turn, member="m", nick="M", sources=sources, given=given, known=[])
+    assert [f.kind.value for f in flaws] == ["wrong_unit"]
+
+
+def test_tags_written_as_a_span() -> None:
+    assert facts.tags("Parts sell for $40-90 [F12\u2013F15].") == ["F12", "F13", "F14", "F15"]
+    assert facts.tags("A 6% note [F21-F22].") == ["F21", "F22"]
+    assert facts.tags("A typo [F3-F90].") == ["F3", "F90"]
+    assert cite("Acme owes $9.2bn [F1-F2].") == []
+    assert cite("Acme owes $9.2bn [F2-F4].") == [
+        "miscited: $9.2bn is in [F1], not in [F2], [F3], [F4]."
+    ]
