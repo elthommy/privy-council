@@ -57,6 +57,9 @@ class OllamaModelConfig(_Section):
     # each batch copies those layers to the GPU, so bigger batches read prompts
     # faster (spike 6). None leaves Ollama's default.
     num_batch: int | None = Field(default=None, gt=0)
+    # M19: this model may fix a flagged draft before it is posted, when
+    # [engine] repair_turns = "local". Opt-in per model, after a bench shows it helps.
+    repair: bool = False
 
 
 class OllamaConfig(_Section):
@@ -83,8 +86,8 @@ class EngineConfig(_Section):
     # shows they are precise enough. They are always logged and listed by /flaws.
     estimate_flaws_to_moderator: bool = False
     # M19: a local member whose draft trips a precise check (models.flaw.REPAIR_KINDS)
-    # rewrites it once before it is posted; "off" until a bench shows it helps.
-    # Claude members are never repaired (quota). Local drafts then aren't streamed.
+    # rewrites it once before it is posted, if its model opts in ([ollama.models]
+    # `repair`). Claude members are never repaired (quota). Those drafts aren't streamed.
     repair_turns: Literal["off", "local"] = "off"
     # TUI `/run`: how long to wait for the user's answer to the Chair before the
     # debate goes on without it (like Discord's question_timeout_s); 0 waits for it.

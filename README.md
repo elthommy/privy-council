@@ -97,8 +97,10 @@ The first two of each round become floor turns asking that member to check them
 own "Errors caught" section in the synthesis. Messages are never changed: `/flaws` lists
 what was flagged.
 
-**Fixing a draft before it's posted** (off by default). With `[engine] repair_turns =
-"local"`, a local member whose draft trips one of the precise checks (a fact tag pointing
+**Fixing a draft before it's posted.** With `[engine] repair_turns = "local"` and
+`repair = true` on the member's model (`[ollama.models."..."]`; set for gemma4,
+nemotron-3.5-bolt and qwen3.6 after a bench), a local member whose draft trips one of
+the precise checks (a fact tag pointing
 to a fact without that figure, a missing or inconsistent estimate line, a missing
 devil's-advocate line, a "Nick:" prefix or a literal "@nick") rewrites it once before it
 is posted, and the rewrite is kept only if it has fewer such problems. Claude members are

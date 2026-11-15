@@ -67,13 +67,16 @@ class FlawFlow(EngineCore):
     def _repairing(self, persona: Persona) -> bool:
         """Whether this member's turn is checked and repaired before it is posted (M19).
 
-        Local members only: a Claude repair would spend quota, and a Claude member
-        falling back to a local model keeps its draft.
+        Local members whose model opts in (`repair`, set after a bench): a Claude
+        repair would spend quota, and a Claude member falling back keeps its draft.
         """
         if self.settings.engine.repair_turns != "local":
             return False
         route = self.registry.route(persona, self.claude_exhausted)
-        return route.kind is BackendKind.OLLAMA and not route.fallback
+        if route.kind is not BackendKind.OLLAMA or route.fallback:
+            return False
+        model = self.settings.ollama.models.get(route.model)
+        return model is not None and model.repair
 
     async def _repaired(
         self, persona: Persona, prompt: context.Prompt, draft: CompletionResult

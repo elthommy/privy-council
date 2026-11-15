@@ -18,7 +18,10 @@ from tests.engine.test_resume import HangingBackend, Resumed, kill_snapshot, nth
 
 DRAFT = "Rigor: build the fund first, three months of expenses."
 FIXED = "Build the fund first, three months of expenses."
-REPAIR_ON = {"engine": {"repair_turns": "local"}}
+REPAIR_ON = {
+    "engine": {"repair_turns": "local"},
+    "ollama": {"models": {m: {"repair": True} for m in ("nemotron-3.5-bolt:latest", "gemma4:26b")}},
+}
 
 
 def scripted(turns: dict[str, Reply], fix: Reply = FIXED) -> Callable[[CompletionRequest], Reply]:
@@ -150,3 +153,12 @@ async def test_flaws_lists_the_fixed_drafts_with_counts(
     assert "-- fixed before posting" in text
     assert "turns fixed: Rigor 1" in text
     assert '[self_prefix]: "Rigor:"' in text
+
+
+async def test_a_model_without_repair_keeps_its_drafts(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    config = {"engine": {"repair_turns": "local"}}  # no model opts in
+    h = await blind_round(tmp_path, personas, scripted({"rigor": DRAFT}), config=config)
+    assert h.texts("rigor") == [DRAFT]
+    assert "fix" not in [r.tag.purpose for r in h.requests()]

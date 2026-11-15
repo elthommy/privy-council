@@ -25,6 +25,7 @@ keep_alive = "10m"
 # The local personas' model since 2026-10-18: in replayed turns it kept the user's
 # details straight where the MoE below mixed them up (scripts/replay_turn.py).
 [ollama.models."qwen3.6:27b"]
+repair = true   # M19 bench 2026-11-15: fixes its flagged drafts (gemma 21/21, Bolt 24/25, qwen 17/17)
 num_ctx = 12288   # 8k dropped every recent message once a file was attached (spike 5)
 think = false   # thinks by default; at ~5 tok/s a draft would take minutes
 
@@ -40,6 +41,7 @@ think = false   # thinks by default; on, turns ran 36-40 s (target: <= ~30 s)
 # Used by Contrarian for a different model family (brief G1). Switching between it
 # and qwen3.6 costs ~11-13 s per GPU swap (benchmarked 2026-10-16).
 [ollama.models."gemma4:26b"]
+repair = true   # M19 bench 2026-11-15: fixes its flagged drafts (gemma 21/21, Bolt 24/25, qwen 17/17)
 num_ctx = 12288   # 8k dropped every recent message once a file was attached (spike 5)
 # 2048 prefilled 2.4x faster (spike 6), but its ~0.5 GB larger compute buffer left
 # gemma short of VRAM in two evenings of runtime OOMs (2026-11-11, 11-14): ~+10 s a turn.
@@ -76,6 +78,7 @@ think = false   # thinks by default
 # (quantization-aware distillation), 25 GB; ~13 tok/s, ~30 s turns. Rigor and Skeptic since
 # 2026-11-07: Super-like accuracy in a seat bench at ~1/3 of the time (STATUS.md).
 [ollama.models."nemotron-3.5-bolt:latest"]
+repair = true   # M19 bench 2026-11-15: fixes its flagged drafts (gemma 21/21, Bolt 24/25, qwen 17/17)
 num_ctx = 12288
 think = false   # thinking via the template's enable_thinking
 
@@ -103,7 +106,7 @@ max_output_tokens = 1500   # hard cap per turn, a safety net; prompts ask for co
 max_turn_chars_display = 2000
 max_flaw_prompts_per_round = 2   # turns asking members to check a caught error; 0: off
 estimate_flaws_to_moderator = false  # show estimate-line flags (M17) to the Chair; on after the bench
-repair_turns = "off"   # "local": a local member fixes a flagged draft before it is posted (M19)
+repair_turns = "local"   # a local member fixes a flagged draft before posting, if its model has repair = true (M19); "off": never
 question_timeout_s = 600   # TUI /run: wait this long for your answer to the Chair, then go on; 0: wait
 
 [memory]
