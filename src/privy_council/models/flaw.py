@@ -34,14 +34,16 @@ class FlawKind(StrEnum):
     OTHER = "other"
 
 
+# Engine kinds about fact tags (M18): the bench passed its gate on 2026-11-15
+# (12 of 13 MISCITED real), so they go to the moderator with FIGURE_KINDS.
+CITATION_KINDS = frozenset({FlawKind.UNKNOWN_CITATION, FlawKind.MISCITED})
 # Engine kinds about figures: shown to the moderator. The formatting ones are only logged.
-FIGURE_KINDS = frozenset({FlawKind.UNSOURCED, FlawKind.MISLABELLED, FlawKind.WRONG_UNIT})
+FIGURE_KINDS = (
+    frozenset({FlawKind.UNSOURCED, FlawKind.MISLABELLED, FlawKind.WRONG_UNIT}) | CITATION_KINDS
+)
 # Engine kinds about estimate lines: shown to the moderator only when
 # `[engine] estimate_flaws_to_moderator` is on (off until the M17 bench passes its gate).
 ESTIMATE_KINDS = frozenset({FlawKind.ESTIMATE_INCOHERENT, FlawKind.UNMARKED_CHANGE})
-# Engine kinds about fact tags: logged and in /flaws only until the M18 bench passes
-# its gate, then they join FIGURE_KINDS.
-CITATION_KINDS = frozenset({FlawKind.UNKNOWN_CITATION, FlawKind.MISCITED})
 # Engine kinds whose note is a sentence, not just the figure in question.
 NOTE_KINDS = ESTIMATE_KINDS | CITATION_KINDS | {FlawKind.MISSING_ESTIMATE}
 

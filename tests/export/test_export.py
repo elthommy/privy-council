@@ -210,3 +210,14 @@ def test_unreadable_session(tmp_path: Path, personas: dict[str, Persona]) -> Non
     (tmp_path / "broken").mkdir()
     with pytest.raises(ExportError, match="can't read session broken"):
         build_report(tmp_path / "broken", personas, "A")
+
+
+def test_flaw_text_keeps_a_citation_note_whole() -> None:
+    from privy_council.export.report import flaw_text
+    from privy_council.models.flaw import Flaw, FlawKind
+
+    note = "$9 is not in [F2]."
+    cited = Flaw(member="m", kind=FlawKind.MISCITED, excerpt="x [F2]", note=note, round=2)
+    assert flaw_text(cited) == 'r2 [miscited, engine] "x [F2]": $9 is not in [F2].'
+    figure = Flaw(member="m", kind=FlawKind.UNSOURCED, excerpt="costs $9", note="$9", round=2)
+    assert flaw_text(figure) == 'r2 [unsourced, engine] $9 in "costs $9"'

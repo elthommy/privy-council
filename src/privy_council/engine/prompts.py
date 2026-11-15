@@ -7,13 +7,13 @@ from collections.abc import Callable, Sequence
 from privy_council.backends.base import ChatMessage
 from privy_council.engine.dynamics import REPEAT_THRESHOLD, MemberStats
 from privy_council.models.estimate import Estimate, EstimateRecord
-from privy_council.models.flaw import Flaw, FlawKind
+from privy_council.models.flaw import CITATION_KINDS, Flaw, FlawKind
 from privy_council.models.persona import Persona, Role
 from privy_council.models.session import DebateState, Message
 from privy_council.models.vote import Vote
 from privy_council.util.language import Language
 
-PROMPTS_VERSION = "62"
+PROMPTS_VERSION = "63"
 
 # Backends that accept a single user turn (the claude CLI on stdin) flatten a
 # multi-message conversation with these labels.
@@ -470,7 +470,9 @@ signal to wait for that user_facts show has already happened or can't happen, e.
 "wait for a written signal" when the user said nothing gets written), "unsourced" (a figure \
 stated as fact that neither the facts, the dossier nor the user gave; see the engine's \
 list above, if any; also a base rate or a "usually"/"most cases" claim given as fact \
-with no data) or "other" (another factual error: a member claiming personal experience, \
+with no data; members tag the fresh facts they use, e.g. [F7], so a claim its tag \
+doesn't support is unsourced too, and your note may name the tag: "[F7] gives €320, \
+not $90") or "other" (another factual error: a member claiming personal experience, \
 "in my experience" or "cases I've seen", which a council member doesn't have; a \
 specific nobody gave, such as a technology, a duration or an effort, stated as \
 established; a date or figure given a meaning the facts don't, such as an end of \
@@ -578,6 +580,13 @@ DYNAMICS_FLAWS = (
     "the member's own estimates or sums: judge whether one matters for the advice."
 )
 DYNAMICS_FLAW = '- @{nick}: "{figure}" in "{excerpt}"{label}'
+# A fact-tag flag (M18): its note is a sentence naming the tags.
+DYNAMICS_CITATION = '- @{nick}: {note} In "{excerpt}"'
+DYNAMICS_CITATIONS = (
+    "A note naming a tag ([F7]) means the member cited a fact that doesn't hold that "
+    "figure, or a tag that is no fact. Read the cited fact before you report it: the "
+    "figure may be the member's own arithmetic, or a detail sourced elsewhere."
+)
 DYNAMICS_MISLABELLED = " (labelled as an estimate, though the facts give it)"
 DYNAMICS_WRONG_UNIT = " (the sources give this number only with another unit)"
 DYNAMICS_FLAWS_MORE = "- … and {count} more"
@@ -1105,18 +1114,21 @@ _DYNAMICS_LABELS = {
 
 def _flaw_lines(flaws: Sequence[Flaw], nick_of: Callable[[str], str]) -> list[str]:
     """Render engine-flagged figures for the moderator, at most MAX_DYNAMICS_FLAWS."""
-    lines = [
-        DYNAMICS_FLAW.format(
-            nick=nick_of(f.member),
-            figure=f.note,
-            excerpt=f.excerpt,
-            label=_DYNAMICS_LABELS.get(f.kind, ""),
-        )
-        for f in flaws[:MAX_DYNAMICS_FLAWS]
-    ]
+    lines = [_flaw_line(f, nick_of) for f in flaws[:MAX_DYNAMICS_FLAWS]]
     if len(flaws) > MAX_DYNAMICS_FLAWS:
         lines.append(DYNAMICS_FLAWS_MORE.format(count=len(flaws) - MAX_DYNAMICS_FLAWS))
+    if any(f.kind in CITATION_KINDS for f in flaws[:MAX_DYNAMICS_FLAWS]):
+        lines.append(DYNAMICS_CITATIONS)
     return lines
+
+
+def _flaw_line(flaw: Flaw, nick_of: Callable[[str], str]) -> str:
+    """Render one engine flag: the figure in question, or a fact-tag flag's sentence."""
+    nick = nick_of(flaw.member)
+    if flaw.kind in CITATION_KINDS:
+        return DYNAMICS_CITATION.format(nick=nick, note=flaw.note, excerpt=flaw.excerpt)
+    label = _DYNAMICS_LABELS.get(flaw.kind, "")
+    return DYNAMICS_FLAW.format(nick=nick, figure=flaw.note, excerpt=flaw.excerpt, label=label)
 
 
 def flaw_rule(cap: int, last_round: bool) -> str:

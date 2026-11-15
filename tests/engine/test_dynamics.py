@@ -186,3 +186,29 @@ def test_parse_new_fields(personas: dict[str, Persona]) -> None:
     assert parsed.summon is not None and parsed.summon.persona == "optimist"
     with pytest.raises(DecisionError, match="consensus"):
         parse_decision(structured({**raw, "consensus": "maybe"}), members)
+
+
+def test_render_dynamics_shows_citation_flags_as_sentences() -> None:
+    from privy_council.models.flaw import Flaw, FlawKind
+
+    flaws = [
+        Flaw(member="rigor", kind=FlawKind.UNSOURCED, excerpt="costs $70", note="$70"),
+        Flaw(
+            member="rigor",
+            kind=FlawKind.MISCITED,
+            excerpt="a $90 kit [F2]",
+            note="$90 is in [F5], not in [F2].",
+        ),
+    ]
+    text = prompts.render_dynamics([stats("rigor")], str.capitalize, 0, 0, flaws)
+    assert '- @Rigor: "$70" in "costs $70"' in text
+    assert '- @Rigor: $90 is in [F5], not in [F2]. In "a $90 kit [F2]"' in text
+    assert "Read the cited fact before you report it" in text
+    plain = prompts.render_dynamics([stats("rigor")], str.capitalize, 0, 0, flaws[:1])
+    assert "cited fact" not in plain
+
+
+def test_citation_kinds_reach_the_moderator() -> None:
+    from privy_council.models.flaw import CITATION_KINDS, FIGURE_KINDS
+
+    assert CITATION_KINDS <= FIGURE_KINDS

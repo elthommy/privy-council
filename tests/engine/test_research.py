@@ -395,3 +395,5 @@ async def test_members_see_fact_tags_and_a_wrong_citation_is_logged(
     assert prompts.FACT_TAG_RULE in turn.messages[-1].content.split("# Your task")[-1]
     [flaw] = [f for f in h.engine.meta.runtime.flaws if f.member == "rigor"]
     assert (flaw.kind.value, flaw.note) == ("miscited", "$3,900 is not in [F1].")
+    update = [r for r in h.requests() if r.tag.purpose == "moderate"][-1]
+    assert '$3,900 is not in [F1]. In "' in update.messages[-1].content  # the Chair sees it

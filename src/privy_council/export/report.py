@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict
 
 from privy_council.engine.facts import tagged_notes
 from privy_council.engine.local_research import missing_facts, without_missing
-from privy_council.models.flaw import FIGURE_KINDS, Flaw
+from privy_council.models.flaw import FIGURE_KINDS, NOTE_KINDS, Flaw
 from privy_council.models.persona import Persona
 from privy_council.models.session import (
     DossierAdded,
@@ -195,7 +195,8 @@ def flaws_by_member(report: Report) -> list[tuple[str, list[Flaw]]]:
 
 def flaw_text(flaw: Flaw) -> str:
     """Describe one flaw on one line, as `/flaws` does."""
-    if flaw.by == "engine" and flaw.note:  # the engine's note is the figure in question
+    # The engine's note is the figure in question, or a sentence for NOTE_KINDS.
+    if flaw.by == "engine" and flaw.note and flaw.kind not in NOTE_KINDS:
         what = f'{flaw.note} in "{flaw.excerpt}"'
     else:
         what = f'"{flaw.excerpt}"' + (f": {flaw.note}" if flaw.note else "")
