@@ -219,12 +219,24 @@ September and November" when the fact says the reverse) passes. Say so in STATUS
   model size. Still open: the arithmetic check does not follow a range times a
   number ("$410-450M x 4 = $1.64-1.8B" is flagged).
 
+### Gate result (2026-11-15)
+Passed: tagging read by hand at about 92 % (gemma4), 84 % (Bolt) and 94 % (qwen3.6);
+MISCITED 12 of 13 real (the owner counted two borderline flags as real, one as
+false); invented figures 4 on the untagged prompts, 0 with tags. Citation flags now
+reach the moderator.
+
 ### Step 2 (after the gate) — own-estimate exemption
 Most false engine flags are a member's own probability or an estimate labelled in
 other words. With M17, probabilities live in the estimate and split lines: exempt
 those lines from `UNSOURCED`. Then re-check all saved runs (`flaw_bench.py --recheck`)
 against the labelled engine flags in `full.jsonl`. Target: at least half of the
 false "unsourced" flags gone, no real one lost. Report the numbers either way.
+
+As built (2026-11-15): estimate and split lines were already blanked (M17). Wider
+rule: a figure in no source isn't unsourced when it is labelled or its sentence says
+"from memory", "my estimate" (FR too), or, for a percentage, "I update" or "my
+position". On the 43 turns with a labelled engine flag: 26 of 45 false flags gone
+since the labelling (5 by this rule), all 6 real ones kept.
 
 ### Tests
 `tests/engine/test_facts.py` (stable ids across appended notes, bullets, a note with
