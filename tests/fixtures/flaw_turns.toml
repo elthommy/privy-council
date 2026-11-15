@@ -65,7 +65,8 @@ name = "a labelled estimate of something unknown"
 nick = "Rigor"
 sources = "The board is second-hand."
 text = "Assume a 40% (estimate, from memory) chance it fails within a year."
-flaws = ["unsourced:40%"]
+# The member's own estimate, labelled: not reported (M18 step 2; labelled flags: all false).
+flaws = []
 
 [[turn]]
 name = "formatting habits"

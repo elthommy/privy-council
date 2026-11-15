@@ -124,6 +124,20 @@ _FAMILIES = {
 _CURRENCY_WORDS = {"eur": "€", "euro": "€", "usd": "$", "dollar": "$"}
 # Lines whose figures are the member's own judgment, not claims: "Confidence: 70%".
 _OWN_LINE = re.compile(r"\b(?:confidence|confiance)\b[^\n]*", re.IGNORECASE)
+# A sentence that presents its figures as the member's own (M18 step 2): an estimate
+# labelled in other words. Labelled flags (full.jsonl, 2026-11-11): every UNSOURCED
+# flag on such a sentence was false, none of the real ones had one.
+_OWN_ESTIMATE = re.compile(
+    r"\b(?:from memory|my (?:own )?(?:estimate|guess)|I estimate|de mémoire"
+    r"|(?:mon|ma) (?:estimation|hypothèse)|j'estime)\b",
+    re.IGNORECASE,
+)
+# The same for a percentage: the member's own probability or threshold.
+_OWN_PERCENT = re.compile(
+    r"\b(?:I update|my (?:position|probability|forecast|threshold|number)"
+    r"|ma (?:position|probabilité|prévision)|mon (?:seuil|chiffre))\b",
+    re.IGNORECASE,
+)
 # Percentages that are figures of speech ("100% sure").
 _TRIVIAL_PERCENT = {0.0, 100.0}
 # Rounding: a figure may round its source, by at most this share of its value.
@@ -822,6 +836,8 @@ def _reported(
         again = not fig.spelled and all((fig.family, v) in derived for v in fig.values)
         if not sourced and (arithmetic or again):
             continue  # the member's own arithmetic: the moderator judges it
+        if not sourced and _presented_as_own(text, fig):
+            continue  # a labelled estimate, in the protocol's words or its own
         kind = _kind(fig, sourced, quoted, occurrences, own)
         if kind is None:
             continue
@@ -830,6 +846,23 @@ def _reported(
         if flaw not in out:
             out.append(flaw)
     return out
+
+
+def _presented_as_own(text: str, fig: Figure) -> bool:
+    """Whether the member presents a figure as its own estimate, not as a fact.
+
+    The protocol's label "(estimate, from memory)" counts, and so does its sentence
+    saying so in other words ("from memory", "my estimate"); a percentage also when
+    the sentence gives the member's own position ("I update: 15%", "my threshold").
+    """
+    if fig.labelled:
+        return True
+    lo = max((m.end() for m in _SENTENCE_END.finditer(text, 0, fig.start)), default=0)
+    after = _SENTENCE_END.search(text, fig.end)
+    sentence = text[lo : after.start() if after else len(text)]
+    return bool(
+        _OWN_ESTIMATE.search(sentence) or (fig.family == "%" and _OWN_PERCENT.search(sentence))
+    )
 
 
 def figures_cleared(quote: str, text: str, sources: str, given: str) -> bool:

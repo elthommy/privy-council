@@ -340,3 +340,29 @@ def test_shares_conversions_and_midpoints_are_the_members_math(text: str, note: 
 )
 def test_other_shares_and_conversions_stay_unsourced(text: str, note: str) -> None:
     assert note in [f.note for f in checks.figure_flaws(text, SAVINGS, SAVINGS, "compounder")]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "A warranty of about 2.5 years, from memory, so check the terms.",
+        "My estimate is roughly €40bn of reserves, unverified.",
+        "I update: I move my position to 15% by the deadline.",
+        "De mémoire, la garantie dure environ 2,5 ans.",
+    ],
+)
+def test_figures_the_member_presents_as_its_own_are_not_unsourced(text: str) -> None:
+    assert checks.figure_flaws(text, "The user asked about a deadline.", "", "rigor") == []
+
+
+@pytest.mark.parametrize(
+    ("text", "note"),
+    [
+        ("The subsidy was €70M, as the article said.", "€70M"),  # stated as fact
+        ("My position: the fee is €90 a year.", "€90"),  # "my position" frees only a %
+        ("Roughly 12 years remain on the lease.", "12 years"),  # a hedge isn't a label
+    ],
+)
+def test_other_unsourced_figures_are_still_reported(text: str, note: str) -> None:
+    flaws = checks.figure_flaws(text, "The user asked about a deadline.", "", "rigor")
+    assert note in [f.note for f in flaws]
