@@ -9,8 +9,10 @@ against that one bullet instead of guessing where a number came from.
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
+from typing import Literal
+from urllib.parse import urlsplit
 
 from privy_council.engine import prompts
 
@@ -23,7 +25,8 @@ _ID = re.compile(r"F\d+")
 _SPAN = re.compile(r"F(\d+)\s*[\-\u2013]\s*F(\d+)")
 _MAX_SPAN = 10
 # A fact's tag at the start of its line, after the bullet, as `tag_block` writes it.
-_TAGGED_LINE = re.compile(r"^\s*(?:(?:[-*•]|\d+[.)])\s+)?\[(F\d+)\] ?", re.MULTILINE)
+_TAGGED_LINE = re.compile(r"^\s*(?:(?:[-*•]|\d+[.)])\s+)?\[(F\d+)(?:, [a-z]+)?\] ?", re.MULTILINE)
+_URL = re.compile(r"https?://[^\s)\]>\"']+")
 # Where a sentence ends: after . ! or ? (and any tags right after it) before a space,
 # or at a line break, so a list item is a sentence of its own. "5.5%" has no space.
 _SENTENCE_END = re.compile(r"[.!?](?:\s*" + TAG.pattern + r")*(?=\s)|\n")
@@ -60,21 +63,54 @@ def numbered(notes: Sequence[str]) -> list[Fact]:
     return out
 
 
-def tag_block(fact: Fact) -> str:
-    """Return the bullet with its tag after the bullet marker: "- [F7] ..."."""
-    tag = prompts.FACT_TAG.format(id=fact.id)
+def tier(text: str, primary_domains: Collection[str]) -> Literal["primary", "secondary"]:
+    """Return "primary" when every URL of a fact is on an official domain (M20).
+
+    A fact with no URL is secondary. A domain entry matches its host and subdomains:
+    ".gov" or "gov" matches "www.sec.gov", "insee.fr" matches "www.insee.fr".
+    """
+    hosts = [(urlsplit(u).hostname or "").lower() for u in _URL.findall(text)]
+    suffixes = [d.lower().strip().lstrip(".") for d in primary_domains if d.strip()]
+    if hosts and all(any(_on_domain(h, s) for s in suffixes) for h in hosts):
+        return "primary"
+    return "secondary"
+
+
+def _on_domain(host: str, suffix: str) -> bool:
+    """Tell whether a host is the domain or one of its subdomains."""
+    return host == suffix or host.endswith("." + suffix)
+
+
+def tag_block(fact: Fact, label: str = "") -> str:
+    """Return the bullet with its tag after the bullet marker: "- [F7] ...".
+
+    With a `label` (the primary tier's word), the tag reads "[F7, primary]".
+    """
+    tag = (
+        prompts.FACT_TAG_TIER.format(id=fact.id, tier=label)
+        if label
+        else (prompts.FACT_TAG.format(id=fact.id))
+    )
     bullet = BULLET.match(fact.text)
     if bullet is None:
         return f"{tag} {fact.text}"
     return f"{fact.text[: bullet.end()]}{tag} {fact.text[bullet.end() :]}"
 
 
-def tagged_notes(notes: Sequence[str]) -> list[str]:
-    """Return each note's text with its bullets tagged, in the notes' order."""
+def tagged_notes(
+    notes: Sequence[str], primary_domains: Collection[str] = (), primary_label: str = ""
+) -> list[str]:
+    """Return each note's text with its bullets tagged, in the notes' order.
+
+    With `primary_domains`, a primary fact's tag carries `primary_label`; others don't,
+    since most facts are secondary (6 % of the cited URLs were official, 2026-11-15).
+    """
     out = ["" for _ in notes]
     for fact in numbered(notes):
+        primary = primary_domains and tier(fact.text, primary_domains) == "primary"
+        block = tag_block(fact, primary_label if primary else "")
         joined = out[fact.note_index]
-        out[fact.note_index] = f"{joined}\n{tag_block(fact)}" if joined else tag_block(fact)
+        out[fact.note_index] = f"{joined}\n{block}" if joined else block
     return out
 
 

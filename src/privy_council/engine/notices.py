@@ -119,6 +119,12 @@ FORGET_SHARED = "the shared facts about you"
 FORGET_ALL = "all memory (every persona's notes and the shared facts)"
 FORGET_PERSONA = "{nick}'s private notes"
 NOTICE_AUTO_RESEARCH = "{nick} is looking up: {focus}"
+# M20: the Chair's third lookup of the same thing found nothing new in every saved
+# session (2026-11-15 labels); the user's /research still runs it.
+NOTICE_AUTO_RESEARCH_REPEAT = (
+    "{nick} wanted to look up again: {focus}. Skipped: searched {count} times already "
+    "(/research runs it anyway)."
+)
 NOTICE_NEEDS_TOPIC = "No question yet: type it to start the session"
 NOTICE_TOPIC_SET = "Question set; opening the debate"
 NOTICE_QUESTIONS_PAUSE = "/run paused for {nick}'s question"

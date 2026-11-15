@@ -287,7 +287,7 @@ Members of the same council run on different model families where possible, so t
 - `[ollama]`: `num_ctx` and `think` per model;
 - `[engine]`: last K messages and the output cap;
 - `[memory]`: caps, approval, council scope;
-- `[research]`: on or off, how many searches Chair may start on its own, and `provider` (`claude`, `local` or `auto`, see Local-only mode); `[research.local]`: local web search via SearXNG (see Local-only mode);
+- `[research]`: on or off, how many searches Chair may start on its own, `provider` (`claude`, `local` or `auto`, see Local-only mode), and `primary_domains` (official domains whose facts are tagged `primary`); `[research.local]`: local web search via SearXNG (see Local-only mode);
 - `[dossier]`: summary threshold and size limit;
 - `[user] name`: your nick;
 - `[local_only]`: the default mode and the seat map (see Local-only mode);

@@ -352,6 +352,22 @@ Pure tests for `repeat_focus`, tiers and rendering; an engine test where the thi
 identical auto lookup is skipped. No bench needed; check on the next real session
 how many research calls were skipped.
 
+### As built (2026-11-15)
+Premise check on the saved sessions (168 notes, no model calls): the 70 % / two-note
+rule above matched 1 lookup and missed a filing note searched four times in other
+words. Claude notes had no "Missing:" line, so the "missing" leg was empty for them.
+40 lookups sharing half their words with an earlier one were labelled by hand: 19
+found nothing new; about half the second tries found something; every third try or
+later found nothing. Changes from the spec:
+- `repeat_focus` (`engine/research_ledger.py`): 2 earlier Chair lookups sharing 50 % of
+  the focus's words, and no date or number in the focus that none of them names. On
+  the labels: 7 of the 19 wasted lookups skipped, no useful one.
+- `RESEARCH_TASK` asks for the "Missing:" line; `ResearchNote.missing` holds its items.
+- "Not findable so far" goes first in the facts section, not last: trimming keeps the
+  section's start.
+- Tiers: only primary facts carry the label (`[F7, primary]`); 6 % of the cited URLs
+  were official, so a "secondary" label would be on nearly every fact.
+
 ---
 
 ## M21 — Document reader

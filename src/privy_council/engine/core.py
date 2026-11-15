@@ -362,7 +362,9 @@ class EngineCore:
 
     def _facts(self) -> str | None:
         """Return the session's web research for prompts, or None."""
-        return context.facts_text(self.meta.runtime.research)
+        label = prompts.LABELS[self.meta.language]["primary"]
+        domains = self.settings.research.primary_domains
+        return context.facts_text(self.meta.runtime.research, domains, label)
 
     def _facts_task(self) -> str:
         """Return the fact-tag rule to append to a member's task ("" with no facts)."""

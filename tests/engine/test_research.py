@@ -397,3 +397,32 @@ async def test_members_see_fact_tags_and_a_wrong_citation_is_logged(
     assert (flaw.kind.value, flaw.note) == ("miscited", "$3,900 is not in [F1].")
     update = [r for r in h.requests() if r.tag.purpose == "moderate"][-1]
     assert '$3,900 is not in [F1]. In "' in update.messages[-1].content  # the Chair sees it
+
+
+async def test_a_third_lookup_of_the_same_thing_is_skipped(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    empty = research_result(
+        "- Totals only (https://example.org/q)\nMissing: maturities by quarter",
+        queries=("acme debt maturities",),
+    )
+    h = Harness(
+        tmp_path,
+        personas,
+        responder([], [empty, empty, research_result(), research_result()]),
+        config={"research": {"auto_max_per_session": 9}},
+    )
+    focus = "Acme 10-Q debt maturities by quarter 2027"
+    for _ in range(3):
+        await h.engine._auto_research([focus])
+    assert len(research_requests(h)) == 2
+    notes = h.engine.meta.runtime.research
+    assert notes[0].missing == ["maturities by quarter"]
+    assert any("Skipped: searched 2 times already" in t for t in h.texts("system"))
+    second = research_requests(h)[1].messages[0].content
+    assert "Queries earlier searches already ran: acme debt maturities." in second
+    assert "Still not found after them: maturities by quarter." in second
+    # A new date is a new lookup, and the user's /research always runs.
+    await h.engine._auto_research(["Acme 10-Q debt maturities by quarter 2028"])
+    await h.engine.research(focus)
+    assert len(research_requests(h)) == 4

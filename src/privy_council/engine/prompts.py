@@ -13,7 +13,7 @@ from privy_council.models.session import DebateState, Message
 from privy_council.models.vote import Vote
 from privy_council.util.language import Language
 
-PROMPTS_VERSION = "64"
+PROMPTS_VERSION = "65"
 
 # Backends that accept a single user turn (the claude CLI on stdin) flatten a
 # multi-message conversation with these labels.
@@ -78,6 +78,7 @@ LABELS: dict[Language, dict[str, str]] = {
         "h_open_disagreements": "Open disagreements",
         "h_open_questions": "Open questions",
         "research_opening": "background for the question",
+        "primary": "primary",
     },
     "fr": {
         "position": "Position :",
@@ -103,6 +104,7 @@ LABELS: dict[Language, dict[str, str]] = {
         "h_open_disagreements": "Désaccords ouverts",
         "h_open_questions": "Questions ouvertes",
         "research_opening": "contexte de la question",
+        "primary": "primaire",
     },
 }
 
@@ -154,6 +156,9 @@ figure from the fresh facts, put its tag right after it: "debt was $9.2B [F7]". 
 only what that fact says; never tag a sentence it doesn't support. A sentence with no \
 tag and no named source is your own judgment, so word it as one ("I think", "my \
 estimate").
+- A fact tagged "primary" ("[F7, primary]") comes from an official source: a regulator, \
+a statistics office, a central bank. When two facts disagree, the primary one wins; say \
+which one you used.
 - Figures: a number from the fresh facts, the dossier or the user's messages is \
 sourced. Quote it as written; tag a fresh fact's, and name the source of any other in a \
 few words ("$233 in your file"), even when the source is undated or the sources \
@@ -509,6 +514,7 @@ with no data; members tag the fresh facts they use, e.g. [F7], so a claim its ta
 doesn't support is unsourced too, and your note may name the tag: "[F7] gives €320, \
 not $90") or "other" (another factual error: a member claiming personal experience, \
 "in my experience" or "cases I've seen", which a council member doesn't have; a \
+figure from a fact not tagged primary when a primary fact gives another value; a \
 specific nobody gave, such as a technology, a duration or an effort, stated as \
 established; a date or figure given a meaning the facts don't, such as an end of \
 funding called a deadline); `quote` is the member's exact \
@@ -648,7 +654,9 @@ situation or preferences and that would change the answer; never a question abou
 world or the analysis (dates, prices, rules, what something is), those go in the next \
 steps, and none the fresh facts already answer; write "None." if there is none)
 ## {h_next}
-(no trigger or condition the user's facts show has already happened or can't happen)
+(no trigger or condition the user's facts show has already happened or can't happen; \
+a fact the fresh facts call not findable goes here when the advice rests on it, with \
+where to check)
 
 Where the members' advice leads to one course of action, state it plainly as the \
 council's recommendation, not as a menu of options; leave a choice to the user only \
@@ -740,7 +748,10 @@ Return at most 8 bullets, about 1,200 characters in total, with no preamble:
 - each bullet: the fact, its date, and its source URL;
 - prefer primary sources (statistics offices, central banks, official sites, research \
 institutes, academic work) over commentary;
-- say when sources disagree or data is missing.
+- say when sources disagree;
+- if the focus needs facts you couldn't find, end with one line "Missing: " (this \
+English word, whatever the language) and those facts in a few words each, separated by \
+semicolons.
 Don't make recommendations.{read_before}"""
 # Added to RESEARCH_TASK when earlier searches read pages: a page cut off before the
 # part needed comes back cut off at the same place (Note 10 of a 10-Q, read 4 times
@@ -749,6 +760,15 @@ RESEARCH_READ_BEFORE = """
 Pages earlier searches already read (their facts are above): {urls}. Don't fetch them \
 again. If a part you need was missing from them, find another page that holds it: a \
 section page, a data table, the document's index."""
+
+# Added to RESEARCH_TASK once earlier lookups ran (M20): the same 10-Q note was
+# searched four times in one session (2026-11-14), each time in other words.
+RESEARCH_EARLIER = """
+Queries earlier searches already ran: {queries}. Don't run them again or close \
+variants."""
+RESEARCH_STILL_MISSING = """ Still not found after them: {missing}. For these, look for \
+another kind of source (a filing's own section, a statistics table, an official \
+release), or report what is findable instead."""
 
 RESEARCH_DEFAULT_FOCUS = "the current facts and figures the council will need"
 
@@ -812,6 +832,13 @@ TITLE_FACTS = (
     "Fresh facts (web search by the moderator; may contain errors, say so when you rely on them)"
 )
 RESEARCH_ENTRY = "{focus} (searched {date}):\n{text}"
+# First in the facts section (its start survives trimming), so members stop leaning on
+# a fact nobody could find (M20).
+NOT_FINDABLE = "Not findable so far: {items}. Don't state these as known."
+NOT_FINDABLE_ITEM = "{item} (searched {count} times)"
+NOT_FINDABLE_ITEM_ONCE = "{item} (searched once)"
+# A fact whose every source is on an official domain ([research] primary_domains).
+FACT_TAG_TIER = "[{id}, {tier}]"
 # A fresh fact's tag (M18), put before each research bullet and after a cited claim.
 FACT_TAG = "[{id}]"
 # Engine notes on citations (flaws UNKNOWN_CITATION and MISCITED).
@@ -1092,12 +1119,23 @@ def floor_line(nick: str, prompt: str) -> str:
     return FLOOR_LINE.format(nick=nick, prompt=text or prompt)
 
 
-def render_research(entries: Sequence[tuple[str, str, str]]) -> str:
-    """Render research notes, given as (focus, date, text), newest first."""
-    return "\n\n".join(
-        RESEARCH_ENTRY.format(focus=focus, date=date, text=text)
-        for focus, date, text in reversed(entries)
-    )
+def render_research(
+    entries: Sequence[tuple[str, str, str]], missing: Sequence[tuple[str, int]] = ()
+) -> str:
+    """Render research notes, given as (focus, date, text), newest first.
+
+    `missing` (fact, times searched) goes first, as one line.
+    """
+    notes = [RESEARCH_ENTRY.format(focus=f, date=d, text=t) for f, d, t in reversed(entries)]
+    if missing:
+        items = [
+            (NOT_FINDABLE_ITEM if count > 1 else NOT_FINDABLE_ITEM_ONCE).format(
+                item=item, count=count
+            )
+            for item, count in missing
+        ]
+        notes.insert(0, NOT_FINDABLE.format(items="; ".join(items)))
+    return "\n\n".join(notes)
 
 
 def render_memory(private: str, shared: str) -> str | None:

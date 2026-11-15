@@ -12,12 +12,12 @@ task are never trimmed.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
 
 from privy_council.config import Settings
 from privy_council.engine import facts as fact_tags
-from privy_council.engine import prompts
+from privy_council.engine import prompts, research_ledger
 from privy_council.engine.local_research import without_missing
 from privy_council.models.persona import BackendKind
 from privy_council.models.session import DebateState, DossierFile, Message, ResearchNote
@@ -231,16 +231,25 @@ def state_text(state: DebateState, nick_of: NickOf) -> str | None:
     return prompts.render_debate_state(state, nick_of)
 
 
-def facts_text(notes: Sequence[ResearchNote]) -> str | None:
-    """Render the session's research for prompts (newest first), or None if there is none."""
+def facts_text(
+    notes: Sequence[ResearchNote],
+    primary_domains: Collection[str] = (),
+    primary_label: str = "",
+) -> str | None:
+    """Render the session's research for prompts (newest first), or None if there is none.
+
+    The facts still not found after the lookups come first (M20).
+    """
     if not notes:
         return None
-    texts = fact_tags.tagged_notes([without_missing(n.text) for n in notes])
+    texts = fact_tags.tagged_notes(
+        [without_missing(n.text) for n in notes], primary_domains, primary_label
+    )
     entries = [
         (n.focus, f"{n.ts.astimezone():%Y-%m-%d}", text)
         for n, text in zip(notes, texts, strict=True)
     ]
-    return prompts.render_research(entries)
+    return prompts.render_research(entries, research_ledger.not_findable(notes))
 
 
 def research_facts(notes: Sequence[ResearchNote]) -> list[fact_tags.Fact]:

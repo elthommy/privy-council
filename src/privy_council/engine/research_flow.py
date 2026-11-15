@@ -27,6 +27,7 @@ from privy_council.engine.local_research import (
 from privy_council.engine.moderation import MAX_RESEARCH_REQUESTS, DecisionError
 from privy_council.engine.notices import (
     NOTICE_AUTO_RESEARCH,
+    NOTICE_AUTO_RESEARCH_REPEAT,
     NOTICE_BUSY,
     NOTICE_CUT_OFF,
     NOTICE_LOCAL_DROPPED,
@@ -51,6 +52,13 @@ from privy_council.engine.research import (
     fetches,
     searches,
     searches_first,
+)
+from privy_council.engine.research_ledger import (
+    earlier_queries,
+    missing_items,
+    not_findable,
+    repeat_count,
+    repeat_focus,
 )
 from privy_council.models.persona import BackendKind
 from privy_council.models.research import LocalSearchRecord, SearchResult
@@ -109,6 +117,15 @@ class ResearchFlow(EngineCore):
         """Run the moderator's own searches; return the ones relayed to the user instead."""
         relayed: list[str] = []
         for focus in focuses:
+            research = self.meta.runtime.research
+            if repeat_focus(focus, research):  # before the cap: a skip costs nothing
+                count = repeat_count(focus, research)
+                self._notice(
+                    NOTICE_AUTO_RESEARCH_REPEAT.format(
+                        nick=self.moderator.name, focus=focus, count=count
+                    )
+                )
+                continue
             line = self._lookup_relay(focus)
             if line is not None:
                 relayed.append(line)
@@ -259,7 +276,9 @@ class ResearchFlow(EngineCore):
         cfg = self.settings.research
         read = list(dict.fromkeys(url for n in self.meta.runtime.research for url in n.fetched))
         read_before = prompts.RESEARCH_READ_BEFORE.format(urls="; ".join(read)) if read else ""
-        task = prompts.RESEARCH_TASK.format(focus=focus, today=_today(), read_before=read_before)
+        task = prompts.RESEARCH_TASK.format(
+            focus=focus, today=_today(), read_before=read_before + self._earlier_searches()
+        )
         prompt = self._research_prompt(prompts.RESEARCH_SYSTEM, task)
         result, _ = await self._complete(
             self.moderator,
@@ -285,7 +304,18 @@ class ResearchFlow(EngineCore):
             fetched=urls,
             truncated=result.truncated,
             auto=auto,
+            missing=missing_items(result.text),
         )
+
+    def _earlier_searches(self) -> str:
+        """Return the research task's block on queries already run and facts not found."""
+        notes = self.meta.runtime.research
+        queries = earlier_queries(notes)
+        if not queries:
+            return ""
+        missing = "; ".join(item for item, _ in not_findable(notes))
+        block = prompts.RESEARCH_EARLIER.format(queries="; ".join(queries))
+        return block + (prompts.RESEARCH_STILL_MISSING.format(missing=missing) if missing else "")
 
     async def _local_research(self, focus: str, auto: bool) -> ResearchNote:
         """Search with SearXNG: the moderator writes queries, then summarizes the hits.
@@ -337,6 +367,7 @@ class ResearchFlow(EngineCore):
             truncated=result.truncated,
             auto=auto,
             source="local",
+            missing=missing_items(text),
         )
 
     async def _local_queries(self, focus: str) -> list[str]:

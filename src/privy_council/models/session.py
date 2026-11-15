@@ -113,6 +113,8 @@ class ResearchNote(BaseModel):
     auto: bool = False  # started by the moderator on its own (counts toward auto_max)
     # Who searched: the claude CLI's web tools, or SearXNG (local-only sessions).
     source: Literal["claude", "local"] = "claude"
+    # The facts the note's "Missing:" line says the lookup didn't find (M20).
+    missing: list[str] = Field(default_factory=list)
 
 
 class DossierFile(BaseModel):

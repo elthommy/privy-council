@@ -113,6 +113,32 @@ class LocalSearchConfig(_Section):
     follow_up: bool = True
 
 
+# Regulators, statistics offices, central banks and international institutions.
+PRIMARY_DOMAINS = (
+    "gov",
+    "gouv.fr",
+    "gov.uk",
+    "gc.ca",
+    "go.jp",
+    "europa.eu",
+    "int",
+    "imf.org",
+    "oecd.org",
+    "bis.org",
+    "worldbank.org",
+    "un.org",
+    "insee.fr",
+    "banque-france.fr",
+    "amf-france.org",
+    "bankofengland.co.uk",
+    "destatis.de",
+    "bundesbank.de",
+    "boj.or.jp",
+    "snb.ch",
+    "admin.ch",
+)
+
+
 class ResearchConfig(_Section):
     """Web research by the moderator (claude CLI web tools); see docs/spike-notes.md."""
 
@@ -129,6 +155,9 @@ class ResearchConfig(_Section):
     # writes the queries and the summary), or "auto" (Claude, and SearXNG whenever
     # Claude can't search). Local-only sessions always use SearXNG, whatever this says.
     provider: Literal["claude", "local", "auto"] = "claude"
+    # Official domains (M20): a fact whose every URL is on one is tagged "primary" and
+    # wins when facts disagree. An entry matches its subdomains. Extend it in config.
+    primary_domains: list[str] = Field(default_factory=lambda: list(PRIMARY_DOMAINS))
 
     @model_validator(mode="after")
     def _local_needs_consent(self) -> ResearchConfig:

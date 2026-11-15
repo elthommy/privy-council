@@ -133,6 +133,9 @@ provider = "claude"           # normal sessions: "claude" (its web search), "loc
                               # Claude writes queries and summary) or "auto" (SearXNG only when
                               # Claude can't search); "local"/"auto" need [research.local] enabled.
                               # Local-only and Discord sessions always use SearXNG, never Claude.
+# primary_domains = ["gov", "europa.eu", ...]  # facts sourced only from these are tagged
+                              # [F7, primary]; the default lists regulators, statistics
+                              # offices and central banks (config.py PRIMARY_DOMAINS)
 
 [research.local]              # web search via SearXNG: local-only sessions, provider local/auto
 enabled = false               # true = your consent: search queries leave this PC
