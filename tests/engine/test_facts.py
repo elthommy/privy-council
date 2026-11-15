@@ -236,3 +236,13 @@ def test_tags_written_as_a_span() -> None:
     assert cite("Acme owes $9.2bn [F2-F4].") == [
         "miscited: $9.2bn is in [F1], not in [F2], [F3], [F4]."
     ]
+
+
+def test_the_note_names_another_fact_only_in_the_same_currency() -> None:
+    sources, given = prompt_parts(
+        "- No verified sold prices for used boards; asking prices only.",
+        "- A memory kit averaged about €95-100 last summer.",
+    )
+    turn = "You risk a dead chip on a $100 board [F1]."
+    flaws = checks.check_turn(turn, member="m", nick="M", sources=sources, given=given, known=[])
+    assert [f.note for f in flaws] == ["$100 is not in [F1]."]

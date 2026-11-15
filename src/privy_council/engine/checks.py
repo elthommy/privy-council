@@ -1088,6 +1088,16 @@ def _within_range(figure: str, held: str) -> bool:
 
 
 def _holds(fact: str, figure: str) -> bool:
-    """Whether a fact gives a figure, in its unit."""
-    flaws = figure_flaws(figure, fact, fact, "")
-    return not any(f.kind in (FlawKind.UNSOURCED, FlawKind.WRONG_UNIT) for f in flaws)
+    """Whether a fact gives a figure, value for value in the same unit.
+
+    Stricter than the figure check (no conversions, no arithmetic): a MISCITED note
+    that names the wrong fact misleads the reader. "$100" isn't in "€95-100 for a
+    32GB kit" (bench 2026-11-15).
+    """
+    figs = figures(figure)
+    given = [f for f in figures(fact) if figs and f.unit == figs[0].unit]
+    return bool(figs) and all(
+        any(_matches(v, p, g.values) for g in given)
+        for fig in figs
+        for v, p in zip(fig.values, fig.precisions, strict=True)
+    )
