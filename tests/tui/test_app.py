@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -332,16 +333,26 @@ def asking_harness(tmp_path: Path, personas: dict[str, Persona], timeout: float)
     return h
 
 
+WAIT_S = 30.0
+
+
 async def start_run_until_waiting(pilot: Pilot[None], app: CouncilApp) -> None:
     """Send `/run 3` and return once it waits for the user's answer."""
     await app.workers.wait_for_complete()
     app.query_one(ChatInput).value = "/run 3"
     await pilot.press("enter")
-    for _ in range(500):
-        if app._answered is not None:
-            return
+    if not await wait_until(pilot, lambda: app._answered is not None):
+        raise AssertionError("the /run never waited for an answer")
+
+
+async def wait_until(pilot: Pilot[None], done: Callable[[], bool]) -> bool:
+    """Poll until `done()`, for up to WAIT_S of real time (a slow CI runner needs >5 s)."""
+    deadline = asyncio.get_running_loop().time() + WAIT_S
+    while not done():
+        if asyncio.get_running_loop().time() > deadline:
+            return False
         await pilot.pause(0.01)
-    raise AssertionError("the /run never waited for an answer")
+    return True
 
 
 async def test_run_goes_on_without_an_answer_after_the_timeout(
@@ -376,10 +387,7 @@ async def test_each_question_gets_its_own_wait(
         first_wait = app._answered
         app.query_one(ChatInput).value = "2 months"
         await pilot.press("enter")
-        for _ in range(500):
-            if app._answered is not None and app._answered is not first_wait:
-                break
-            await pilot.pause(0.01)
+        await wait_until(pilot, lambda: app._answered not in (None, first_wait))
         assert second in chat_text(app)
         assert h.engine.meta.runtime.round == 1  # still waiting, now on the second question
         await submit(pilot, "Yes")
