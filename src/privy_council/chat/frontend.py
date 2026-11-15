@@ -373,7 +373,9 @@ class ChatFrontend:
         if name == "status":
             return self._status(engine)
         if name == "flaws":
-            return flaws_text(engine.meta.runtime.flaws, engine.nick)[:1900]
+            return flaws_text(
+                engine.meta.runtime.flaws, engine.nick, engine.meta.runtime.revisions
+            )[:1900]
         if name == "facts":
             return facts_list_text(engine.meta.runtime.research)[:1900]
         if name == "pause":

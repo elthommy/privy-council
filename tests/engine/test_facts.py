@@ -246,3 +246,13 @@ def test_the_note_names_another_fact_only_in_the_same_currency() -> None:
     turn = "You risk a dead chip on a $100 board [F1]."
     flaws = checks.check_turn(turn, member="m", nick="M", sources=sources, given=given, known=[])
     assert [f.note for f in flaws] == ["$100 is not in [F1]."]
+
+
+def test_a_sum_of_the_cited_facts_figures_passes() -> None:
+    sources, given = prompt_parts("- Client X was 31% of sales and client Y 22%.")
+    turn = "The two clients, together 53% of sales [F1], could leave."
+    flaws = checks.check_turn(turn, member="m", nick="M", sources=sources, given=given, known=[])
+    assert flaws == []
+    wrong = turn.replace("53%", "61%")
+    flaws = checks.check_turn(wrong, member="m", nick="M", sources=sources, given=given, known=[])
+    assert [f.note for f in flaws] == ["61% is not in [F1]."]

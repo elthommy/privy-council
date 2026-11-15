@@ -97,6 +97,15 @@ The first two of each round become floor turns asking that member to check them
 own "Errors caught" section in the synthesis. Messages are never changed: `/flaws` lists
 what was flagged.
 
+**Fixing a draft before it's posted** (off by default). With `[engine] repair_turns =
+"local"`, a local member whose draft trips one of the precise checks (a fact tag pointing
+to a fact without that figure, a missing or inconsistent estimate line, a missing
+devil's-advocate line, a "Nick:" prefix or a literal "@nick") rewrites it once before it
+is posted, and the rewrite is kept only if it has fewer such problems. Claude members are
+never repaired. The draft stays in `transcript.jsonl` and `/flaws` lists what was fixed,
+with a count per member. The cost: one more local call per repaired turn, and no typing
+effect for local members while it's on.
+
 PgUp/PgDn scroll the chat. While you read older messages, new ones don't scroll it, and End jumps back to the newest.
 
 ### The dossier

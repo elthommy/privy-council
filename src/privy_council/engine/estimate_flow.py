@@ -12,7 +12,8 @@ from __future__ import annotations
 from privy_council.engine import context, ledger, prompts
 from privy_council.engine.flaw_flow import FlawFlow
 from privy_council.engine.notices import NOTICE_SPLIT
-from privy_council.models.flaw import ESTIMATE_KINDS, Flaw
+from privy_council.models.estimate import EstimateRecord
+from privy_council.models.flaw import ESTIMATE_KINDS, REPAIR_KINDS, Flaw
 from privy_council.models.moderator import ModeratorDecision
 from privy_council.models.persona import Persona, Role
 
@@ -36,11 +37,33 @@ class EstimateFlow(FlawFlow):
         rule = prompts.estimate_rule(self.meta.language, devil, self.meta.runtime.split)
         return f"\n\n{rule}"
 
-    def _check_turn(self, persona: Persona, prompt: context.Prompt, text: str) -> None:
+    def _turn_flaws(self, persona: Persona, prompt: context.Prompt, text: str) -> list[Flaw]:
         """Run the engine's checks, minus the figure check on the estimate lines."""
         if self._estimating():
             text = ledger.blank_lines(text)
-        super()._check_turn(persona, prompt, text)
+        return super()._turn_flaws(persona, prompt, text)
+
+    def _draft_flaws(self, persona: Persona, prompt: context.Prompt, text: str) -> list[Flaw]:
+        """Add a draft's estimate-line flaws (M19), keeping the ledger as it is."""
+        flaws = super()._draft_flaws(persona, prompt, text)
+        return flaws + [f for f in self._read_estimate(persona, text)[1] if f.kind in REPAIR_KINDS]
+
+    def _read_estimate(
+        self, persona: Persona, text: str
+    ) -> tuple[EstimateRecord | None, list[Flaw]]:
+        """Parse a turn's estimate lines against the member's last ones, storing nothing."""
+        if not self._estimating() or persona.meta.role is Role.DEVIL_ADVOCATE:
+            return None, []
+        rt = self.meta.runtime
+        own = rt.estimates.get(persona.slug, [])
+        return ledger.read_turn(
+            text,
+            member=persona.slug,
+            round_=rt.round,
+            previous=own[-1] if own else None,
+            split_set=rt.split is not None,
+            reframed=self._user_spoke_since(persona.slug),
+        )
 
     def _user_spoke_since(self, slug: str) -> bool:
         """Whether the user wrote between the member's turn just posted and its previous one.
@@ -63,20 +86,10 @@ class EstimateFlow(FlawFlow):
 
         `/ask` answers are read but not flagged: they come outside the rounds.
         """
-        if not self._estimating() or persona.meta.role is Role.DEVIL_ADVOCATE:
-            return
-        rt = self.meta.runtime
-        own = rt.estimates.get(persona.slug, [])
-        record, flaws = ledger.read_turn(
-            text,
-            member=persona.slug,
-            round_=rt.round,
-            previous=own[-1] if own else None,
-            split_set=rt.split is not None,
-            reframed=self._user_spoke_since(persona.slug),
-        )
+        record, flaws = self._read_estimate(persona, text)
         if record is not None:
-            rt.estimates[persona.slug] = [*own, record]
+            rt = self.meta.runtime
+            rt.estimates[persona.slug] = [*rt.estimates.get(persona.slug, []), record]
         if check:
             self._record_flaws(flaws)
 

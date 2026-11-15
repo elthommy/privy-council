@@ -197,7 +197,7 @@ async def dispatch(engine: DebateEngine, cmd: Command, out: Output) -> bool:
         )
         out(state_text(rt.debate_state, judged, engine.nick), None)
     elif cmd.name == "flaws":
-        out(flaws_text(engine.meta.runtime.flaws, engine.nick), None)
+        out(flaws_text(engine.meta.runtime.flaws, engine.nick, engine.meta.runtime.revisions), None)
     elif cmd.name == "facts":
         out(facts_list_text(engine.meta.runtime.research), None)
     elif cmd.name == "export":

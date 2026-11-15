@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -10,7 +11,7 @@ from privy_council.engine import context, prompts
 from privy_council.engine.facts import tag_block
 from privy_council.export import EXPORTS_DIR, ExportError, ExportFormat, export_session
 from privy_council.models.flaw import NOTE_KINDS, Flaw
-from privy_council.models.session import Consensus, DebateState, ResearchNote
+from privy_council.models.session import Consensus, DebateState, ResearchNote, Revision
 from privy_council.models.vote import Vote
 
 if TYPE_CHECKING:
@@ -110,11 +111,18 @@ NO_FLAWS = "No flaws caught so far."
 FLAW_LINE = "  r{round} {nick} [{kind}, {by}]: {text}"
 
 
-def flaws_text(flaws: list[Flaw], nick_of: Callable[[str], str]) -> str:
-    """Render the session's flaws for `/flaws`, oldest first."""
-    if not flaws:
+REVISIONS_TITLE = "-- fixed before posting (the drafts are kept in transcript.jsonl) --"
+REVISIONS_COUNT = "  turns fixed: {counts}"
+REVISION_LINE = "  r{round} {nick} [{kind}]: {text}"
+
+
+def flaws_text(
+    flaws: list[Flaw], nick_of: Callable[[str], str], revisions: Sequence[Revision] = ()
+) -> str:
+    """Render the session's flaws for `/flaws`, oldest first, then the fixed drafts."""
+    if not flaws and not revisions:
         return NO_FLAWS
-    lines = [FLAWS_TITLE]
+    lines = [FLAWS_TITLE] if flaws else []
     for f in flaws:
         text = f'"{f.excerpt}"' + (f" ({f.note})" if f.note else "")
         # The engine's note is mostly the figure in question; some kinds explain instead.
@@ -125,7 +133,25 @@ def flaws_text(flaws: list[Flaw], nick_of: Callable[[str], str]) -> str:
                 round=f.round, nick=nick_of(f.member), kind=f.kind.value, by=f.by, text=text
             )
         )
-    return "\n".join(lines)
+    return "\n".join(lines + _revision_lines(revisions, nick_of))
+
+
+def _revision_lines(revisions: Sequence[Revision], nick_of: Callable[[str], str]) -> list[str]:
+    """Render the drafts a local member fixed before posting (M19), with counts."""
+    if not revisions:
+        return []
+    counts = Counter(nick_of(r.member) for r in revisions)
+    lines = [REVISIONS_TITLE]
+    lines.append(REVISIONS_COUNT.format(counts=", ".join(f"{n} {c}" for n, c in counts.items())))
+    for r in revisions:
+        for f in r.flaws:
+            text = f'"{f.excerpt}"' + (f": {f.note}" if f.note else "")
+            lines.append(
+                REVISION_LINE.format(
+                    round=r.round, nick=nick_of(r.member), kind=f.kind.value, text=text
+                )
+            )
+    return lines
 
 
 FACTS_TITLE = "-- fresh facts (members cite them by tag) --"

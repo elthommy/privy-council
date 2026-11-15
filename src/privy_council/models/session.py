@@ -138,6 +138,15 @@ class MemoryReview(BaseModel):
         return bool(self.facts) or self.rewrite is not None
 
 
+class Revision(BaseModel):
+    """A member turn rewritten before it was posted (M19): the draft and its flaws."""
+
+    member: str  # persona slug
+    round: int = Field(ge=0)
+    draft: str
+    flaws: list[Flaw]
+
+
 class EngineRuntime(BaseModel):
     """Protocol progress, saved at turn boundaries so a failed step can be retried."""
 
@@ -179,6 +188,8 @@ class EngineRuntime(BaseModel):
     extra_rounds: int = Field(default=0, ge=0)
     # Flaws found in member turns (M11), by the engine's checks and by the moderator.
     flaws: list[Flaw] = Field(default_factory=list)
+    # Member turns a local model rewrote before they were posted (M19).
+    revisions: list[Revision] = Field(default_factory=list)
     # Members' parsed estimate lines, oldest first (M17, `estimate: probability` councils),
     # and the event the moderator split the question on (set once).
     estimates: dict[str, list[EstimateRecord]] = Field(default_factory=dict)
@@ -339,6 +350,13 @@ class FlawsFound(_EventBase):
     flaws: list[Flaw]
 
 
+class TurnRevised(_EventBase):
+    """A local member fixed its draft before posting (M19); `/flaws` lists it."""
+
+    kind: Literal["revised"] = "revised"
+    revision: Revision
+
+
 class RosterChanged(_EventBase):
     """A persona joined or left the channel (`/summon`, `/kick`)."""
 
@@ -361,6 +379,7 @@ Event = Annotated[
     | VoteTaken
     | DossierAdded
     | FlawsFound
+    | TurnRevised
     | TextDelta,
     Field(discriminator="kind"),
 ]

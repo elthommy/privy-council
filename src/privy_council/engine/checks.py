@@ -1094,6 +1094,8 @@ def _miscited(
             continue
         if _within_range(flaw.note, held):
             continue  # "~$60 for a used part [F7]" where F7 says "$40-$75"
+        if _combined(flaw.note, held):
+            continue  # "the two biggest clients, 53% of sales [F7]": F7's 31% + 22%
         found = [i for i, fact in shown.items() if i not in cited and _holds(fact, flaw.note)]
         note = (
             prompts.CITATION_NOTE_ELSEWHERE.format(
@@ -1118,6 +1120,23 @@ def _within_range(figure: str, held: str) -> bool:
         for fig in figs
         for v in fig.values
     )
+
+
+def _combined(figure: str, held: str) -> bool:
+    """Whether a figure is the sum of two figures the cited facts give, in its unit.
+
+    The member added up what the fact says (live check 2026-11-15: two customers'
+    31% and 22% cited as 53%). Sums only, same unit: differences and other
+    currencies matched by chance ("$90" for €410 - €320, bench 2026-11-14).
+    """
+    figs = figures(figure)
+    given = figures(held)
+    for fig in figs:
+        values = {v for f in given if f.unit == fig.unit for v in f.values}
+        pairs = {a + b for a, b in combinations(sorted(values), 2)}
+        if not all(_matches(v, p, pairs) for v, p in zip(fig.values, fig.precisions, strict=True)):
+            return False
+    return bool(figs)
 
 
 def _holds(fact: str, figure: str) -> bool:

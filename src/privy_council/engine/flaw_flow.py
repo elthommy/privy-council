@@ -1,20 +1,27 @@
 """Flaws in member turns (M11): the engine's checks, the moderator's flaw reports,
 and the floor prompts that make members check them.
 
-Flag only: a flawed turn's text is never changed, on disk or on screen.
+Flag only: a flawed turn's text is never changed, on disk or on screen. The one
+exception (M19, `[engine] repair_turns`, off by default): a local member whose draft
+trips a precise check rewrites it once before it is posted; the draft is kept.
 """
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 
+from privy_council.backends.base import BackendError, ChatMessage, CompletionResult
 from privy_council.engine import checks, context, prompts
 from privy_council.engine.core import EngineCore
 from privy_council.engine.notices import NOTICE_FLAW_ANSWERED
-from privy_council.models.flaw import FIGURE_KINDS, Flaw, FlawKind
+from privy_council.models.flaw import FIGURE_KINDS, REPAIR_KINDS, Flaw, FlawKind
 from privy_council.models.moderator import ModeratorDecision, ReportedFlaw
-from privy_council.models.persona import Persona, Role
-from privy_council.models.session import FlawsFound, ResearchNote
+from privy_council.models.persona import BackendKind, Persona, Role
+from privy_council.models.session import FlawsFound, ResearchNote, Revision, TurnRevised
+from privy_council.util.tokens import estimate_tokens
+
+log = logging.getLogger(__name__)
 
 
 class FlawFlow(EngineCore):
@@ -34,10 +41,14 @@ class FlawFlow(EngineCore):
 
     def _check_turn(self, persona: Persona, prompt: context.Prompt, text: str) -> None:
         """Run the engine's checks on a member turn against the prompt it was given."""
+        self._record_flaws(self._turn_flaws(persona, prompt, text))
+
+    def _turn_flaws(self, persona: Persona, prompt: context.Prompt, text: str) -> list[Flaw]:
+        """Return the engine's flaws in a member turn, recording nothing."""
         sources = context.sources_text(prompt.system, prompt.user)
         given = context.given_text(prompt.user)
         self._turn_sources[persona.slug, self.meta.runtime.round] = (sources, given)
-        flaws = checks.check_turn(
+        return checks.check_turn(
             text,
             member=persona.slug,
             nick=persona.name,
@@ -47,7 +58,63 @@ class FlawFlow(EngineCore):
             devil_line=self._devil_line(persona),
             round_=self.meta.runtime.round,
         )
-        self._record_flaws(flaws)
+
+    def _draft_flaws(self, persona: Persona, prompt: context.Prompt, text: str) -> list[Flaw]:
+        """Return the flaws a draft could be repaired for (M19), recording nothing."""
+        flaws = self._turn_flaws(persona, prompt, text)
+        return [f for f in flaws if f.kind in REPAIR_KINDS]
+
+    def _repairing(self, persona: Persona) -> bool:
+        """Whether this member's turn is checked and repaired before it is posted (M19).
+
+        Local members only: a Claude repair would spend quota, and a Claude member
+        falling back to a local model keeps its draft.
+        """
+        if self.settings.engine.repair_turns != "local":
+            return False
+        route = self.registry.route(persona, self.claude_exhausted)
+        return route.kind is BackendKind.OLLAMA and not route.fallback
+
+    async def _repaired(
+        self, persona: Persona, prompt: context.Prompt, draft: CompletionResult
+    ) -> CompletionResult:
+        """Return the turn to post: the draft, or its rewrite if that has fewer flaws.
+
+        One rewrite at most, on the member's own model: the same prompt, the draft as
+        its answer, then the problems to fix. A failed or cut-off rewrite keeps the
+        draft; so does one that fixes nothing.
+        """
+        flaws = self._draft_flaws(persona, prompt, draft.text)
+        if not flaws or draft.truncated:
+            return draft
+        task = prompts.repair_task(flaws, self.meta.language)
+        size = estimate_tokens(prompt.system + prompt.user + draft.text + task)
+        if size > self._budget(persona):
+            # The prompt was trimmed to fit the window: the draft and task on top would
+            # make Ollama cut its start (the persona) silently.
+            log.info("no repair of %s's turn: %d tokens past the budget", persona.slug, size)
+            return draft
+        messages = [
+            ChatMessage(role="user", content=prompt.user),
+            ChatMessage(role="assistant", content=draft.text),
+            ChatMessage(role="user", content=task),
+        ]
+        try:
+            fixed, _ = await self._complete(persona, prompt, "fix", messages=messages)
+        except BackendError as exc:
+            log.warning("repair of %s's turn failed: %s", persona.slug, exc)
+            return draft
+        text = fixed.text.strip()
+        if fixed.truncated or not text:
+            return draft
+        if len(self._draft_flaws(persona, prompt, text)) >= len(flaws):
+            return draft
+        revision = Revision(
+            member=persona.slug, round=self.meta.runtime.round, draft=draft.text, flaws=flaws
+        )
+        self.meta.runtime.revisions.append(revision)
+        self._emit(TurnRevised(revision=revision))
+        return fixed
 
     def _record_flaws(self, flaws: list[Flaw]) -> None:
         """Keep flaws in the session and log them in the transcript."""

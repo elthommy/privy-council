@@ -471,8 +471,12 @@ class DebateEngine(ResearchFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
             self._post(self.moderator.slug, floor)
         self._emit(TurnStarted(speaker=persona.slug, round=rt.round))
         prompt = self._member_prompt(persona, turn)
+        repair = self._repairing(persona)
         try:
-            result, fallback = await self._complete(persona, prompt, "turn", stream=True)
+            # A draft that may be rewritten isn't streamed: the chat shows only what is posted.
+            result, fallback = await self._complete(persona, prompt, "turn", stream=not repair)
+            if repair:
+                result = await self._repaired(persona, prompt, result)
             self._post_result(persona, result, fallback)
             self._check_turn(persona, prompt, result.text)
             self._track_estimate(persona, result.text)

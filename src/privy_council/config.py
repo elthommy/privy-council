@@ -82,6 +82,10 @@ class EngineConfig(_Section):
     # Show the engine's estimate flaws (M17) to the moderator; off until the bench
     # shows they are precise enough. They are always logged and listed by /flaws.
     estimate_flaws_to_moderator: bool = False
+    # M19: a local member whose draft trips a precise check (models.flaw.REPAIR_KINDS)
+    # rewrites it once before it is posted; "off" until a bench shows it helps.
+    # Claude members are never repaired (quota). Local drafts then aren't streamed.
+    repair_turns: Literal["off", "local"] = "off"
     # TUI `/run`: how long to wait for the user's answer to the Chair before the
     # debate goes on without it (like Discord's question_timeout_s); 0 waits for it.
     question_timeout_s: float = Field(default=600, ge=0)

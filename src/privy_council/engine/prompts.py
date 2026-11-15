@@ -13,7 +13,7 @@ from privy_council.models.session import DebateState, Message
 from privy_council.models.vote import Vote
 from privy_council.util.language import Language
 
-PROMPTS_VERSION = "63"
+PROMPTS_VERSION = "64"
 
 # Backends that accept a single user turn (the claude CLI on stdin) flatten a
 # multi-message conversation with these labels.
@@ -402,6 +402,41 @@ FLAW_TURN_PROMPT: dict[Language, str] = {
     ),
 }
 FLAW_TURN_THEN: dict[Language, str] = {"en": " Then: {prompt}", "fr": " Ensuite : {prompt}"}
+# M19: a local member's draft tripped a precise check; it rewrites it before posting.
+# The member answers in the debate language, so the task is in it too.
+REPAIR_TURN_TASK: dict[Language, str] = {
+    "en": (
+        "Before your message is posted, the engine found these problems in it:\n"
+        "{problems}\n"
+        "Rewrite the message with only these fixed: correct the tag, drop the claim, or "
+        "state it as your own estimate; add or fix the required line; make the numbers "
+        "agree. Change nothing else. Reply with the full corrected message and nothing more."
+    ),
+    "fr": (
+        "Avant que ton message soit publié, le moteur y a trouvé ces problèmes :\n"
+        "{problems}\n"
+        "Réécris le message en corrigeant seulement ces points : corrige l'étiquette, "
+        "retire l'affirmation ou présente-la comme ta propre estimation ; ajoute ou corrige "
+        "la ligne demandée ; mets les chiffres en accord. Ne change rien d'autre. Réponds "
+        "par le message corrigé en entier, et rien d'autre."
+    ),
+}
+REPAIR_PROBLEM = '- "{excerpt}": {note}'
+# What to fix, for the flaw kinds whose note is empty (keyed by FlawKind value).
+REPAIR_KIND_NOTES: dict[Language, dict[str, str]] = {
+    "en": {
+        "self_prefix": "don't start with your own name",
+        "self_mention": "don't address yourself",
+        "nick_literal": '"@nick" is a placeholder: write the member\'s name or drop it',
+        "missing_devil_line": "the line your task asks you to start with is missing",
+    },
+    "fr": {
+        "self_prefix": "ne commence pas par ton propre nom",
+        "self_mention": "ne t'adresse pas à toi-même",
+        "nick_literal": "« @nick » est un modèle : écris le nom du membre ou retire-le",
+        "missing_devil_line": "la ligne par laquelle ta tâche demande de commencer manque",
+    },
+}
 # The moderator forwarding questions to the user (one line per question).
 USER_QUESTION_LINE = "@{nick} {question}"
 
@@ -1136,6 +1171,17 @@ def flaw_rule(cap: int, last_round: bool) -> str:
     if cap <= 0 or last_round:
         return FLAW_RULE_SYNTHESIS
     return FLAW_RULE_PROMPTED.format(cap=cap)
+
+
+def repair_task(flaws: Sequence[Flaw], lang: Language) -> str:
+    """Render the task asking a member to fix the flagged problems of its draft."""
+    lines = [
+        REPAIR_PROBLEM.format(
+            excerpt=f.excerpt, note=f.note or REPAIR_KIND_NOTES[lang].get(f.kind.value, "")
+        ).rstrip(": ")
+        for f in flaws
+    ]
+    return REPAIR_TURN_TASK[lang].format(problems="\n".join(lines))
 
 
 def flaw_turn_prompt(quote: str, note: str, lang: Language, then: str | None = None) -> str:

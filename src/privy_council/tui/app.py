@@ -288,7 +288,11 @@ class CouncilApp(App[None]):
             "summary": lambda _: self.start(self.engine.summary),
             "state": lambda _: self.action_toggle_state(),
             "flaws": lambda _: self.chat.notice(
-                flaws_text(self.engine.meta.runtime.flaws, self.engine.nick)
+                flaws_text(
+                    self.engine.meta.runtime.flaws,
+                    self.engine.nick,
+                    self.engine.meta.runtime.revisions,
+                )
             ),
             "facts": lambda _: self.chat.notice(facts_list_text(self.engine.meta.runtime.research)),
             "export": lambda arg: self.chat.notice(export_command(self.engine, arg)),

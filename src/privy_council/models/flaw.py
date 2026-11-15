@@ -44,6 +44,18 @@ FIGURE_KINDS = (
 # Engine kinds about estimate lines: shown to the moderator only when
 # `[engine] estimate_flaws_to_moderator` is on (off until the M17 bench passes its gate).
 ESTIMATE_KINDS = frozenset({FlawKind.ESTIMATE_INCOHERENT, FlawKind.UNMARKED_CHANGE})
+# Engine kinds a local member may fix before its turn is posted (M19, `repair_turns`):
+# only checks precise enough that a false flag rarely rewrites a right message. Not
+# UNSOURCED or WRONG_UNIT (about a quarter real), UNMARKED_CHANGE (too little data),
+# UNKNOWN_MENTION (may be a right name).
+REPAIR_KINDS = CITATION_KINDS | {
+    FlawKind.MISSING_ESTIMATE,
+    FlawKind.ESTIMATE_INCOHERENT,
+    FlawKind.MISSING_DEVIL_LINE,
+    FlawKind.SELF_PREFIX,
+    FlawKind.SELF_MENTION,
+    FlawKind.NICK_LITERAL,
+}
 # Engine kinds whose note is a sentence, not just the figure in question.
 NOTE_KINDS = ESTIMATE_KINDS | CITATION_KINDS | {FlawKind.MISSING_ESTIMATE}
 
