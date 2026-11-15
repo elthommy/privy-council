@@ -29,6 +29,11 @@ def test_missing_items_from_a_claude_note() -> None:
     assert missing_items("- nothing missing here") == []
 
 
+def test_missing_items_drops_an_item_the_cap_would_cut() -> None:
+    long_item = "verification of a report " + "x" * 200
+    assert missing_items(f"Missing: the split; {long_item}; covenants") == ["the split"]
+
+
 def test_third_lookup_of_the_same_thing_repeats() -> None:
     notes = [
         note("Widget Corp filing debt note maturity table 2027"),
@@ -68,7 +73,16 @@ def test_earlier_queries_without_repeats() -> None:
 def test_facts_text_lists_what_is_not_findable_first() -> None:
     notes = [note("Widget", missing=("the quarterly split",))]
     text = context.facts_text(notes) or ""
-    assert text.startswith("Not findable so far: the quarterly split (searched once).")
+    assert text.startswith("Not findable so far: the quarterly split (missing after one search).")
+
+
+def test_not_findable_keeps_the_most_often_missing() -> None:
+    words = ["harbor", "meadow", "copper", "violet", "granite", "falcon", "willow"]
+    notes = [note(f"lookup {w}", missing=(w, "the debt table")) for w in words]
+    found = not_findable(notes)
+    assert found[0] == ("the debt table", 7)
+    assert len(found) == 5
+    assert found[1] == ("willow", 1)  # then newest first
 
 
 def test_tier_from_the_urls() -> None:

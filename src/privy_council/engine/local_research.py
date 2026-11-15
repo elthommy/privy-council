@@ -38,10 +38,15 @@ _MISSING = re.compile(r"^\s*(?:[-*•]\s*)?\**missing\**\s*:\s*\**\s*(?P<facts>.
 MAX_MISSING_CHARS = 200
 
 
+def missing_line(note: str) -> str:
+    """Return a summary's whole "Missing: …" line (the last one), or ""."""
+    found = _MISSING.findall(note)
+    return " ".join(found[-1].split()) if found else ""
+
+
 def missing_facts(note: str) -> str:
     """Return the facts a summary says the results lack ("Missing: …" line), or ""."""
-    found = _MISSING.findall(note)
-    return " ".join(found[-1].split())[:MAX_MISSING_CHARS] if found else ""
+    return missing_line(note)[:MAX_MISSING_CHARS]
 
 
 def without_missing(note: str) -> str:

@@ -835,8 +835,9 @@ RESEARCH_ENTRY = "{focus} (searched {date}):\n{text}"
 # First in the facts section (its start survives trimming), so members stop leaning on
 # a fact nobody could find (M20).
 NOT_FINDABLE = "Not findable so far: {items}. Don't state these as known."
-NOT_FINDABLE_ITEM = "{item} (searched {count} times)"
-NOT_FINDABLE_ITEM_ONCE = "{item} (searched once)"
+# The count is of the searches that reported the fact missing, whatever they aimed at.
+NOT_FINDABLE_ITEM = "{item} (missing after {count} searches)"
+NOT_FINDABLE_ITEM_ONCE = "{item} (missing after one search)"
 # A fact whose every source is on an official domain ([research] primary_domains).
 FACT_TAG_TIER = "[{id}, {tier}]"
 # A fresh fact's tag (M18), put before each research bullet and after a cited claim.

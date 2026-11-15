@@ -12,7 +12,7 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 
-from privy_council.engine.local_research import missing_facts
+from privy_council.engine.local_research import MAX_MISSING_CHARS, missing_line
 from privy_council.engine.moderation import _fact_words
 from privy_council.models.session import ResearchNote
 
@@ -22,14 +22,28 @@ REPEAT_OVERLAP = 0.5
 REPEAT_SKIP_AFTER = 2
 # The research prompt lists at most this many earlier queries (newest kept).
 MAX_EARLIER_QUERIES = 15
+# The facts section lists at most this many facts not found, the most often missing
+# first: the 2026-11-15 live check reached 8, four of them wordings of one fact.
+MAX_NOT_FINDABLE = 5
 _NUMBER = re.compile(r"\d+")
 _ITEM_SPLIT = re.compile(r"\s*;\s*")
 
 
 def missing_items(note_text: str) -> list[str]:
-    """Return the facts a note's "Missing:" line lists, one per item ("" items dropped)."""
-    line = missing_facts(note_text).rstrip(".")
-    return [item for item in _ITEM_SPLIT.split(line) if item]
+    """Return the facts a note's "Missing:" line lists, one per item ("" items dropped).
+
+    Whole items only, up to MAX_MISSING_CHARS in all: a cap cutting an item left
+    a dangling "report (" fragment in a live check (2026-11-15).
+    """
+    items: list[str] = []
+    size = 0
+    for item in _ITEM_SPLIT.split(missing_line(note_text).rstrip(".")):
+        size += len(item)
+        if size > MAX_MISSING_CHARS:
+            break
+        if item:
+            items.append(item)
+    return items
 
 
 def _overlap(words: set[str], other: set[str]) -> float:
@@ -73,10 +87,11 @@ def _found_later(words: set[str], later: Sequence[ResearchNote]) -> bool:
 
 
 def not_findable(notes: Sequence[ResearchNote]) -> list[tuple[str, int]]:
-    """Return the facts still missing after the lookups, newest wording first.
+    """Return the facts still missing after the lookups, most often missing first.
 
-    Each comes with the number of notes that reported it missing. A fact a later
-    lookup aimed at without reporting it missing counts as found.
+    Each comes with the number of notes that reported it missing (newest wording; at
+    most MAX_NOT_FINDABLE). A fact a later lookup aimed at without reporting it
+    missing counts as found.
     """
     out: list[tuple[str, int]] = []
     seen: list[set[str]] = []
@@ -90,7 +105,7 @@ def not_findable(notes: Sequence[ResearchNote]) -> list[tuple[str, int]]:
                 continue
             count = sum(any(_similar(words, _fact_words(m)) for m in n.missing) for n in notes)
             out.append((item, count))
-    return out
+    return sorted(out, key=lambda pair: -pair[1])[:MAX_NOT_FINDABLE]  # stable: newest first
 
 
 def earlier_queries(notes: Sequence[ResearchNote]) -> list[str]:
