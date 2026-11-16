@@ -31,7 +31,13 @@ from privy_council.engine.notices import (
     NOTICE_DOCUMENT_USAGE,
 )
 from privy_council.engine.research_flow import ResearchFlow, _today
-from privy_council.engine.research_ledger import cited_url, missing_items
+from privy_council.engine.research_ledger import (
+    cited_url,
+    missing_items,
+    page_for_repeat,
+    readable_pages,
+    repeat_focus,
+)
 from privy_council.models.moderator import DocumentRequest
 from privy_council.models.research import DocumentRecord, SearchResult
 from privy_council.models.session import ErrorEvent, ResearchNote, TurnStarted
@@ -86,6 +92,32 @@ class DocumentFlow(ResearchFlow):
                 continue
             await self._read_safely(request.url, request.look_for, auto=True)
         return relayed
+
+    def _reads_for_repeats(self, focuses: list[str]) -> list[DocumentRequest]:
+        """Return a page read for the first lookup that will be skipped as a repeat.
+
+        Call it before the lookups run. The search was tried twice with nothing new;
+        an official page those searches cite, never read in full, is what's left.
+        """
+        if not self._documents_on():
+            return []
+        research = self.meta.runtime.research
+        domains = self.settings.research.primary_domains
+        for focus in focuses:
+            if not repeat_focus(focus, research):
+                continue
+            url = page_for_repeat(focus, research, domains)
+            if url is not None:
+                return [DocumentRequest(url=url, look_for=focus)]
+        return []
+
+    def _readable_block(self) -> str:
+        """Return the official pages the moderator may read, for its task ("" if none)."""
+        if not self._documents_on():
+            return ""
+        pages = readable_pages(self.meta.runtime.research, self.settings.research.primary_domains)
+        block = prompts.render_readable_pages(pages)
+        return f"\n\n{block}" if block else ""
 
     def _document_problem(self) -> str | None:
         """Return why no page can be read now, or None if one can."""

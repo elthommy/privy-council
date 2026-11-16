@@ -8,6 +8,8 @@ from privy_council.engine.research_ledger import (
     earlier_queries,
     missing_items,
     not_findable,
+    page_for_repeat,
+    readable_pages,
     repeat_count,
     repeat_focus,
 )
@@ -109,3 +111,38 @@ def test_only_primary_facts_carry_the_tier_and_tags_still_parse() -> None:
         "F2": "Debt $8B (https://news.example.com/a)",
     }
     assert facts.tags("debt was $9B [F1, primary]") == ["F1"]
+
+
+GOV = "https://stats.example.gov/release/current.htm"
+
+
+def cited(focus: str, text: str, *, source: str = "claude", auto: bool = True) -> ResearchNote:
+    """A research note citing pages."""
+    return ResearchNote(focus=focus, text=text, auto=auto, source=source)  # type: ignore[arg-type]
+
+
+def test_readable_pages_are_the_official_html_pages_newest_first() -> None:
+    notes = [
+        cited("deposits", f"- Deposits 120 ({GOV})\n- Blog view https://blog.example.com/x"),
+        cited("loans", "- Loans 80 https://stats.example.gov/release/h8.pdf."),
+        cited("rates", "- Rate 3 % (https://bank.example.gov/rates/)"),
+        cited("split by type", f"- Table 2: 70 {GOV}", source="document", auto=False),
+    ]
+    assert readable_pages(notes, PRIMARY_DOMAINS) == [
+        (GOV, ["split by type"]),
+        ("https://bank.example.gov/rates/", []),
+    ]
+    assert readable_pages(notes, []) == []
+
+
+def test_a_repeated_lookup_gets_the_official_page_its_searches_cite() -> None:
+    notes = [
+        cited("Widget Corp filing debt note maturities 2027", f"- Note cut off ({GOV})"),
+        cited("Widget Corp filing debt maturities 2027 principal", "- https://news.example.com/a"),
+        cited("unrelated market close", "- https://other.example.gov/close.htm"),
+    ]
+    focus = "Widget Corp debt note maturities 2027"
+    assert page_for_repeat(focus, notes, PRIMARY_DOMAINS) == GOV
+    read = cited("maturities", f"- 2027: 2,222 {GOV}", source="document", auto=False)
+    assert page_for_repeat(focus, [*notes, read], PRIMARY_DOMAINS) is None
+    assert page_for_repeat("gold price today", notes, PRIMARY_DOMAINS) is None

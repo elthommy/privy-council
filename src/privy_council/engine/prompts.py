@@ -13,7 +13,7 @@ from privy_council.models.session import DebateState, Message
 from privy_council.models.vote import Vote
 from privy_council.util.language import Language
 
-PROMPTS_VERSION = "66"
+PROMPTS_VERSION = "67"
 
 # Backends that accept a single user turn (the claude CLI on stdin) flatten a
 # multi-message conversation with these labels.
@@ -554,12 +554,34 @@ RESEARCH_RULE_OFF = (
 # The document reader (M21): a page whose figure sits deep inside it (a filing's debt
 # note past the 99k characters a web fetch returns, 2026-10-30 and 2026-11-14).
 DOCUMENTS_RULE_ON = (
-    "at most 1 web page to read in full before the next round, when a figure the debate "
-    "needs sits deep inside a page the fresh facts already cite (a filing's note, an "
-    "official table) and the facts say it was cut off or not found. `url` is copied "
-    "exactly from the fresh facts; `look_for` names the figure in a few words, as the "
-    'page would label it ("debt maturities by year, principal"). Empty if none.'
+    "at most 1 web page to read in full before the next round. Use it instead of a "
+    "search whenever both hold: (1) a figure the debate needs is missing: a note's "
+    "Missing line or the not-findable list names it, a note says a page was cut off, "
+    "or a member asked for it; (2) a page the fresh facts already cite should hold it "
+    "(an official release's tables, a filing and its notes, a statistics page). "
+    "Another search returns the same summaries; the reader goes through the whole page. "
+    "`url` is copied exactly from the fresh facts{pages_hint}; `look_for` names the "
+    "figure in a few words, as the page would label it, with the table's scope when "
+    'the page has several ("debt maturities by year, principal"; "mortgage-backed '
+    'and other securities, all banks, monthly"). Not a page already read for the '
+    "same thing. Empty if none."
 )
+# Appended to "copied exactly from the fresh facts" when the task lists readable pages.
+DOCUMENTS_PAGES_HINT = ", best one of the official pages listed above"
+# With the reader on, the research rule sends such figures to `documents`.
+RESEARCH_RULE_READ = (
+    " A missing figure that a page already in the facts should hold goes in "
+    "`documents` below, not here."
+)
+# The official pages the facts cite, after the dynamics (M21: the Chair searched twice
+# more for a table that a cited page held).
+READABLE_PAGES = (
+    "Official pages the fresh facts cite, which the document reader can read in full "
+    "(see `documents`):\n{pages}"
+)
+READ_FOR_CHARS = 100  # of each earlier `look_for` shown beside a page
+READABLE_PAGE = "- {url}"
+READABLE_PAGE_READ = "- {url} (already read for: {look_for})"
 DOCUMENTS_RULE_OFF = "the document reader is off: always empty."
 # The moderator relaying a page read it couldn't run on its own (a chat line).
 READ_ASK = (
@@ -1183,6 +1205,26 @@ def render_memory(private: str, shared: str) -> str | None:
     if shared.strip():
         parts.append(MEMORY_SHARED.format(text=shared.strip()))
     return "\n\n".join(parts) or None
+
+
+def render_readable_pages(pages: Sequence[tuple[str, Sequence[str]]]) -> str:
+    """Render the pages the moderator may ask the reader for ("" when there are none)."""
+    if not pages:
+        return ""
+    lines = [
+        READABLE_PAGE_READ.format(url=url, look_for="; ".join(r[:READ_FOR_CHARS] for r in read))
+        if read
+        else READABLE_PAGE.format(url=url)
+        for url, read in pages
+    ]
+    return READABLE_PAGES.format(pages="\n".join(lines))
+
+
+def documents_rule(on: bool, pages: bool) -> str:
+    """Return the moderator's rule for `documents`: when to read a page, or always empty."""
+    if not on:
+        return DOCUMENTS_RULE_OFF
+    return DOCUMENTS_RULE_ON.format(pages_hint=DOCUMENTS_PAGES_HINT if pages else "")
 
 
 def render_dynamics(

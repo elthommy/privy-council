@@ -133,6 +133,14 @@ def _report(
     print("   questions_for_user:")
     for q in decision.questions_for_user or ["(none)"]:
         print(f"     - {q}")
+    print("   research:")
+    for focus in decision.research or ["(none)"]:
+        print(f"     - {focus}")
+    print("   documents:")
+    for d in decision.documents:
+        print(f"     - {d.url} for: {d.look_for}")
+    if not decision.documents:
+        print("     - (none)")
     print("   new_arguments:")
     for arg in decision.new_arguments or ["(none)"]:
         print(f"     - {arg}")

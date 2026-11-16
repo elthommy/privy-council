@@ -131,7 +131,8 @@ def test_discord_has_no_read() -> None:
 async def test_the_moderator_is_told_whether_it_may_ask_for_a_page(
     tmp_path: Path, personas: dict[str, Persona], fetched: list[str]
 ) -> None:
-    for config, rule in ((ON, prompts.DOCUMENTS_RULE_ON), (None, prompts.DOCUMENTS_RULE_OFF)):
+    on_rule = prompts.documents_rule(True, False)
+    for config, rule in ((ON, on_rule), (None, prompts.DOCUMENTS_RULE_OFF)):
         name = "on" if config else "off"
         h = Harness(
             tmp_path / name,
@@ -143,3 +144,50 @@ async def test_the_moderator_is_told_whether_it_may_ask_for_a_page(
         await h.engine.step()
         moderate = [r for r in h.claude.requests if r.tag.purpose == "moderate"]
         assert any(rule in r.messages[0].content for r in moderate), name
+
+
+async def test_the_moderator_sees_the_official_pages_it_may_read(
+    tmp_path: Path, personas: dict[str, Persona], fetched: list[str]
+) -> None:
+    h = Harness(
+        tmp_path,
+        personas,
+        responder([decision([("rigor", "x")]), decision([("rigor", "y")])]),
+        config=ON,
+    )
+    h.engine.meta.runtime.research.append(
+        ResearchNote(
+            focus="filing", text=f"- Debt $5B ({FILING_URL})\n- https://blog.example.com/a"
+        )
+    )
+    await h.engine.step()
+    await h.engine.step()
+    task = next(r for r in h.claude.requests if r.tag.purpose == "moderate").messages[0].content
+    assert prompts.READABLE_PAGE.format(url=FILING_URL) in task
+    assert "- https://blog.example.com/a\n" not in task.split(prompts.READABLE_PAGES[:30])[1]
+    assert prompts.DOCUMENTS_PAGES_HINT in task and prompts.RESEARCH_RULE_READ in task
+
+
+async def test_a_lookup_skipped_as_a_repeat_becomes_a_read_of_its_page(
+    tmp_path: Path, personas: dict[str, Persona], fetched: list[str]
+) -> None:
+    again = decision([("rigor", "x")]) | {"research": ["Widget Corp debt note maturities 2027"]}
+    h = Harness(tmp_path, personas, responder([again, decision([("rigor", "y")])]), config=ON)
+    h.engine.meta.runtime.research.extend(
+        [
+            ResearchNote(
+                focus="Widget Corp filing debt note maturities 2027",
+                text=f"- Note cut off ({FILING_URL})",
+                auto=True,
+            ),
+            ResearchNote(
+                focus="Widget Corp debt maturities 2027 principal", text="- nothing", auto=True
+            ),
+        ]
+    )
+    await h.engine.step()
+    await h.engine.step()
+    assert fetched == [FILING_URL]
+    assert any("Skipped: searched 2 times" in t for t in h.texts("system"))
+    assert h.engine.meta.runtime.research[-1].source == "document"
+    assert not [r for r in h.claude.requests if r.tag.purpose == "research"]

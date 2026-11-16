@@ -10,10 +10,16 @@ never when it names a new date or number ("close on Oct 19" after "close on Oct 
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
+from urllib.parse import urlsplit
 
-from privy_council.engine.facts import URL
-from privy_council.engine.local_research import MAX_MISSING_CHARS, missing_line, normalize_url
+from privy_council.engine.facts import URL, tier
+from privy_council.engine.local_research import (
+    MAX_MISSING_CHARS,
+    URL_TAIL,
+    missing_line,
+    normalize_url,
+)
 from privy_council.engine.moderation import _fact_words
 from privy_council.models.session import ResearchNote
 
@@ -26,6 +32,10 @@ MAX_EARLIER_QUERIES = 15
 # The facts section lists at most this many facts not found, the most often missing
 # first: the 2026-11-15 live check reached 8, four of them wordings of one fact.
 MAX_NOT_FINDABLE = 5
+# The moderator's task lists at most this many official pages it may read (newest first).
+MAX_READABLE_PAGES = 6
+# The document reader takes HTML and plain text only.
+_UNREADABLE = (".pdf", ".xls", ".xlsx", ".csv", ".zip", ".doc", ".docx", ".ppt", ".pptx")
 _NUMBER = re.compile(r"\d+")
 _ITEM_SPLIT = re.compile(r"\s*;\s*")
 
@@ -58,14 +68,19 @@ def repeat_count(focus: str, notes: Sequence[ResearchNote]) -> int:
     0 when the focus names a date or number none of them did: a new day's close is a
     new lookup, even in the same words.
     """
+    return len(repeat_notes(focus, notes))
+
+
+def repeat_notes(focus: str, notes: Sequence[ResearchNote]) -> list[ResearchNote]:
+    """Return the Chair's earlier lookups of this focus (none if it names a new number)."""
     words = _fact_words(focus)
     matched = [
         n for n in notes if n.auto and _overlap(words, _fact_words(n.focus)) >= REPEAT_OVERLAP
     ]
     seen = {num for n in matched for num in _NUMBER.findall(n.focus)}
     if set(_NUMBER.findall(focus)) - seen:
-        return 0
-    return len(matched)
+        return []
+    return matched
 
 
 def repeat_focus(focus: str, notes: Sequence[ResearchNote]) -> bool:
@@ -117,6 +132,67 @@ def cited_url(url: str, notes: Sequence[ResearchNote]) -> bool:
         for n in notes
         for found in [*URL.findall(n.text), *n.fetched]
     )
+
+
+def _note_urls(note: ResearchNote) -> dict[str, str]:
+    """Return the URLs a note cites or fetched, as written, by normalized form (in order)."""
+    out: dict[str, str] = {}
+    for url in [*URL.findall(note.text), *note.fetched]:
+        out.setdefault(normalize_url(url), url.strip().rstrip(URL_TAIL))
+    return out
+
+
+def _readable(url: str, primary_domains: Collection[str]) -> bool:
+    """Tell whether a URL is an official page the reader can take (no PDF or data file)."""
+    path = urlsplit(url).path.lower()
+    data_file = path.endswith(_UNREADABLE) or path.rstrip("/").endswith("/pdf")
+    return tier(url, primary_domains) == "primary" and not data_file
+
+
+def _read_pages(notes: Sequence[ResearchNote]) -> dict[str, list[str]]:
+    """Return what the document reader looked for, by normalized URL of the page read."""
+    read: dict[str, list[str]] = {}
+    for n in notes:
+        if n.source != "document":
+            continue
+        for key in _note_urls(n):
+            if n.focus not in read.setdefault(key, []):
+                read[key].append(n.focus)
+    return read
+
+
+def readable_pages(
+    notes: Sequence[ResearchNote], primary_domains: Collection[str]
+) -> list[tuple[str, list[str]]]:
+    """Return the official pages the facts cite, each with what the reader looked for there.
+
+    For the moderator's task (M21 live check, 2026-11-16: it searched twice more for a
+    table that a page in its facts held). Newest note first, at most MAX_READABLE_PAGES.
+    """
+    read = _read_pages(notes)
+    pages: dict[str, str] = {}
+    for n in reversed(notes):
+        for key, url in _note_urls(n).items():
+            if _readable(url, primary_domains):
+                pages.setdefault(key, url)
+    return [(url, read.get(key, [])) for key, url in pages.items()][:MAX_READABLE_PAGES]
+
+
+def page_for_repeat(
+    focus: str, notes: Sequence[ResearchNote], primary_domains: Collection[str]
+) -> str | None:
+    """Return an official page the earlier lookups of `focus` cite and nobody read yet.
+
+    A third search for the same thing finds nothing new (see the module docstring);
+    reading the page those searches cite is the one thing not tried. Newest lookup
+    first; None when they cite no such page or each was read already.
+    """
+    read = _read_pages(notes)
+    for n in reversed(repeat_notes(focus, notes)):
+        for key, url in _note_urls(n).items():
+            if _readable(url, primary_domains) and key not in read:
+                return url
+    return None
 
 
 def earlier_queries(notes: Sequence[ResearchNote]) -> list[str]:

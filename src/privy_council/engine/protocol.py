@@ -13,6 +13,7 @@ Shared plumbing lives in `core.py`; research, memory, the roster, `/vote` +
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -104,6 +105,8 @@ from privy_council.models.session import (
 )
 from privy_council.storage.sessions import SessionStore
 from privy_council.util.language import LANGUAGE_NAMES, LANGUAGES
+
+log = logging.getLogger(__name__)
 
 MODERATOR_SCHEMA: dict[str, Any] = moderator_schema()
 # The people's lines repeated in the update's task (shared chats): about 1k tokens.
@@ -586,9 +589,20 @@ class DebateEngine(DocumentFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
         if not ending:
             self._set_split(decision)
         searched = len(rt.research)
-        relayed = [] if ending else await self._auto_research(decision.research)
+        # Counts and URLs only: a run can then be audited for reads asked or not.
+        log.info(
+            "moderator update, round %d: %d searches and %d page reads asked %s",
+            rt.round,
+            len(decision.research),
+            len(decision.documents),
+            [d.url for d in decision.documents],
+        )
+        relayed: list[str] = []
         if not ending:
-            relayed += await self._auto_documents(decision.documents)
+            # Decided before the lookups run: each one adds a note the rule would count.
+            documents = decision.documents or self._reads_for_repeats(decision.research)
+            relayed = await self._auto_research(decision.research)
+            relayed += await self._auto_documents(documents)
         if self._drop_answered_flaws(rt.research[searched:]):
             rt.pending = self._with_flaw_turns(planned)
             self._notice(NOTICE_NEXT.format(speakers=self._speaker_list(rt.pending)))
@@ -633,6 +647,7 @@ class DebateEngine(DocumentFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
         rt = self.meta.runtime
         protocol = self.council.protocol
         stall_limit = protocol.stall_rounds if protocol.auto_stop_on_consensus else 0
+        reading = self._documents_on() and not last_round
         task = prompts.MODERATE_TASK.format(
             questions_cap=prompts.QUESTIONS_CAP_SHARED
             if self.guests
@@ -640,7 +655,8 @@ class DebateEngine(DocumentFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
             dynamics=prompts.render_dynamics(
                 stats, self.nick, rt.stalled_rounds, stall_limit, self._round_figure_flaws()
             )
-            + self._estimates_block(),
+            + self._estimates_block()
+            + ("" if last_round else self._readable_block()),
             round=rt.round,
             max_rounds=self.max_rounds,
             stop_rule=prompts.stop_rule(
@@ -651,13 +667,9 @@ class DebateEngine(DocumentFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
                 if last_round
                 else prompts.RESEARCH_RULE_OFF
                 if self._research_unavailable() in ("off", "needs_claude")
-                else prompts.RESEARCH_RULE_ON
+                else prompts.RESEARCH_RULE_ON + (prompts.RESEARCH_RULE_READ if reading else "")
             ),
-            documents_rule=(
-                prompts.DOCUMENTS_RULE_ON
-                if self._documents_on() and not last_round
-                else prompts.DOCUMENTS_RULE_OFF
-            ),
+            documents_rule=prompts.documents_rule(reading, bool(self._readable_block())),
             summon_rule=prompts.summon_rule([] if last_round else self._summon_candidates()),
             split_rule=prompts.split_rule(self._estimating() and not last_round, rt.split),
             asked_rule=prompts.asked_rule(rt.asked_questions, last_round),

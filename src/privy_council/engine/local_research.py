@@ -86,7 +86,7 @@ def shorter_queries(queries: Sequence[str]) -> list[str]:
 
 QUERIES_SCHEMA: dict[str, Any] = ResearchQueries.model_json_schema()
 _URL = re.compile(r"https?://[^\s<>\"')\]]+")
-_URL_TAIL = ".,;:!?*_`"
+URL_TAIL = ".,;:!?*_`"
 
 
 def parse_queries(result: CompletionResult, limit: int) -> list[str]:
@@ -118,7 +118,7 @@ def fallback_query(focus: str, topic: str, standing: str = "") -> str:
 
 def normalize_url(url: str) -> str:
     """Return a URL in the form used to compare them (no trailing slash or punctuation)."""
-    return url.strip().rstrip(_URL_TAIL).rstrip("/")
+    return url.strip().rstrip(URL_TAIL).rstrip("/")
 
 
 def merge_results(batches: Sequence[Sequence[SearchResult]], limit: int) -> list[SearchResult]:
