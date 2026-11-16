@@ -38,6 +38,7 @@ from privy_council.models.session import (
     Event,
     MessageEvent,
     Phase,
+    ResearchAdded,
     SessionMeta,
     SessionState,
     StateUpdated,
@@ -83,6 +84,8 @@ def _meta_at(meta: SessionMeta, events: list[Event], round_: int, stalled: int) 
     rt.moderated_upto = len(messages_of(events[: updates[round_ - 2] + 1])) if prior else 0
     rt.stalled_rounds, rt.early_stop, rt.stop_reason = stalled, False, None
     rt.asked_questions, rt.proposed_summons = asked, summons
+    # Only the research done by then: later notes would answer what the update asks for.
+    rt.research = [e.note for e in before if isinstance(e, ResearchAdded)]
     return out
 
 
