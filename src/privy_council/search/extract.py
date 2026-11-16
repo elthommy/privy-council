@@ -3,8 +3,8 @@
 Pure functions, stdlib only. Scripts and styles are dropped, headings kept, and a
 table row becomes its cells joined by " | ", so a maturity table stays readable.
 A chunk is about CHUNK_CHARS on paragraph borders, with its heading on top; a table
-stays whole up to TABLE_CHARS (plus a short lead-in paragraph), and a longer one is
-cut by rows with its first row repeated.
+stays whole up to TABLE_CHARS (plus its short lead-in paragraphs), and a longer one is
+cut by rows, each part with the lead-in and the first row repeated.
 """
 
 from __future__ import annotations
@@ -18,8 +18,11 @@ CHUNK_CHARS = 1500
 TABLE_CHARS = 4000
 # A paragraph this short right before a table is its lead-in ("The following table
 # shows principal maturities by year"): it joins the table's passage, or it outranks
-# the table, whose rows hold the figures but few of the words.
+# the table, whose rows hold the figures but few of the words. A release without
+# heading tags puts the table's title there too ("2. Maturity Distribution of ...",
+# then "Millions of dollars"), so up to LEAD_PARAGRAPHS short ones are taken.
 LEAD_CHARS = 500
+LEAD_PARAGRAPHS = 3
 # A first line this short is a table's subtitle ("Seasonally adjusted, billions of
 # dollars."), part of its label; a longer one is a paragraph.
 SUBTITLE_CHARS = 80
@@ -47,9 +50,12 @@ class Chunk:
 
     heading: str
     text: str
+    lead: str = ""  # a table's lead-in paragraphs, which open `text` too
 
     def label(self) -> str:
-        """Return the heading and, if the text opens with a short line, that subtitle."""
+        """Return the heading and the table's lead-in, or a short first line (a subtitle)."""
+        if self.lead:
+            return f"{self.heading}\n{self.lead}"
         first = self.text.split("\n", 1)[0]
         return f"{self.heading}\n{first}" if len(first) <= SUBTITLE_CHARS else self.heading
 
@@ -188,17 +194,26 @@ def chunks(blocks: list[Block]) -> list[Chunk]:
             flush()
             heading = block.text
         elif block.kind == "table":
-            lead = body.pop() if body and len(body[-1]) <= LEAD_CHARS else ""
+            lead = _take_lead(body)
             flush()
-            parts = _table_parts(block.text)
-            out.append(Chunk(heading, f"{lead}\n{parts[0]}" if lead else parts[0]))
-            out += [Chunk(heading, part) for part in parts[1:]]
+            for part in _table_parts(block.text):
+                out.append(Chunk(heading, f"{lead}\n{part}" if lead else part, lead))
         else:
             if body and sum(len(b) for b in body) + len(block.text) > CHUNK_CHARS:
                 flush()
             body.append(block.text[: CHUNK_CHARS * 4])
     flush()
     return out
+
+
+def _take_lead(body: list[str]) -> str:
+    """Remove the short paragraphs that end `body` (a table's lead-in) and return them."""
+    lead: list[str] = []
+    while body and len(lead) < LEAD_PARAGRAPHS:
+        if sum(len(p) for p in lead) + len(body[-1]) > LEAD_CHARS:
+            break
+        lead.insert(0, body.pop())
+    return "\n".join(lead)
 
 
 def _table_parts(table: str) -> list[str]:

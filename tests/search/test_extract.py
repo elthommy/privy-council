@@ -103,3 +103,25 @@ def test_the_table_without_unasked_qualifiers_wins() -> None:
     assert "33" in passages[bm25.top(query, passages, 1, 8000, labels)[0]]
     small = "Treasury securities at small regional banks"
     assert "11" in passages[bm25.top(small, passages, 1, 8000, labels)[0]]
+
+
+def test_a_table_title_written_as_paragraphs_joins_the_table() -> None:
+    html = (
+        "<p>" + "Long prose about the release. " * 30 + "</p>"
+        "<p>R.9</p><p>2. Maturity of widgets held</p><p>Millions of units</p>"
+        "<table><tr><td>Within 15 days</td><td>4,321</td></tr></table>"
+    )
+    cut = chunks(html_blocks(html))
+    table = cut[-1]
+    assert table.text.startswith("R.9\n2. Maturity of widgets held\nMillions of units\n")
+    assert "Maturity of widgets" in table.label()
+    assert "Maturity of widgets" not in cut[0].text
+
+
+def test_every_part_of_a_cut_table_keeps_the_lead_in() -> None:
+    rows = "".join(f"<tr><td>Line {i}</td><td>{i * 7:,}</td></tr>" for i in range(400))
+    html = f"<h2>Table 5. Widgets</h2><p>Not seasonally adjusted.</p><table>{rows}</table>"
+    cut = chunks(html_blocks(html))
+    assert len(cut) > 1
+    assert all(c.text.startswith("Not seasonally adjusted.\nLine 0 | 0") for c in cut)
+    assert all(c.label() == "Table 5. Widgets\nNot seasonally adjusted." for c in cut)
