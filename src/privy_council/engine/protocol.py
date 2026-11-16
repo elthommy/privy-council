@@ -26,6 +26,7 @@ from privy_council.backends.base import (
 from privy_council.backends.registry import BackendRegistry
 from privy_council.config import Settings
 from privy_council.engine import context, dynamics, prompts
+from privy_council.engine.document_flow import DocumentFlow
 from privy_council.engine.dossier_flow import DossierFlow
 from privy_council.engine.estimate_flow import EstimateFlow
 from privy_council.engine.memory_flow import MemoryFlow
@@ -81,7 +82,6 @@ from privy_council.engine.notices import (
     NOTICE_SYNTHESIS_MODEL_LIMITED,
     NOTICE_UNKNOWN_MEMBER,
 )
-from privy_council.engine.research_flow import ResearchFlow
 from privy_council.engine.resume import check_resumable, resume_notice
 from privy_council.engine.review_flow import ReviewFlow
 from privy_council.engine.roster_flow import RosterFlow
@@ -120,7 +120,7 @@ PHASE_STATES = {
 }
 
 
-class DebateEngine(ResearchFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow, EstimateFlow):
+class DebateEngine(DocumentFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow, EstimateFlow):
     """Runs one council session; see the module docstring."""
 
     @classmethod
@@ -587,6 +587,8 @@ class DebateEngine(ResearchFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
             self._set_split(decision)
         searched = len(rt.research)
         relayed = [] if ending else await self._auto_research(decision.research)
+        if not ending:
+            relayed += await self._auto_documents(decision.documents)
         if self._drop_answered_flaws(rt.research[searched:]):
             rt.pending = self._with_flaw_turns(planned)
             self._notice(NOTICE_NEXT.format(speakers=self._speaker_list(rt.pending)))
@@ -650,6 +652,11 @@ class DebateEngine(ResearchFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
                 else prompts.RESEARCH_RULE_OFF
                 if self._research_unavailable() in ("off", "needs_claude")
                 else prompts.RESEARCH_RULE_ON
+            ),
+            documents_rule=(
+                prompts.DOCUMENTS_RULE_ON
+                if self._documents_on() and not last_round
+                else prompts.DOCUMENTS_RULE_OFF
             ),
             summon_rule=prompts.summon_rule([] if last_round else self._summon_candidates()),
             split_rule=prompts.split_rule(self._estimating() and not last_round, rt.split),

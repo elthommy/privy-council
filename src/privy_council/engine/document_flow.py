@@ -1,0 +1,210 @@
+"""The document reader (M21): fetch a public page, keep the passages that match, summarize.
+
+A web fetch by Claude returns about the first 100k characters of a page, so a
+filing's debt note further down was never read (2026-10-30, 2026-11-14). Here our
+own code fetches the page behind a URL guard (`search/fetch.py`), cuts it into
+passages, ranks them with BM25 against what to look for, and the moderator
+summarizes the best ones in one call with no tools. Bullets the passages don't back
+are dropped, as for local search.
+
+The moderator may only ask for a URL already in the fresh facts; the owner's `/read`
+takes any URL. Discord has no `/read`.
+"""
+
+from __future__ import annotations
+
+from privy_council.backends.base import BackendAuthError, BackendError
+from privy_council.engine import prompts
+from privy_council.engine.facts import blocks
+from privy_council.engine.local_research import check_summary, missing_line, unbacked_numbers
+from privy_council.engine.moderation import MAX_DOCUMENT_REQUESTS
+from privy_council.engine.notices import (
+    NOTICE_BUSY,
+    NOTICE_DOCUMENT_DROPPED,
+    NOTICE_DOCUMENT_FAILED,
+    NOTICE_DOCUMENT_NEEDS_LOCAL,
+    NOTICE_DOCUMENT_NO_MATCH,
+    NOTICE_DOCUMENT_NOT_IN_FACTS,
+    NOTICE_DOCUMENT_OFF,
+    NOTICE_DOCUMENT_READ,
+    NOTICE_DOCUMENT_READING,
+    NOTICE_DOCUMENT_USAGE,
+)
+from privy_council.engine.research_flow import ResearchFlow, _today
+from privy_council.engine.research_ledger import cited_url, missing_items
+from privy_council.models.moderator import DocumentRequest
+from privy_council.models.research import DocumentRecord, SearchResult
+from privy_council.models.session import ErrorEvent, ResearchNote, TurnStarted
+from privy_council.search import bm25
+from privy_council.search.extract import chunks, html_blocks, text_blocks
+from privy_council.search.fetch import FetchedPage, fetch_page
+
+
+class DocumentFlow(ResearchFlow):
+    """Reading one page for a figure the web search couldn't reach."""
+
+    async def read(self, arg: str) -> None:
+        """The owner's `/read <url> <what to look for>`: any public page, through the guard."""
+        if self._needs_topic():
+            return
+        url, _, look_for = arg.strip().partition(" ")
+        if not url or not look_for.strip():
+            self._notice(NOTICE_DOCUMENT_USAGE)
+            return
+        problem = self._document_problem()
+        if problem is not None:
+            self._notice(problem)
+            return
+        if self.busy:
+            self._notice(NOTICE_BUSY)
+            return
+        self.busy = True
+        try:
+            await self._read_safely(url, look_for.strip(), auto=False)
+        except BackendAuthError as exc:
+            self._emit(ErrorEvent(text=NOTICE_DOCUMENT_FAILED.format(error=exc)))
+        finally:
+            self.busy = False
+
+    async def _auto_documents(self, requests: list[DocumentRequest]) -> list[str]:
+        """Read the pages the moderator asked for; return the reads relayed to the user."""
+        relayed: list[str] = []
+        for request in requests[:MAX_DOCUMENT_REQUESTS]:
+            if self._document_problem() is not None:
+                continue
+            nick = self.moderator.name
+            if not cited_url(request.url, self.meta.runtime.research):
+                self._notice(NOTICE_DOCUMENT_NOT_IN_FACTS.format(nick=nick, url=request.url))
+                continue
+            reason = self._read_cap_reason()
+            if reason is not None:
+                relayed.append(
+                    prompts.READ_ASK.format(
+                        url=request.url, look_for=request.look_for, reason=reason
+                    )
+                )
+                continue
+            await self._read_safely(request.url, request.look_for, auto=True)
+        return relayed
+
+    def _document_problem(self) -> str | None:
+        """Return why no page can be read now, or None if one can."""
+        cfg = self.settings.research
+        if not cfg.documents.enabled:
+            return NOTICE_DOCUMENT_OFF
+        if self.meta.local_only and not cfg.local.enabled:
+            return NOTICE_DOCUMENT_NEEDS_LOCAL
+        if self._research_unavailable() == "off":
+            return self._research_problem()
+        return None
+
+    def _documents_on(self) -> bool:
+        """Whether the moderator may ask for a page read (for its task's rule)."""
+        return self._document_problem() is None
+
+    def _read_cap_reason(self) -> str | None:
+        """Return why the moderator can't read on its own now (its allowance), or None."""
+        research = self.meta.runtime.research
+        if sum(n.auto for n in research) >= self.settings.research.auto_max_per_session:
+            return prompts.REASON_AUTO_LIMIT.format(count=len(research))
+        if self.budget_warnings(1):
+            return prompts.REASON_BUDGET
+        return None
+
+    async def _read_safely(self, url: str, look_for: str, *, auto: bool) -> None:
+        """Read a page; a failure (refused, unreachable, timeout) never stops the debate."""
+        try:
+            await self._read_document(url, look_for, auto=auto)
+        except BackendAuthError:
+            raise
+        except BackendError as exc:
+            self._emit(ErrorEvent(text=NOTICE_DOCUMENT_FAILED.format(error=exc)))
+
+    async def _read_document(self, url: str, look_for: str, *, auto: bool) -> None:
+        """Fetch, pick the passages, summarize them, and add the note."""
+        nick = self.moderator.name
+        self._emit(TurnStarted(speaker=self.moderator.slug, round=self.meta.runtime.round))
+        self._notice(NOTICE_DOCUMENT_READING.format(nick=nick, url=url, look_for=look_for))
+        page = await fetch_page(url, self.settings.research.documents)
+        passages = self._passages(page, look_for)
+        if not passages:
+            self._notice(NOTICE_DOCUMENT_NO_MATCH.format(nick=nick, url=url, look_for=look_for))
+            return
+        chars = sum(len(p) for p in passages)
+        self._notice(
+            NOTICE_DOCUMENT_READ.format(nick=nick, url=url, count=len(passages), chars=chars)
+        )
+        text = await self._summarize_page(url, page, look_for, passages)
+        self._add_note(
+            ResearchNote(
+                focus=look_for,
+                text=text or prompts.DOCUMENT_SUMMARY_EMPTY,
+                fetched=[url],
+                auto=auto,
+                source="document",
+                missing=missing_items(text),
+            )
+        )
+
+    def _passages(self, page: FetchedPage, look_for: str) -> list[str]:
+        """Return the page's passages that best match `look_for`, best first."""
+        cfg = self.settings.research.documents
+        html = page.content_type != "text/plain"
+        blocks = html_blocks(page.text) if html else text_blocks(page.text)
+        rendered = [c.render() for c in chunks(blocks)]
+        picked = bm25.top(look_for, rendered, cfg.passages, cfg.passage_chars)
+        return [rendered[i][: cfg.passage_chars] for i in picked]
+
+    async def _summarize_page(
+        self, url: str, page: FetchedPage, look_for: str, passages: list[str]
+    ) -> str:
+        """Summarize the passages in one call with no tools; drop unbacked bullets."""
+        numbered = "\n\n".join(
+            prompts.DOCUMENT_PASSAGE.format(index=i, text=p) for i, p in enumerate(passages, 1)
+        )
+        task = prompts.DOCUMENT_TASK.format(
+            url=url, look_for=look_for, today=_today(), passages=numbered
+        )
+        prompt = self._research_prompt(prompts.RESEARCH_SYSTEM, task, facts=False)
+        cfg = self.settings.research
+        result, _ = await self._complete(
+            self.moderator,
+            prompt,
+            "read",
+            timeout_s=cfg.timeout_s,
+            max_output=cfg.max_output_tokens,
+        )
+        hits = [SearchResult(title="", url=url, snippet=p) for p in passages]
+        hits.append(SearchResult(title="", url=page.url))  # after redirects
+        context = f"{self.meta.topic}\n{look_for}"
+        text, dropped = check_summary(result.text, hits, context)
+        text, dropped = _strict(text, "\n".join([context, url, *passages]), dropped)
+        if dropped:
+            self._notice(NOTICE_DOCUMENT_DROPPED.format(count=len(dropped)))
+        if self.store:
+            record = DocumentRecord(
+                url=page.url,
+                look_for=look_for,
+                passages=passages,
+                summary=result.text,
+                dropped=dropped,
+            )
+            self.store.append_document_raw(record.model_dump_json())
+        return text
+
+
+def _strict(text: str, sources: str, dropped: list[str]) -> tuple[str, list[str]]:
+    """Drop the bullets with a number the passages don't hold (bare numbers included).
+
+    A "Missing:" line is never dropped (it may name a period the page lacks), and
+    it is judged apart from the bullet it follows, which `blocks` would join it to.
+    """
+    kept: list[str] = []
+    missing: list[str] = []
+    for block in blocks(text):
+        lines = block.split("\n")
+        missing += [line for line in lines if missing_line(line)]
+        fact = "\n".join(line for line in lines if not missing_line(line))
+        if fact.strip():
+            (dropped if unbacked_numbers(fact, sources) else kept).append(fact)
+    return "\n".join([*kept, *missing]), dropped

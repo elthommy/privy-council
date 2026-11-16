@@ -113,6 +113,23 @@ class LocalSearchConfig(_Section):
     follow_up: bool = True
 
 
+class DocumentsConfig(_Section):
+    """The document reader (M21): our own code fetches a public page and reads it.
+
+    Off by default. The fetch sends only the URL: no cookies, no referer, nothing
+    built from the question. Local-only sessions also need [research.local] enabled.
+    """
+
+    enabled: bool = False
+    max_bytes: int = Field(default=20_000_000, gt=0)
+    timeout_s: float = Field(default=30, gt=0)
+    # A generic name with no personal data; some sites want a contact, which the
+    # owner may set in config.local.toml (never committed).
+    user_agent: str = "privy-council-document-reader/1.0"
+    passages: int = Field(default=6, ge=1, le=12)  # chunks given to the summary
+    passage_chars: int = Field(default=8000, ge=1000)  # their total size
+
+
 # Regulators, statistics offices, central banks and international institutions.
 PRIMARY_DOMAINS = (
     "gov",
@@ -151,6 +168,7 @@ class ResearchConfig(_Section):
     # Share of each member's prompt budget the facts may take (small num_ctx models).
     context_share: float = Field(default=0.25, gt=0.0, le=0.8)
     local: LocalSearchConfig = Field(default_factory=LocalSearchConfig)
+    documents: DocumentsConfig = Field(default_factory=DocumentsConfig)
     # Normal sessions: "claude" (its web search), "local" (SearXNG; the Chair still
     # writes the queries and the summary), or "auto" (Claude, and SearXNG whenever
     # Claude can't search). Local-only sessions always use SearXNG, whatever this says.

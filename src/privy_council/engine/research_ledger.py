@@ -12,7 +12,8 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 
-from privy_council.engine.local_research import MAX_MISSING_CHARS, missing_line
+from privy_council.engine.facts import URL
+from privy_council.engine.local_research import MAX_MISSING_CHARS, missing_line, normalize_url
 from privy_council.engine.moderation import _fact_words
 from privy_council.models.session import ResearchNote
 
@@ -106,6 +107,16 @@ def not_findable(notes: Sequence[ResearchNote]) -> list[tuple[str, int]]:
             count = sum(any(_similar(words, _fact_words(m)) for m in n.missing) for n in notes)
             out.append((item, count))
     return sorted(out, key=lambda pair: -pair[1])[:MAX_NOT_FINDABLE]  # stable: newest first
+
+
+def cited_url(url: str, notes: Sequence[ResearchNote]) -> bool:
+    """Tell whether a URL appears in the session's facts or was read by a search (M21)."""
+    wanted = normalize_url(url)
+    return any(
+        normalize_url(found) == wanted
+        for n in notes
+        for found in [*URL.findall(n.text), *n.fetched]
+    )
 
 
 def earlier_queries(notes: Sequence[ResearchNote]) -> list[str]:

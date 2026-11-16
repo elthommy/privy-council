@@ -3,7 +3,8 @@
 Whatever `config.toml` says: no call reaches Claude (the registry's local-only
 guard), no persona memory is read or written, and sessions live under
 `data/chat/`, so `council sessions` and the private memory stay separate. Chat
-sessions search when local search is enabled (user decision, 2026-10-24).
+sessions search when local search is enabled (user decision, 2026-10-24), but
+never read whole pages (M21: the document reader is off, whatever the config says).
 """
 
 from __future__ import annotations
@@ -28,9 +29,12 @@ CHAT_DATA = "chat"
 
 
 def chat_settings(settings: Settings) -> Settings:
-    """Return the settings chat sessions run with: data under data/chat/."""
+    """Return the settings chat sessions run with: data under data/chat/, no page reads."""
     paths = settings.paths.model_copy(update={"data": settings.data_dir / CHAT_DATA})
-    return settings.model_copy(update={"paths": paths})
+    # The security model: no page fetch from Discord, not even one the Chair asks for.
+    documents = settings.research.documents.model_copy(update={"enabled": False})
+    research = settings.research.model_copy(update={"documents": documents})
+    return settings.model_copy(update={"paths": paths, "research": research})
 
 
 class ChatSessions:

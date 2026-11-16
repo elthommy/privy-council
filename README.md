@@ -59,6 +59,7 @@ The chat opens with Chair restating the question. `/step` runs one round and pau
 | `/ask @nick <text>` | A direct question to one member, outside the rounds |
 | `/as <name> <text>` | Speak as another person, to try a shared chat locally (M16) |
 | `/research [focus]` | Chair searches the web (through the claude CLI); everyone sees the facts |
+| `/read <url> <what to look for>` | read one public page in full for a figure deep inside it (a filing's table); needs `[research.documents] enabled` |
 | `/attach <path>` | Add a `.txt`, `.json`, `.md` or `.csv` file to the dossier |
 | `/vote` | Every member states a final position and a confidence (0–100 %), shown as a table |
 | `/summary` | An interim synthesis; the debate goes on |
@@ -287,7 +288,7 @@ Members of the same council run on different model families where possible, so t
 - `[ollama]`: `num_ctx` and `think` per model;
 - `[engine]`: last K messages and the output cap;
 - `[memory]`: caps, approval, council scope;
-- `[research]`: on or off, how many searches Chair may start on its own, `provider` (`claude`, `local` or `auto`, see Local-only mode), and `primary_domains` (official domains whose facts are tagged `primary`); `[research.local]`: local web search via SearXNG (see Local-only mode);
+- `[research]`: on or off, how many searches Chair may start on its own, `provider` (`claude`, `local` or `auto`, see Local-only mode), and `primary_domains` (official domains whose facts are tagged `primary`); `[research.documents]`: the document reader (off by default); `[research.local]`: local web search via SearXNG (see Local-only mode);
 - `[dossier]`: summary threshold and size limit;
 - `[user] name`: your nick;
 - `[local_only]`: the default mode and the seat map (see Local-only mode);

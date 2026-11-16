@@ -137,6 +137,12 @@ provider = "claude"           # normal sessions: "claude" (its web search), "loc
                               # [F7, primary]; the default lists regulators, statistics
                               # offices and central banks (config.py PRIMARY_DOMAINS)
 
+[research.documents]          # the document reader: /read, and pages the Chair asks to read
+enabled = false               # true: our own code fetches public pages (URL guard, no cookies)
+# max_bytes = 20000000 / timeout_s = 30 / passages = 6 / passage_chars = 8000
+# user_agent = "privy-council-document-reader/1.0"   # generic; set a contact only in
+                              # config.local.toml, if a site refuses the generic name
+
 [research.local]              # web search via SearXNG: local-only sessions, provider local/auto
 enabled = false               # true = your consent: search queries leave this PC
 base_url = "http://127.0.0.1:8888"   # scripts/searxng.sh start (Podman)

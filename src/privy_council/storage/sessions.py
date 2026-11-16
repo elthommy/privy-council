@@ -43,6 +43,7 @@ SYNTHESIS_MD = "synthesis.md"
 DOSSIER_DIR = "dossier"
 RESEARCH_MD = "research.md"
 RESEARCH_RAW_JSONL = "research_raw.jsonl"  # local search hits, for checking a note by hand
+DOCUMENTS_RAW_JSONL = "documents_raw.jsonl"  # passages the document reader used
 SUMMARY_SUFFIX = ".summary.md"  # the moderator's summary of a large attached file
 # Symlink to the newest session, so `tail -f data/sessions/latest/transcript.md` works.
 LATEST_LINK = "latest"
@@ -271,6 +272,11 @@ class SessionStore:
     def append_research_raw(self, record: str) -> None:
         """Append one local search's queries, hits and dropped bullets (a JSON line)."""
         with (self.directory / RESEARCH_RAW_JSONL).open("a", encoding="utf-8") as fh:
+            fh.write(record.rstrip("\n") + "\n")
+
+    def append_document_raw(self, record: str) -> None:
+        """Append one page read: its URL, the passages used and dropped bullets (JSON)."""
+        with (self.directory / DOCUMENTS_RAW_JSONL).open("a", encoding="utf-8") as fh:
             fh.write(record.rstrip("\n") + "\n")
 
     def add_dossier_file(self, source: Path) -> str:

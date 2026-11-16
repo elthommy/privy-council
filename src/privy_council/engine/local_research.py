@@ -161,6 +161,24 @@ def _backed(block: str, urls: set[str], sources: str) -> bool:
     return not any(f.kind is FlawKind.UNSOURCED for f in flaws)
 
 
+_NUMBER = re.compile(r"\d(?:[\d,.\u202f\u00a0']*\d)?")
+
+
+def _numbers(text: str) -> set[str]:
+    """Return a text's numbers, with thousands separators removed ("1,234" -> "1234")."""
+    return {re.sub(r"[,\u202f\u00a0']", "", n) for n in _NUMBER.findall(text)}
+
+
+def unbacked_numbers(block: str, sources: str) -> list[str]:
+    """Return the numbers in a bullet that the sources don't hold, URLs aside.
+
+    For a page summary (M21): its table cells are bare numbers ("2,222" under "in
+    millions"), which the figure check, made for numbers with a unit, lets through.
+    """
+    known = _numbers(_URL.sub(" ", sources))
+    return sorted(_numbers(_URL.sub(" ", block)) - known)
+
+
 def check_summary(
     text: str, results: Sequence[SearchResult], context: str = ""
 ) -> tuple[str, list[str]]:

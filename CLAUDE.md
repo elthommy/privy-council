@@ -52,6 +52,19 @@ change an entry point (a command, a front end, a network call, a file read);
     local-only and Discord sessions never reach Claude. Page fetching in our own code
     (local search) still needs the URL guard (http(s) only, no private or loopback
     IPs, re-checked after redirects, size and time caps).
+  - *Fetched pages* (the document reader, `[research.documents]`, off by default):
+    our own code fetches one public page, through the URL guard in `search/fetch.py`
+    (http(s) only, no credentials in the URL, every hop's host resolved and refused
+    unless all its addresses are public, an IPv4 address inside an IPv6 one
+    included (mapped, 6to4, Teredo, NAT64), redirects followed by hand and re-checked, 5 at
+    most, 20 MB and 30 s caps, HTML and plain text only). The request carries only the
+    URL: no cookies, referer, proxy or netrc, and a generic User-Agent. The page is data
+    for one summary call with **no tools**; bullets with a figure or number the
+    passages don't hold are dropped. The moderator may only ask for a URL already in
+    the session's facts; the owner's `/read` takes any URL (TUI and REPL only). URLs
+    are logged at INFO, never page text. **Accepted risk**: DNS rebinding between the
+    address check and the request (check-then-fetch); pinning the checked address
+    would close it.
   - *Discord* (`council chat discord`): the only input reachable from outside the
     PC, through an outbound connection only (no open port). Friends are allowlisted
     by **user ID**; they can only speak, answer the Chair, and read `/status`,
@@ -70,7 +83,11 @@ change an entry point (a command, a front end, a network call, a file read);
   API keys stripped (normal mode); search queries leave the PC only through the
   claude CLI or, with the `[research.local]` opt-in, SearXNG (local-only and Discord
   sessions; normal sessions only with `[research] provider` "local" or "auto"; the
-  Chair's query prompt never carries the dossier itself); everything else stays
+  Chair's query prompt never carries the dossier itself); page fetches by the
+  document reader (off by default; in local-only sessions only with
+  `[research.local] enabled`; never in Discord sessions, which have no `/read` and
+  run with the reader off; the request
+  carries only the URL); everything else stays
   in `data/` (gitignored). Local-only sessions can't reach Claude (registry guard).
 - **Attackers that matter**:
   1. Someone posting in the Discord channel (a friend, or anyone who gets in)
@@ -122,7 +139,9 @@ src/privy_council/
   engine/      protocol.py (DebateEngine) core.py memory_flow.py research_flow.py
                state_machine.py prompts.py notices.py context.py moderation.py
                research.py local_research.py resume.py scheduler.py budget.py
+               research_ledger.py document_flow.py
   search/      base.py searxng.py (local web search, local-only sessions)
+               fetch.py (URL guard) extract.py bm25.py (document reader)
   chat/        frontend.py render.py names.py store.py launch.py cli.py
                discord_bot.py (the only module importing discord.py)
   memory/      store.py distill.py

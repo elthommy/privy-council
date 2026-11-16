@@ -26,6 +26,17 @@ class SearchResult(BaseModel):
     published: str | None = None  # as the engine gave it, when it gave one
 
 
+class DocumentRecord(BaseModel):
+    """One page read, as saved in `documents_raw.jsonl`, to check its note by hand."""
+
+    ts: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    url: str  # where the page ended up, after redirects
+    look_for: str
+    passages: list[str]  # what the summary read, best first
+    summary: str  # the moderator's summary before the check
+    dropped: list[str] = Field(default_factory=list)  # bullets the check removed
+
+
 class LocalSearchRecord(BaseModel):
     """One local search as saved in `research_raw.jsonl`, to check its note by hand."""
 

@@ -41,6 +41,15 @@ class ReportedFlaw(BaseModel):
 FLAW_KINDS = ("arithmetic", "contradiction", "logic", "unsourced", "other")
 
 
+class DocumentRequest(BaseModel):
+    """A page the moderator wants read (M21): a URL from the facts and what to find."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    url: str
+    look_for: str
+
+
 class ModeratorDecision(BaseModel):
     """The moderator's JSON output after each round, parsed strictly."""
 
@@ -57,6 +66,9 @@ class ModeratorDecision(BaseModel):
     still_open: list[int] | None = None
     # Web searches the moderator wants before the next round (search focuses).
     research: list[str] = Field(default_factory=list)
+    # Pages to read before the next round (M21; at most one is kept), when the reader
+    # is on; a URL must already be in the fresh facts.
+    documents: list[DocumentRequest] = Field(default_factory=list)
     consensus: Consensus = Consensus.NONE
     # What the round added, one line each ("@Nick: ..."); [] means nothing new and
     # None (a reply without the field) means not judged. For loop detection.

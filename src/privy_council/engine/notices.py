@@ -55,7 +55,11 @@ NOTICE_RESEARCH_READ = "{nick} read web pages: {urls}"
 NOTICE_RESEARCH_NO_SEARCH = "{nick} answered without searching the web"
 NOTICE_RESEARCH_FAILED = "Research failed ({error}); the debate continues without it"
 # Shown with each research note, so the quality difference stays visible.
-RESEARCH_SOURCE_LABELS = {"claude": "Claude web search", "local": "local search"}
+RESEARCH_SOURCE_LABELS = {
+    "claude": "Claude web search",
+    "local": "local search",
+    "document": "document reader",
+}
 NOTICE_LOCAL_ONLY_SEARCH = (
     "Local-only mode: every seat runs on a local model and nothing reaches Claude. "
     "Web search via SearXNG: search queries leave this PC"
@@ -119,6 +123,23 @@ FORGET_SHARED = "the shared facts about you"
 FORGET_ALL = "all memory (every persona's notes and the shared facts)"
 FORGET_PERSONA = "{nick}'s private notes"
 NOTICE_AUTO_RESEARCH = "{nick} is looking up: {focus}"
+# The document reader (M21).
+NOTICE_DOCUMENT_READING = "{nick} is reading {url} for: {look_for}"
+NOTICE_DOCUMENT_READ = "{nick} read {url}: {count} passages matched, {chars:,} characters"
+NOTICE_DOCUMENT_NO_MATCH = "{nick} read {url} but no passage mentions: {look_for}"
+NOTICE_DOCUMENT_NOT_IN_FACTS = (
+    "{nick} wanted to read {url}, which is not in the fresh facts: skipped (/read reads any page)."
+)
+NOTICE_DOCUMENT_FAILED = "Couldn't read the page: {error}"
+NOTICE_DOCUMENT_OFF = (
+    "The document reader is off: set [research.documents] enabled = true in config.local.toml."
+)
+NOTICE_DOCUMENT_NEEDS_LOCAL = (
+    "Local-only session: reading a page needs network access, allowed with "
+    "[research.local] enabled = true."
+)
+NOTICE_DOCUMENT_USAGE = "usage: /read <url> <what to look for>"
+NOTICE_DOCUMENT_DROPPED = "{count} bullet(s) of the page summary dropped: not in the passages."
 # M20: the Chair's third lookup of the same thing found nothing new in every saved
 # session (2026-11-15 labels); the user's /research still runs it.
 NOTICE_AUTO_RESEARCH_REPEAT = (

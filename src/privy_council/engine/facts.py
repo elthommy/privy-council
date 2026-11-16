@@ -26,7 +26,7 @@ _SPAN = re.compile(r"F(\d+)\s*[\-\u2013]\s*F(\d+)")
 _MAX_SPAN = 10
 # A fact's tag at the start of its line, after the bullet, as `tag_block` writes it.
 _TAGGED_LINE = re.compile(r"^\s*(?:(?:[-*•]|\d+[.)])\s+)?\[(F\d+)(?:, [a-z]+)?\] ?", re.MULTILINE)
-_URL = re.compile(r"https?://[^\s)\]>\"']+")
+URL = re.compile(r"https?://[^\s)\]>\"']+")
 # Where a sentence ends: after . ! or ? (and any tags right after it) before a space,
 # or at a line break, so a list item is a sentence of its own. "5.5%" has no space.
 _SENTENCE_END = re.compile(r"[.!?](?:\s*" + TAG.pattern + r")*(?=\s)|\n")
@@ -69,7 +69,7 @@ def tier(text: str, primary_domains: Collection[str]) -> Literal["primary", "sec
     A fact with no URL is secondary. A domain entry matches its host and subdomains:
     ".gov" or "gov" matches "www.sec.gov", "insee.fr" matches "www.insee.fr".
     """
-    hosts = [(urlsplit(u).hostname or "").lower() for u in _URL.findall(text)]
+    hosts = [(urlsplit(u).hostname or "").lower() for u in URL.findall(text)]
     suffixes = [d.lower().strip().lstrip(".") for d in primary_domains if d.strip()]
     if hosts and all(any(_on_domain(h, s) for s in suffixes) for h in hosts):
         return "primary"

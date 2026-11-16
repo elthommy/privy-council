@@ -38,6 +38,7 @@ MAX_USER_QUESTIONS = 2
 REPEAT_OVERLAP = 0.8
 # Web searches the moderator may request per update (each one is a Claude call).
 MAX_RESEARCH_REQUESTS = 2
+MAX_DOCUMENT_REQUESTS = 1  # a page read costs a fetch and a summary call (M21)
 # New arguments the moderator lists per update; more is a sign it isn't filtering.
 MAX_NEW_ARGUMENTS = 5
 # User facts kept in the debate state; past this, the state crowds out messages.
@@ -153,6 +154,7 @@ def moderator_schema(people: int = 1) -> dict[str, Any]:
     schema["properties"]["next_turns"]["minItems"] = 1
     schema["properties"]["questions_for_user"]["maxItems"] = MAX_USER_QUESTIONS * people
     schema["properties"]["research"]["maxItems"] = MAX_RESEARCH_REQUESTS
+    schema["properties"]["documents"]["maxItems"] = MAX_DOCUMENT_REQUESTS
     state = schema["$defs"]["DebateState"]["properties"]
     state["user_facts"]["maxItems"] = MAX_USER_FACTS
     return schema
@@ -466,6 +468,9 @@ def parse_decision(result: CompletionResult, members: Mapping[str, Persona]) -> 
                 decision.questions_for_user, len(decision.questions_for_user)
             ),
             "research": _clean(decision.research, MAX_RESEARCH_REQUESTS),
+            "documents": [d for d in decision.documents if d.url.strip() and d.look_for.strip()][
+                :MAX_DOCUMENT_REQUESTS
+            ],
             "new_arguments": (
                 None
                 if decision.new_arguments is None

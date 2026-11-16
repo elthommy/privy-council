@@ -165,6 +165,8 @@ async def dispatch(engine: DebateEngine, cmd: Command, out: Output) -> bool:
             await engine.ask(*parts)
     elif cmd.name == "research":
         await engine.research(cmd.arg or None)
+    elif cmd.name == "read":
+        await engine.read(cmd.arg)
     elif cmd.name == "summon":
         engine.summon(cmd.arg)
     elif cmd.name == "kick":

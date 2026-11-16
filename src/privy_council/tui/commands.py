@@ -28,6 +28,7 @@ COMMANDS = {
     "ask": "/ask @nick <text>: a direct question to one member, outside the rounds",
     "as": "/as <name> <text>: speak as another person (tries a shared chat locally)",
     "research": "/research [focus]: the moderator searches the web; everyone sees the facts",
+    "read": "/read <url> <what to look for>: read one page in full for a figure (if enabled)",
     "summon": "/summon <persona>: add a persona to the channel; it speaks next round",
     "kick": "/kick <nick>: remove a member from the channel",
     "attach": "/attach <path>: add a .txt/.json/.md/.csv file; everyone sees it",

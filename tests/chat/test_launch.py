@@ -56,6 +56,13 @@ def test_chat_sessions_search_when_local_search_is_on(tmp_path: Path) -> None:
     assert engine.research_mode is ResearchMode.AUTO
 
 
+def test_chat_sessions_never_read_pages(tmp_path: Path) -> None:
+    on = settings(tmp_path, research={"local": {"enabled": True}, "documents": {"enabled": True}})
+    engine = ChatSessions(on).new("wellbeing", "Should I change jobs?")
+    assert not engine.settings.research.documents.enabled
+    assert not engine._documents_on()
+
+
 def test_token_never_shows(tmp_path: Path) -> None:
     s = settings(tmp_path, chat={"discord": CHAT})
     assert s.chat.discord is not None

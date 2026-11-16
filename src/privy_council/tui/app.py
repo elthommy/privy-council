@@ -284,6 +284,7 @@ class CouncilApp(App[None]):
             "kick": self.engine.kick,
             "attach": lambda arg: self.start(lambda: self.engine.attach(arg)),
             "research": lambda arg: self.start(lambda: self.engine.research(arg or None)),
+            "read": lambda arg: self.start(lambda: self.engine.read(arg)),
             "vote": lambda _: self.start(self.engine.vote),
             "summary": lambda _: self.start(self.engine.summary),
             "state": lambda _: self.action_toggle_state(),

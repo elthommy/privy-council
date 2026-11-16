@@ -249,7 +249,10 @@ class ResearchFlow(EngineCore):
             note = await self._local_research(focus, auto)
         else:
             note = await self._claude_research(focus, auto)
-        note = note.model_copy(update={"focus": title})
+        self._add_note(note.model_copy(update={"focus": title}))
+
+    def _add_note(self, note: ResearchNote) -> None:
+        """Keep a research note: saved at once, shown, and in every later prompt."""
         rt = self.meta.runtime
         rt.research.append(note)
         self._save()
