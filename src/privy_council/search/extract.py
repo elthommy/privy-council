@@ -20,6 +20,9 @@ TABLE_CHARS = 4000
 # shows principal maturities by year"): it joins the table's passage, or it outranks
 # the table, whose rows hold the figures but few of the words.
 LEAD_CHARS = 500
+# A first line this short is a table's subtitle ("Seasonally adjusted, billions of
+# dollars."), part of its label; a longer one is a paragraph.
+SUBTITLE_CHARS = 80
 _SKIP = frozenset({"script", "style", "noscript", "template", "svg", "head", "iframe"})
 _HEADINGS = frozenset({"h1", "h2", "h3", "h4", "h5", "h6", "caption"})
 _BREAKS = frozenset(
@@ -44,6 +47,11 @@ class Chunk:
 
     heading: str
     text: str
+
+    def label(self) -> str:
+        """Return the heading and, if the text opens with a short line, that subtitle."""
+        first = self.text.split("\n", 1)[0]
+        return f"{self.heading}\n{first}" if len(first) <= SUBTITLE_CHARS else self.heading
 
     def render(self) -> str:
         """Return the passage as the summary reads it, heading first."""

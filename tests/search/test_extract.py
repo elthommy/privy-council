@@ -79,3 +79,27 @@ def test_a_table_caption_becomes_its_heading() -> None:
     page = "<table><caption>Debt maturities</caption><tr><td>2027</td><td>2,222</td></tr></table>"
     passages = [c.render() for c in chunks(html_blocks(page))]
     assert passages == ["Debt maturities\n2027 | 2,222"]
+
+
+def test_the_table_without_unasked_qualifiers_wins() -> None:
+    rows = (
+        "<tr><th>Account</th><th>2025 Oct</th></tr>"
+        "<tr><td>Treasury securities</td><td>{v}</td></tr>"
+    )
+    page = "".join(
+        f"<h2>Table {n}. Assets of {who} Banks</h2><p>Seasonally adjusted, billions.</p>"
+        f"<table>{rows.format(v=v)}</table>"
+        for n, who, v in [
+            (1, "Small Regional", "11"),
+            (2, "Large Regional", "22"),
+            (3, "All Commercial", "33"),
+            (4, "Foreign-Related", "44"),
+        ]
+    )
+    cut = chunks(html_blocks(page))
+    passages = [c.render() for c in cut]
+    labels = [c.label() for c in cut]
+    query = "Treasury securities, all commercial banks, seasonally adjusted"
+    assert "33" in passages[bm25.top(query, passages, 1, 8000, labels)[0]]
+    small = "Treasury securities at small regional banks"
+    assert "11" in passages[bm25.top(small, passages, 1, 8000, labels)[0]]

@@ -151,8 +151,10 @@ class DocumentFlow(ResearchFlow):
         cfg = self.settings.research.documents
         html = page.content_type != "text/plain"
         blocks = html_blocks(page.text) if html else text_blocks(page.text)
-        rendered = [c.render() for c in chunks(blocks)]
-        picked = bm25.top(look_for, rendered, cfg.passages, cfg.passage_chars)
+        cut = chunks(blocks)
+        rendered = [c.render() for c in cut]
+        labels = [c.label() for c in cut]
+        picked = bm25.top(look_for, rendered, cfg.passages, cfg.passage_chars, labels)
         return [rendered[i][: cfg.passage_chars] for i in picked]
 
     async def _summarize_page(
