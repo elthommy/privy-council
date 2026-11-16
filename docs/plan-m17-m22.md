@@ -463,3 +463,43 @@ engine flags, seconds per turn. Gate: at least 40 % fewer invented specifics at 
 more than 4 times the time. If it passes, propose
 `[engine] drafts_per_local_turn = 1 | 3` per model to the user; otherwise record
 the result and drop it.
+
+### Review and step 0 result (2026-11-16) — M22 dropped (user's decision, 2026-11-16)
+
+**Step 0 was run** (`scripts/consistency_probe.py`, no GPU, no Claude) on
+`m18-vouch.jsonl`, the one run with several answers per turn on the current prompts
+(16 later-round turns; gemma4 3 answers each, Bolt 2). The older two-answer files
+predate fact tags and repair, so they no longer describe what a seat posts.
+
+| | gemma4 (48 answers) | Bolt (32 answers) |
+|---|---|---|
+| sourced figure reappears in another draft | 112/188 (60 %) | 48/83 (58 %) |
+| unsourced figure (not a %) reappears | 0/34 (0 %) | 0/10 (0 %) |
+| sourced figures a "2 of 3 drafts" rule keeps | 67/94 (71 %) | n/a (2 drafts) |
+| unsourced figures per answer | 0.35 | 0.31 |
+
+What it shows:
+- The hypothesis holds on its invented side (0 % against the 30 % bar) and misses
+  on its sourced side (60 % against the 70 % bar): a draft picks different facts
+  each time, so "stated by two drafts" is a weak sign that a figure is real.
+- Read by hand, the 28 unsourced figures are the member's own arithmetic (a cost
+  per year, a total of tagged prices) or labelled estimates, with at most 2
+  possible inventions. Fact tags, the citation check and repair (M18, M19) already
+  took the invented figures out: the M18 bench read 0 inventions in the tagged run.
+- So the step 1 gate ("40 % fewer invented specifics") has nothing to measure: 0 to
+  2 events in 80 answers. And the merge rule would cost content: it drops the
+  member's own arithmetic (never worded the same twice) and about 3 sourced figures
+  in 10, unless they carry a tag, at 4 times the time per turn.
+- What the probe can't see: invented names and claims without a number, and the
+  larger label classes (contradiction, logic), which a majority of drafts doesn't
+  obviously fix: a model that reasons wrongly tends to do so in every draft.
+
+**Decision: M22 is not built; it closes with this result.** If local seats
+show a new kind of invention later, two cheaper steps come first:
+1. Re-run the probe on that session's turns (2 extra drafts per turn, about 1 min
+   of GPU per turn on gemma4 or Bolt) to see whether the new kind is unstable
+   across drafts at all.
+2. If it is, use the drafts as a *check*, not a merge: post the first draft, and
+   flag a figure or named fact that no other draft states and no source holds (one
+   more kind for `/flaws` and for repair). This keeps the member's text and its
+   arithmetic, and costs nothing when the seat is not on the list.
