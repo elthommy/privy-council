@@ -42,7 +42,7 @@ change an entry point (a command, a front end, a network call, a file read);
   - *Model output* (Claude and Ollama), text and JSON: parsed with Pydantic, never
     executed. Moderator decisions can only plan turns, ask questions and propose a
     `/summon`, which the owner must accept. Rendered without markup (TUI markup
-    off, HTML export escaped).
+    off, HTML export escaped and loading nothing: images shown as text, a CSP).
   - *Web content* (research by Claude's WebSearch and WebFetch, or SearXNG
     snippets): data for the Chair, never instructions. Local search drops summary
     bullets whose figures or URLs aren't in the hits. **Accepted risk**: Claude

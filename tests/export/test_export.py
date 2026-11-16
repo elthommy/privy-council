@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from privy_council.export import ExportError, ExportFormat, export_session
+from privy_council.export.html import markdown_html
 from privy_council.export.report import build_report
 from privy_council.models.flaw import Flaw, FlawKind
 from privy_council.models.persona import Persona
@@ -167,7 +168,8 @@ def test_html_is_self_contained_and_escaped(tmp_path: Path, personas: dict[str, 
     assert text.startswith("<!doctype html>")
     assert "<script" not in text  # neither ours nor the model's
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in text
-    assert "http" not in text.split("<main>")[0]  # no CDN, no external stylesheet
+    assert "://" not in text.split("<main>")[0]  # no CDN, no external stylesheet
+    assert "Content-Security-Policy" in text  # and nothing in the page may load anything
     assert "<h3>Consensus</h3>" in text
     assert f'style="--c:{personas["rigor"].meta.color}"' in text
     assert "<summary>Research: PEA ceiling</summary>" in text
@@ -221,3 +223,9 @@ def test_flaw_text_keeps_a_citation_note_whole() -> None:
     assert flaw_text(cited) == 'r2 [miscited, engine] "x [F2]": $9 is not in [F2].'
     figure = Flaw(member="m", kind=FlawKind.UNSOURCED, excerpt="costs $9", note="$9", round=2)
     assert flaw_text(figure) == 'r2 [unsourced, engine] $9 in "costs $9"'
+
+
+def test_an_image_in_untrusted_text_is_shown_as_text() -> None:
+    html = markdown_html("See ![chart](https://tracker.example/p.png?d=debate) here")
+    assert "<img" not in html
+    assert "[chart] (https://tracker.example/p.png?d=debate)" in html

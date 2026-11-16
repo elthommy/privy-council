@@ -48,6 +48,9 @@ class Message(BaseModel):
     to_user: bool = False  # the moderator asks the user something (highlighted)
     # Who wrote a "user" message when several people share the chat; None is the owner.
     author: str | None = None
+    # A system notice's raw error, which its text quotes: the chat front end shows
+    # a generic word in its place and keeps the error in the local log.
+    detail: str | None = None
 
     def display_nick(self, nick_of: Callable[[str], str]) -> str:
         """Return the nick to show for this message: its author, else the speaker's."""

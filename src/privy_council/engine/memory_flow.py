@@ -222,7 +222,7 @@ class MemoryFlow(EngineCore):
         try:
             checked, fixed = await writer.check_notes(self.moderator, digest, drafts)
         except (BackendError, MemoryOutputError) as exc:
-            self._notice(NOTICE_NOTES_CHECK_FAILED.format(nick=nick, error=exc))
+            self._notice(NOTICE_NOTES_CHECK_FAILED.format(nick=nick, error=exc), exc)
             return drafts
         finally:
             self._emit(TurnEnded(speaker=self.moderator.slug))
@@ -242,7 +242,7 @@ class MemoryFlow(EngineCore):
         try:
             out[persona.slug] = await writer.draft_notes(persona, digest)
         except BackendError as exc:
-            self._notice(NOTICE_MEMORY_FAILED.format(nick=persona.name, error=exc))
+            self._notice(NOTICE_MEMORY_FAILED.format(nick=persona.name, error=exc), exc)
         finally:
             self._emit(TurnEnded(speaker=persona.slug))
 
@@ -266,7 +266,7 @@ class MemoryFlow(EngineCore):
             notice = NOTICE_MEMORY_MERGED if merged else NOTICE_MEMORY_MERGE_BAD
             self._notice(notice.format(nick=nick, council=digest.council, cap=cap))
         except BackendError as exc:
-            self._notice(NOTICE_MEMORY_FAILED.format(nick=nick, error=exc))
+            self._notice(NOTICE_MEMORY_FAILED.format(nick=nick, error=exc), exc)
         finally:
             self._emit(TurnEnded(speaker=persona.slug))
 
@@ -277,7 +277,7 @@ class MemoryFlow(EngineCore):
         try:
             facts, unquoted = await writer.propose_facts(self.moderator, digest)
         except (BackendError, MemoryOutputError) as exc:
-            self._notice(NOTICE_SHARED_FAILED.format(error=exc))
+            self._notice(NOTICE_SHARED_FAILED.format(error=exc), exc)
             return
         if unquoted:
             self._notice(NOTICE_SHARED_UNQUOTED.format(count=unquoted))
@@ -318,7 +318,7 @@ class MemoryFlow(EngineCore):
         try:
             merged = await writer.propose_rewrite(self.moderator)
         except BackendError as exc:
-            self._notice(NOTICE_SHARED_FAILED.format(error=exc))
+            self._notice(NOTICE_SHARED_FAILED.format(error=exc), exc)
             return
         if merged is None:
             self._notice(NOTICE_SHARED_MERGE_BAD.format(cap=self.settings.memory.shared_cap_bytes))

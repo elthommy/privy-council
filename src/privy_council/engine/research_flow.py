@@ -417,7 +417,7 @@ class ResearchFlow(EngineCore):
                 batches.append(await self.search.search(query, self.meta.language))
             except BackendError as exc:
                 error = exc
-                self._notice(NOTICE_LOCAL_QUERY_FAILED.format(query=query, error=exc))
+                self._notice(NOTICE_LOCAL_QUERY_FAILED.format(query=query, error=exc), exc)
         if not batches and error is not None:
             raise error
         return merge_results(batches, self.settings.research.local.max_results)

@@ -27,6 +27,7 @@ log = logging.getLogger(__name__)
 
 GENERIC_ERROR = "Something went wrong on the host; the details are in its local log."
 HIDDEN_PATH = "(local path hidden)"
+HIDDEN_ERROR = "an error, details in the host's log"
 # An absolute or home-relative path with at least two parts: /home/x/…, ~/data/…
 _PATH = re.compile(r"(?:~|(?<![\w.~]))/[\w.-]+(?:/[\w.-]+)+/?")
 _HEADING = re.compile(r"\n(?=#{1,6} )")
@@ -147,7 +148,11 @@ def _message_posts(
     if msg.speaker == "user":
         return []  # already in the channel, typed by the person
     if msg.speaker == "system":
-        text = chat_notice(hide_paths(msg.text), commands)
+        text = msg.text
+        if msg.detail:
+            log.warning("notice (error not shown in the chat): %s", text)
+            text = text.replace(msg.detail, HIDDEN_ERROR)
+        text = chat_notice(hide_paths(text), commands)
         return [Post(p) for p in split_text(text, limit)]
     role = role_of(msg.speaker)
     label = QUESTION_LABEL if msg.to_user else ROLE_LABELS.get(role, "") if role else ""
@@ -156,11 +161,15 @@ def _message_posts(
 
 def _vote_text(event: VoteTaken, nick_of: Callable[[str], str]) -> str:
     """Render a vote as an aligned code block (Discord has no tables)."""
-    rows = vote_rows(event.votes, nick_of)
+    for vote in event.votes:
+        if vote.error:
+            log.warning("vote error (not shown in the chat): %s: %s", vote.speaker, vote.error)
+    votes = [v.model_copy(update={"error": HIDDEN_ERROR}) if v.error else v for v in event.votes]
+    rows = vote_rows(votes, nick_of)
     width = max(len(nick) for nick, _, _ in rows)
     lines = [f"{nick:<{width}}  {conf:>4}  {pos}" for nick, conf, pos in rows]
     text = VOTE_TITLE.format(round=event.round) + "\n```\n" + "\n".join(lines) + "\n```"
-    return hide_paths(text)  # a vote row may carry an error message
+    return hide_paths(text)
 
 
 def render_event(

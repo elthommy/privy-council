@@ -442,6 +442,7 @@ class EngineCore:
         truncated: bool = False,
         to_user: bool = False,
         author: str | None = None,
+        detail: str | None = None,
     ) -> None:
         """Append a message to the transcript and emit it."""
         message = Message(
@@ -452,13 +453,14 @@ class EngineCore:
             truncated=truncated,
             to_user=to_user,
             author=author,
+            detail=detail,
         )
         self.messages.append(message)
         self._emit(MessageEvent(message=message))
 
-    def _notice(self, text: str) -> None:
-        """Post a system line."""
-        self._post("system", text)
+    def _notice(self, text: str, error: BaseException | None = None) -> None:
+        """Post a system line; `error`, quoted in it, is kept from the chat (local log only)."""
+        self._post("system", text, detail=None if error is None else str(error) or None)
 
     def _fail(self, text: str) -> None:
         """Report a recoverable failure and park the session in ERROR_RECOVERABLE."""

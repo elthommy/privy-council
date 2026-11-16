@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 from html import escape
 
 from markdown_it import MarkdownIt
+from markdown_it.token import Token
+from markdown_it.utils import EnvType, OptionsDict
 
 from privy_council.export.labels import EXPORT_LABELS, ROLE_NAMES
 from privy_council.export.markdown import demote, research_meta
@@ -29,6 +32,21 @@ from privy_council.models.session import (
 
 # Model output is Markdown; raw HTML in it is shown as text, never run.
 _MD = MarkdownIt("commonmark", {"html": False}).enable("table")
+# The page loads nothing: an image in a turn or a guest's line would make the browser
+# fetch a URL that untrusted text chose (and could carry debate details in it).
+CSP = "default-src 'none'; style-src 'unsafe-inline'"
+
+
+def _image_as_text(tokens: Sequence[Token], idx: int, options: OptionsDict, env: EnvType) -> str:
+    """Render a Markdown image as its alt text and URL, never as an <img>."""
+    token = tokens[idx]
+    alt = "".join(c.content for c in token.children or []) or token.content
+    src = str(token.attrGet("src") or "")
+    return escape(f"[{alt}] ({src})" if alt else f"({src})")
+
+
+# Set on the rules table, not add_render_rule, which would bind it as a method.
+_MD.renderer.rules["image"] = _image_as_text  # type: ignore[attr-defined]
 
 CSS = """
 :root { color-scheme: light dark; --bg: #fdfdfb; --fg: #1f2328; --muted: #656d76;
@@ -99,6 +117,7 @@ def render_html(report: Report, flaws: bool = True, now: datetime | None = None)
     parts.append(f"<footer>{escape(labels['exported'].format(when=when))}</footer>")
     return (
         f'<!doctype html>\n<html lang="{report.meta.language}">\n<head>\n<meta charset="utf-8">\n'
+        f'<meta http-equiv="Content-Security-Policy" content="{CSP}">\n'
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
         f"<title>{escape(report.meta.topic)}</title>\n<style>{CSS}</style>\n</head>\n"
         "<body>\n<main>\n" + "\n".join(parts) + "\n</main>\n</body>\n</html>\n"

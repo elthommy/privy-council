@@ -399,7 +399,7 @@ class DebateEngine(DocumentFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
         except (BackendRateLimitError, BackendAuthError):
             raise
         except BackendError as exc:
-            self._notice(NOTICE_OPENING_FAILED.format(error=exc))
+            self._notice(NOTICE_OPENING_FAILED.format(error=exc), exc)
         rt.phase = Phase.ROUND
         rt.pending = [PendingTurn(speaker=s) for s in self.members]
         self._save()
@@ -483,7 +483,7 @@ class DebateEngine(DocumentFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
         except (BackendRateLimitError, BackendAuthError):
             raise
         except BackendError as exc:
-            self._notice(NOTICE_NO_ANSWER.format(nick=persona.name, error=exc))
+            self._notice(NOTICE_NO_ANSWER.format(nick=persona.name, error=exc), exc)
         rt.pending.remove(turn)
         self._save()
 

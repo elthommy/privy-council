@@ -8,6 +8,7 @@ from privy_council.chat.frontend import council_choices
 from privy_council.chat.names import NameBook, clean_name
 from privy_council.chat.render import (
     GENERIC_ERROR,
+    HIDDEN_ERROR,
     HIDDEN_PATH,
     Post,
     chat_notice,
@@ -17,7 +18,14 @@ from privy_council.chat.render import (
 )
 from privy_council.engine import notices
 from privy_council.models.persona import Role
-from privy_council.models.session import ErrorEvent, Message, MessageEvent, RoundStarted
+from privy_council.models.session import (
+    ErrorEvent,
+    Message,
+    MessageEvent,
+    RoundStarted,
+    VoteTaken,
+)
+from privy_council.models.vote import Vote
 
 
 @pytest.mark.parametrize(
@@ -128,3 +136,13 @@ def test_turns_are_headed_with_name_and_role_and_continued() -> None:
     assert render_event(question, nick, "Chair", 2000, roles.get)[0].text == (
         "**Chair** · *question*\n@ana how much?"
     )
+
+
+def test_raw_errors_in_notices_and_votes_stay_out_of_the_chat() -> None:
+    error = "Ollama error 500 at http://127.0.0.1:11434 (model qwen3:8b)"
+    notice = Message(speaker="system", text=f"Rigor couldn't answer: {error}", detail=error)
+    [post] = render_event(MessageEvent(message=notice), nick, "Chair", 2000)
+    assert post.text == f"Rigor couldn't answer: {HIDDEN_ERROR}"
+    vote = VoteTaken(round=2, votes=[Vote(speaker="rigor", error=error)])
+    [table] = render_event(vote, nick, "Chair", 2000)
+    assert "127.0.0.1" not in table.text and HIDDEN_ERROR in table.text
