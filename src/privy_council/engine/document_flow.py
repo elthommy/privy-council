@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from privy_council.backends.base import BackendAuthError, BackendError
 from privy_council.engine import prompts
-from privy_council.engine.facts import blocks
+from privy_council.engine.facts import blocks, on_domains
 from privy_council.engine.local_research import check_summary, missing_line, unbacked_numbers
 from privy_council.engine.moderation import MAX_DOCUMENT_REQUESTS
 from privy_council.engine.notices import (
@@ -28,6 +28,7 @@ from privy_council.engine.notices import (
     NOTICE_DOCUMENT_OFF,
     NOTICE_DOCUMENT_READ,
     NOTICE_DOCUMENT_READING,
+    NOTICE_DOCUMENT_SITE_REFUSES,
     NOTICE_DOCUMENT_USAGE,
 )
 from privy_council.engine.research_flow import ResearchFlow, _today
@@ -82,6 +83,9 @@ class DocumentFlow(ResearchFlow):
             if not cited_url(request.url, self.meta.runtime.research):
                 self._notice(NOTICE_DOCUMENT_NOT_IN_FACTS.format(nick=nick, url=request.url))
                 continue
+            if on_domains(request.url, self.settings.research.documents.unreadable_domains):
+                self._notice(NOTICE_DOCUMENT_SITE_REFUSES.format(nick=nick, url=request.url))
+                continue
             reason = self._read_cap_reason()
             if reason is not None:
                 relayed.append(
@@ -102,11 +106,13 @@ class DocumentFlow(ResearchFlow):
         if not self._documents_on():
             return []
         research = self.meta.runtime.research
-        domains = self.settings.research.primary_domains
+        cfg = self.settings.research
         for focus in focuses:
             if not repeat_focus(focus, research):
                 continue
-            url = page_for_repeat(focus, research, domains)
+            url = page_for_repeat(
+                focus, research, cfg.primary_domains, cfg.documents.unreadable_domains
+            )
             if url is not None:
                 return [DocumentRequest(url=url, look_for=focus)]
         return []
@@ -115,7 +121,10 @@ class DocumentFlow(ResearchFlow):
         """Return the official pages the moderator may read, for its task ("" if none)."""
         if not self._documents_on():
             return ""
-        pages = readable_pages(self.meta.runtime.research, self.settings.research.primary_domains)
+        cfg = self.settings.research
+        pages = readable_pages(
+            self.meta.runtime.research, cfg.primary_domains, cfg.documents.unreadable_domains
+        )
         block = prompts.render_readable_pages(pages)
         return f"\n\n{block}" if block else ""
 

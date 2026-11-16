@@ -76,6 +76,12 @@ def tier(text: str, primary_domains: Collection[str]) -> Literal["primary", "sec
     return "secondary"
 
 
+def on_domains(url: str, domains: Collection[str]) -> bool:
+    """Tell whether a URL's host is one of the domains or a subdomain of one."""
+    host = (urlsplit(url).hostname or "").lower()
+    return any(_on_domain(host, d.lower().strip().lstrip(".")) for d in domains if d.strip())
+
+
 def _on_domain(host: str, suffix: str) -> bool:
     """Tell whether a host is the domain or one of its subdomains."""
     return host == suffix or host.endswith("." + suffix)

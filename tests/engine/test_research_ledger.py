@@ -133,6 +133,9 @@ def test_readable_pages_are_the_official_html_pages_newest_first() -> None:
         ("https://bank.example.gov/rates/", []),
     ]
     assert readable_pages(notes, []) == []
+    assert [u for u, _ in readable_pages(notes, PRIMARY_DOMAINS, ["stats.example.gov"])] == [
+        "https://bank.example.gov/rates/"
+    ]
 
 
 def test_a_repeated_lookup_gets_the_official_page_its_searches_cite() -> None:
@@ -146,3 +149,4 @@ def test_a_repeated_lookup_gets_the_official_page_its_searches_cite() -> None:
     read = cited("maturities", f"- 2027: 2,222 {GOV}", source="document", auto=False)
     assert page_for_repeat(focus, [*notes, read], PRIMARY_DOMAINS) is None
     assert page_for_repeat("gold price today", notes, PRIMARY_DOMAINS) is None
+    assert page_for_repeat(focus, notes, PRIMARY_DOMAINS, ["example.gov"]) is None

@@ -139,7 +139,8 @@ provider = "claude"           # normal sessions: "claude" (its web search), "loc
 
 [research.documents]          # the document reader: /read, and pages the Chair asks to read
 enabled = false               # true: our own code fetches public pages (URL guard, no cookies)
-# max_bytes = 20000000 / timeout_s = 30 / passages = 6 / passage_chars = 8000
+# max_bytes = 20000000 / timeout_s = 30 / passages = 12 / passage_chars = 16000
+# unreadable_domains = ["sec.gov"]   # sites that refuse the reader: the Chair searches instead
 # user_agent = "privy-council-document-reader/1.0"   # generic; set a contact only in
                               # config.local.toml, if a site refuses the generic name
 

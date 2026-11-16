@@ -191,3 +191,20 @@ async def test_a_lookup_skipped_as_a_repeat_becomes_a_read_of_its_page(
     assert any("Skipped: searched 2 times" in t for t in h.texts("system"))
     assert h.engine.meta.runtime.research[-1].source == "document"
     assert not [r for r in h.claude.requests if r.tag.purpose == "research"]
+
+
+async def test_the_moderator_does_not_read_a_site_that_refuses_the_reader(
+    tmp_path: Path, personas: dict[str, Persona], fetched: list[str]
+) -> None:
+    config = {"research": {"documents": {"enabled": True, "unreadable_domains": ["example.gov"]}}}
+    h = Harness(tmp_path, personas, responder([]), config=config)
+    h.engine.meta.runtime.research.append(
+        ResearchNote(focus="filing", text=f"- Debt $5B ({FILING_URL})", auto=True)
+    )
+    assert h.engine._readable_block() == ""
+    request = document_flow.DocumentRequest(url=FILING_URL, look_for="principal by year")
+    await h.engine._auto_documents([request])
+    assert fetched == []
+    assert any("refuses the document reader" in t for t in h.texts("system"))
+    await h.engine.read(f"{FILING_URL} principal by year")  # the owner's /read still tries
+    assert fetched == [FILING_URL]

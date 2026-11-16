@@ -13,7 +13,7 @@ import re
 from collections.abc import Collection, Sequence
 from urllib.parse import urlsplit
 
-from privy_council.engine.facts import URL, tier
+from privy_council.engine.facts import URL, on_domains, tier
 from privy_council.engine.local_research import (
     MAX_MISSING_CHARS,
     URL_TAIL,
@@ -142,11 +142,15 @@ def _note_urls(note: ResearchNote) -> dict[str, str]:
     return out
 
 
-def _readable(url: str, primary_domains: Collection[str]) -> bool:
-    """Tell whether a URL is an official page the reader can take (no PDF or data file)."""
+def _readable(url: str, primary_domains: Collection[str], refusing: Collection[str]) -> bool:
+    """Tell whether a URL is an official page the reader can take.
+
+    No PDF or data file, and no site that refuses the reader (`refusing`).
+    """
     path = urlsplit(url).path.lower()
     data_file = path.endswith(_UNREADABLE) or path.rstrip("/").endswith("/pdf")
-    return tier(url, primary_domains) == "primary" and not data_file
+    official = tier(url, primary_domains) == "primary"
+    return official and not data_file and not on_domains(url, refusing)
 
 
 def _read_pages(notes: Sequence[ResearchNote]) -> dict[str, list[str]]:
@@ -162,7 +166,9 @@ def _read_pages(notes: Sequence[ResearchNote]) -> dict[str, list[str]]:
 
 
 def readable_pages(
-    notes: Sequence[ResearchNote], primary_domains: Collection[str]
+    notes: Sequence[ResearchNote],
+    primary_domains: Collection[str],
+    refusing: Collection[str] = (),
 ) -> list[tuple[str, list[str]]]:
     """Return the official pages the facts cite, each with what the reader looked for there.
 
@@ -173,13 +179,16 @@ def readable_pages(
     pages: dict[str, str] = {}
     for n in reversed(notes):
         for key, url in _note_urls(n).items():
-            if _readable(url, primary_domains):
+            if _readable(url, primary_domains, refusing):
                 pages.setdefault(key, url)
     return [(url, read.get(key, [])) for key, url in pages.items()][:MAX_READABLE_PAGES]
 
 
 def page_for_repeat(
-    focus: str, notes: Sequence[ResearchNote], primary_domains: Collection[str]
+    focus: str,
+    notes: Sequence[ResearchNote],
+    primary_domains: Collection[str],
+    refusing: Collection[str] = (),
 ) -> str | None:
     """Return an official page the earlier lookups of `focus` cite and nobody read yet.
 
@@ -190,7 +199,7 @@ def page_for_repeat(
     read = _read_pages(notes)
     for n in reversed(repeat_notes(focus, notes)):
         for key, url in _note_urls(n).items():
-            if _readable(url, primary_domains) and key not in read:
+            if _readable(url, primary_domains, refusing) and key not in read:
                 return url
     return None
 

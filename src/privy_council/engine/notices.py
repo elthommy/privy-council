@@ -127,6 +127,10 @@ NOTICE_AUTO_RESEARCH = "{nick} is looking up: {focus}"
 NOTICE_DOCUMENT_READING = "{nick} is reading {url} for: {look_for}"
 NOTICE_DOCUMENT_READ = "{nick} read {url}: {count} passages matched, {chars:,} characters"
 NOTICE_DOCUMENT_NO_MATCH = "{nick} read {url} but no passage mentions: {look_for}"
+NOTICE_DOCUMENT_SITE_REFUSES = (
+    "{nick} wanted to read {url}, a site that refuses the document reader: skipped "
+    "(/read tries anyway)."
+)
 NOTICE_DOCUMENT_NOT_IN_FACTS = (
     "{nick} wanted to read {url}, which is not in the fresh facts: skipped (/read reads any page)."
 )

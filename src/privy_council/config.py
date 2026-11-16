@@ -126,8 +126,15 @@ class DocumentsConfig(_Section):
     # A generic name with no personal data; some sites want a contact, which the
     # owner may set in config.local.toml (never committed).
     user_agent: str = "privy-council-document-reader/1.0"
-    passages: int = Field(default=6, ge=1, le=12)  # chunks given to the summary
-    passage_chars: int = Field(default=8000, ge=1000)  # their total size
+    # Chunks given to the summary and their total size. 12 in 16,000 characters found
+    # the wanted passage on 35 of 35 test lookups (32 with 6 in 8,000): a long
+    # release's tables are about 4,000 characters each (scripts/passage_bench.py).
+    passages: int = Field(default=12, ge=1, le=12)
+    passage_chars: int = Field(default=16000, ge=1000)
+    # Sites that refuse the reader (sec.gov wants a contact e-mail in the User-Agent):
+    # the moderator isn't offered their pages and its own reads of them are skipped,
+    # so it keeps searching for them. `/read` still tries.
+    unreadable_domains: list[str] = Field(default_factory=lambda: ["sec.gov"])
 
 
 # Regulators, statistics offices, central banks and international institutions.
