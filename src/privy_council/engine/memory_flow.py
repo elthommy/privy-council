@@ -32,6 +32,7 @@ from privy_council.engine.notices import (
     NOTICE_MEMORY_READ_ONLY,
     NOTICE_MEMORY_SAVED,
     NOTICE_MEMORY_SILENT,
+    NOTICE_MEMORY_TRIMMED,
     NOTICE_NOTES_CHECK_FAILED,
     NOTICE_NOTES_CHECKED,
     NOTICE_SHARED_FAILED,
@@ -47,6 +48,7 @@ from privy_council.engine.scheduler import schedule
 from privy_council.memory.distill import (
     MemoryOutputError,
     MemoryWriter,
+    MergeOutcome,
     SessionDigest,
     parse_selection,
 )
@@ -261,10 +263,13 @@ class MemoryFlow(EngineCore):
             return
         self._emit(TurnStarted(speaker=persona.slug, round=self.meta.runtime.round))
         try:
-            merged = await writer.consolidate(persona, digest.council)
+            outcome = await writer.consolidate(persona, digest.council)
             cap = self.settings.memory.private_cap_bytes
-            notice = NOTICE_MEMORY_MERGED if merged else NOTICE_MEMORY_MERGE_BAD
-            self._notice(notice.format(nick=nick, council=digest.council, cap=cap))
+            notice = {
+                MergeOutcome.MERGED: NOTICE_MEMORY_MERGED,
+                MergeOutcome.FAILED: NOTICE_MEMORY_MERGE_BAD,
+            }.get(outcome, NOTICE_MEMORY_TRIMMED)
+            self._notice(notice.format(nick=nick, council=digest.council, cap=cap, outcome=outcome))
         except BackendError as exc:
             self._notice(NOTICE_MEMORY_FAILED.format(nick=nick, error=exc), exc)
         finally:

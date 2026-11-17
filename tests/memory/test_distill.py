@@ -13,11 +13,13 @@ from privy_council.loaders.personas import load_personas
 from privy_council.memory.distill import (
     MemoryOutputError,
     MemoryWriter,
+    MergeOutcome,
     NoteChange,
     ProposedFact,
     SessionDigest,
     _apply_changes,
     fresh_notes,
+    keep_newest,
     parse_check,
     parse_consolidated,
     parse_notes,
@@ -218,13 +220,17 @@ async def test_consolidate_rewrites_or_keeps(tmp_path: Path, personas: dict[str,
     w = writer(tmp_path, rec, private_cap_bytes=200)
     w.store.append_private("rigor", finance_notes(5))
     assert w.private_over_cap(rigor, "finance")
-    assert await w.consolidate(rigor, "finance") is True
+    assert await w.consolidate(rigor, "finance") is MergeOutcome.MERGED
     assert w.store.read_private("rigor") == "- 2026-10-17 (finance): merged\n"
     w.store.append_private("rigor", finance_notes(5))
-    assert await w.consolidate(rigor, "finance") is False
-    assert "merged" in w.store.read_private("rigor")  # left as it was
+    # No usable merge, nor a well-formed one over the cap: the newest notes are kept.
+    assert await w.consolidate(rigor, "finance") is MergeOutcome.CUT
+    assert w.store.read_private("rigor").splitlines() == [
+        "- 2026-10-17 (finance): merged",
+        finance_notes(5)[-1],
+    ]
     assert [c[1] for c in rec.calls] == ["consolidate"] * 3
-    assert "under 140 characters" in rec.calls[0][2].user
+    assert "at most 3 notes of at most 30 words each" in rec.calls[0][2].user
     assert "from the finance council" in rec.calls[0][2].user
 
 
@@ -234,11 +240,31 @@ async def test_consolidate_retries_once_lower_with_the_reason(
     rec = Recorder(result("- " + "y" * 500), result("- 2026-10-17 (finance): short"))
     w = writer(tmp_path, rec, private_cap_bytes=200)
     w.store.append_private("rigor", finance_notes(5))
-    assert await w.consolidate(personas["rigor"], "finance") is True
+    assert await w.consolidate(personas["rigor"], "finance") is MergeOutcome.MERGED
     retry = rec.calls[1][2].user
-    assert "unusable: it was 502 bytes, over the 200-byte limit" in retry
-    assert retry.endswith("in under 100 characters in total.")
+    assert "unusable: a line did not start with" in retry
+    assert retry.endswith("at most 3 notes of at most 30 words each.")
     assert w.store.read_private("rigor") == "- 2026-10-17 (finance): short\n"
+
+
+async def test_merges_over_the_cap_keep_the_newest_notes_of_the_smaller(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    long_reply = "\n".join(f"- 2026-10-1{i} (finance): merged {i} " + "y" * 40 for i in range(6))
+    shorter = "\n".join(long_reply.splitlines()[:4])  # 4 notes, still over 200 bytes
+    rec = Recorder(result(long_reply), result(shorter))
+    w = writer(tmp_path, rec, private_cap_bytes=200)
+    w.store.append_private("rigor", finance_notes(5))
+    assert await w.consolidate(personas["rigor"], "finance") is MergeOutcome.TRIMMED
+    kept = w.store.read_private("rigor")
+    assert kept.splitlines() == shorter.splitlines()[3:]  # the newest that fit in 140 bytes
+    assert "unusable: it was" in rec.calls[1][2].user
+
+
+def test_keep_newest() -> None:
+    notes = "- 2026-10-02 (f): b\n- undated\n- 2026-10-03 (f): c\n- 2026-10-01 (f): a"
+    assert keep_newest(notes, 40) == "- 2026-10-02 (f): b\n- 2026-10-03 (f): c"
+    assert keep_newest(notes, 5) == ""
 
 
 async def test_cap_and_merge_are_per_council(tmp_path: Path, personas: dict[str, Persona]) -> None:
@@ -252,7 +278,7 @@ async def test_cap_and_merge_are_per_council(tmp_path: Path, personas: dict[str,
     assert not w.private_over_cap(rigor, "career")
     w.store.append_private("rigor", finance_notes(3))
     assert w.private_over_cap(rigor, "finance")
-    assert await w.consolidate(rigor, "finance") is True
+    assert await w.consolidate(rigor, "finance") is MergeOutcome.MERGED
     assert "career note" not in rec.calls[0][2].user and "my own line" not in rec.calls[0][2].user
     assert w.store.read_private("rigor").splitlines() == [
         career[0],

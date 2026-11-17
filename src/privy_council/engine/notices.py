@@ -101,6 +101,10 @@ NOTICE_MEMORY_FAILED = "{nick} couldn't write memory ({error}); skipped"
 NOTICE_MEMORY_MERGED = (
     "{nick}'s {council} notes passed {cap} bytes and were merged (old copy: notes.md.bak)"
 )
+NOTICE_MEMORY_TRIMMED = (
+    "{nick}'s {council} notes passed {cap} bytes and no merge fit: {outcome} "
+    "(old copy: notes.md.bak)"
+)
 NOTICE_MEMORY_MERGE_BAD = (
     "{nick}'s {council} notes are over {cap} bytes, but both merges were unusable; kept as is"
 )

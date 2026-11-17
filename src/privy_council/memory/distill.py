@@ -12,9 +12,11 @@ from __future__ import annotations
 import json
 import logging
 import re
+import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import date
+from enum import StrEnum
 from typing import Any, Protocol
 
 from pydantic import BaseModel, Field, ValidationError
@@ -34,6 +36,16 @@ from privy_council.models.persona import Persona
 from privy_council.models.session import Message
 from privy_council.util.language import Language
 
+
+class MergeOutcome(StrEnum):
+    """How a persona's over-cap notes were brought back under the cap."""
+
+    MERGED = "merged"
+    TRIMMED = "merged, then kept to the newest notes"
+    CUT = "kept to the newest notes, unmerged"
+    FAILED = "kept as is"
+
+
 MAX_NOTES = 3
 NOTE_MAX_CHARS = 300
 NOTES_MAX_OUTPUT = 400
@@ -44,6 +56,10 @@ SHARED_MAX_OUTPUT = 800
 CONSOLIDATE_TARGET = 0.7
 # The one retry after an unusable merge aims lower: the first reply ran long.
 CONSOLIDATE_RETRY_TARGET = 0.5
+# Merges ask for a number of notes, not characters: local models don't count characters
+# (Bolt answered "under 2,048 characters" with 4,319 bytes, 2026-11-16) but keep a count.
+MERGE_NOTE_WORDS = 30
+MERGE_NOTE_BYTES = 225  # a 30-word note with its "- YYYY-MM-DD (council): " prefix
 # A quote shorter than this matches too easily to prove the user said anything.
 MIN_QUOTE_CHARS = 4
 NOTES_CHECK_MAX_OUTPUT = 1500
@@ -239,6 +255,11 @@ def consolidation_target(cap_bytes: int, share: float = CONSOLIDATE_TARGET) -> i
     return int(cap_bytes * share)
 
 
+def merge_counts(target: int) -> dict[str, int]:
+    """Return the prompt's `count` (notes) and `words` (per note) for a size target."""
+    return {"count": max(target // MERGE_NOTE_BYTES, 3), "words": MERGE_NOTE_WORDS}
+
+
 def parse_consolidated(
     text: str, cap_bytes: int, council: str | None = None
 ) -> tuple[str | None, str]:
@@ -247,15 +268,44 @@ def parse_consolidated(
     With `council`, every line must keep that council's tag, so a merge can't
     move a note into another council's scope.
     """
-    lines = [f"- {line}" for line in bullet_lines(text)]
-    merged = "\n".join(lines)
-    if not lines:
+    merged = _bullets(text)
+    if not merged:
         return None, prompts.MERGE_EMPTY
+    if council is not None and any(_council_of(line) != council for line in merged.splitlines()):
+        return None, prompts.MERGE_LOST_TAG.format(council=council)
     if size_bytes(merged) > cap_bytes:
         return None, prompts.MERGE_OVER_CAP.format(size=size_bytes(merged), cap=cap_bytes)
-    if council is not None and any(_council_of(line) != council for line in lines):
-        return None, prompts.MERGE_LOST_TAG.format(council=council)
     return merged, ""
+
+
+def _bullets(text: str) -> str:
+    """Return a reply's bullet lines, one "- " line each."""
+    return "\n".join(f"- {line}" for line in bullet_lines(text))
+
+
+def keep_newest(notes: str, limit: int) -> str:
+    """Return the newest notes that fit in `limit` bytes, in their original order.
+
+    The last resort when no merge fits the cap: the oldest points go first, as a
+    merge is told to drop them first anyway. Undated lines count as the oldest.
+    """
+    lines = [line for line in notes.splitlines() if line.strip()]
+    newest_first = sorted(range(len(lines)), key=lambda i: _date_of(lines[i]), reverse=True)
+    kept: set[int] = set()
+    size = 0
+    for i in newest_first:
+        line_size = size_bytes(lines[i]) + 1  # its line break
+        if size + line_size > limit:
+            break
+        kept.add(i)
+        size += line_size
+    return "\n".join(line for i, line in enumerate(lines) if i in kept)
+
+
+def _date_of(line: str) -> str:
+    """Return a bullet's YYYY-MM-DD date, or "" if it has none (sorts as the oldest)."""
+    found = re.match(r"- (\d{4}-\d{2}-\d{2})", line)
+    return found.group(1) if found else ""
 
 
 def _council_of(line: str) -> str | None:
@@ -439,19 +489,31 @@ class MemoryWriter:
         """Return whether the shared facts exceed the shared cap."""
         return size_bytes(self.store.read_shared()) > self.cfg.shared_cap_bytes
 
-    async def consolidate(self, persona: Persona, council: str) -> bool:
-        """Merge a persona's notes from `council` on its own backend; False if unusable."""
+    async def consolidate(self, persona: Persona, council: str) -> MergeOutcome:
+        """Merge a persona's notes from `council` on its own backend.
+
+        When neither reply fits, the newest notes that do are kept: of the over-cap
+        reply if it was well formed, else of the notes themselves. Notes over the cap
+        would otherwise fail every merge again and grow each session (2026-11-16).
+        """
         notes = self.council_notes(persona, council)
 
         def task(target: int) -> str:
-            """Return the merge task aiming under `target` characters."""
-            return prompts.CONSOLIDATE_TASK.format(target=target, council=council, notes=notes)
+            """Return the merge task aiming at about `target` characters."""
+            counts = merge_counts(target)
+            return prompts.CONSOLIDATE_TASK.format(council=council, notes=notes, **counts)
 
-        merged = await self._merge(persona, persona.body, task, self.cfg.private_cap_bytes, council)
+        cap = self.cfg.private_cap_bytes
+        merged, over_cap = await self._merge(persona, persona.body, task, cap, council)
+        outcome = MergeOutcome.MERGED
         if merged is None:
-            return False
+            merged = keep_newest(over_cap or notes, consolidation_target(cap))
+            outcome = MergeOutcome.TRIMMED if over_cap else MergeOutcome.CUT
+            logger.warning("memory of %s kept to its newest notes (%s)", persona.slug, outcome)
+        if not merged:
+            return MergeOutcome.FAILED
         self.store.rewrite_private_council(persona.slug, council, merged)
-        return True
+        return outcome
 
     async def propose_facts(
         self, moderator: Persona, digest: SessionDigest
@@ -488,10 +550,14 @@ class MemoryWriter:
         notes = self.store.read_shared()
 
         def task(target: int) -> str:
-            """Return the merge task aiming under `target` characters."""
-            return prompts.CONSOLIDATE_SHARED_TASK.format(target=target, notes=notes)
+            """Return the merge task aiming at about `target` characters."""
+            return prompts.CONSOLIDATE_SHARED_TASK.format(notes=notes, **merge_counts(target))
 
-        return await self._merge(moderator, prompts.SHARED_SYSTEM, task, self.cfg.shared_cap_bytes)
+        # Never trimmed: the user approves a shared rewrite, and facts about them stay whole.
+        merged, _ = await self._merge(
+            moderator, prompts.SHARED_SYSTEM, task, self.cfg.shared_cap_bytes
+        )
+        return merged
 
     async def _merge(
         self,
@@ -500,27 +566,43 @@ class MemoryWriter:
         task: Callable[[int], str],
         cap: int,
         council: str | None = None,
-    ) -> str | None:
-        """Run a consolidation call, retrying once lower if the reply is unusable."""
+    ) -> tuple[str | None, str | None]:
+        """Run a consolidation call, retrying once lower if the reply is unusable.
+
+        Returns (the merge, None), or (None, the smaller well-formed reply that was only
+        over the cap, if any).
+        """
         first = consolidation_target(cap)
-        merged, why = await self._merge_once(persona, system, task(first), cap, council)
+        merged, why, over = await self._merge_once(persona, system, task(first), cap, council)
         if merged is not None:
-            return merged
+            return merged, None
         logger.warning("memory merge for %s unusable, retrying: %s", persona.slug, why)
         retry = consolidation_target(cap, CONSOLIDATE_RETRY_TARGET)
-        again = task(retry) + prompts.MERGE_RETRY.format(reason=why, target=retry)
-        merged, why = await self._merge_once(persona, system, again, cap, council)
-        if merged is None:
-            logger.warning("memory merge for %s unusable twice, kept as is: %s", persona.slug, why)
-        return merged
+        counts = merge_counts(retry)
+        again = task(retry) + prompts.MERGE_RETRY.format(reason=why, **counts)
+        merged, why, over_again = await self._merge_once(persona, system, again, cap, council)
+        if merged is not None:
+            return merged, None
+        logger.warning("memory merge for %s unusable twice: %s", persona.slug, why)
+        candidates = [text for text in (over, over_again) if text]
+        return None, min(candidates, key=size_bytes) if candidates else None
 
     async def _merge_once(
         self, persona: Persona, system: str, task: str, cap: int, council: str | None
-    ) -> tuple[str | None, str]:
-        """Run one consolidation call; return the bullets or why they are unusable."""
+    ) -> tuple[str | None, str, str | None]:
+        """Run one consolidation call.
+
+        Returns (the bullets, "", None) or (None, why they are unusable, the bullets
+        if they were well formed and only over the cap).
+        """
         prompt = context.Prompt(system=system, user=task)
-        # The reply is at most ~cap bytes; tokens ≈ bytes / 4, so half the cap is generous.
-        result = await self.complete(persona, prompt, "consolidate", max_output=max(cap // 2, 500))
+        # A usable reply is under `cap` bytes (≈ cap / 4 tokens), but Bolt once spent 2,048
+        # tokens on a 2,681-byte retry (2026-11-17): room for that; the byte cap still rules.
+        result = await self.complete(persona, prompt, "consolidate", max_output=max(cap, 500))
         if result.truncated:
-            return None, prompts.MERGE_TRUNCATED
-        return parse_consolidated(result.text, cap, council)
+            return None, prompts.MERGE_TRUNCATED, None
+        merged, why = parse_consolidated(result.text, cap, council)
+        if merged is not None:
+            return merged, "", None
+        well_formed, _ = parse_consolidated(result.text, sys.maxsize, council)
+        return None, why, well_formed

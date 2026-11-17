@@ -13,7 +13,7 @@ from privy_council.models.session import DebateState, Message
 from privy_council.models.vote import Vote
 from privy_council.util.language import Language
 
-PROMPTS_VERSION = "68"
+PROMPTS_VERSION = "69"
 
 # Backends that accept a single user turn (the claude CLI on stdin) flatten a
 # multi-message conversation with these labels.
@@ -1033,29 +1033,32 @@ TITLE_USER_ANSWERS = "The user's messages this session, with the questions put t
 
 CONSOLIDATE_TASK = """\
 Your private notes from the {council} council have outgrown their size limit. Rewrite \
-them in under {target} characters in total:
+them as **at most {count} notes of at most {words} words each**:
 - merge notes that say the same thing;
-- drop points that are stale or superseded by a newer note;
+- drop points that are stale or superseded by a newer note: with too many points to keep, \
+keep the newest and the user's own decisions;
 - keep the user's decisions and preferences, and lessons that still apply;
-- one point per note, at most 60 words: several short notes, never one long one.
+- one point per note: a note over {words} words is too long, split it or cut it.
 Start each line with "- YYYY-MM-DD ({council}): " (merged notes take the newest date), \
 and keep each note in the language it is written in. Output only the bullet lines.
 
 The notes:
-{notes}"""
+{notes}
+
+Now write the merged notes: at most {count}, each under {words} words."""
 
 MERGE_RETRY = """
 
-Your previous rewrite was unusable: {reason}. Try again, in under {target} characters \
-in total."""
+Your previous rewrite was unusable: {reason}. Try again: at most {count} notes of at \
+most {words} words each."""
 MERGE_EMPTY = "it had no bullet lines"
 MERGE_OVER_CAP = "it was {size} bytes, over the {cap}-byte limit"
 MERGE_TRUNCATED = "it was cut off by the output cap"
 MERGE_LOST_TAG = 'a line did not start with "- YYYY-MM-DD ({council}): "'
 
 CONSOLIDATE_SHARED_TASK = """\
-The shared file of facts about the user has outgrown its size limit. Rewrite it in under \
-{target} characters:
+The shared file of facts about the user has outgrown its size limit. Rewrite it as at \
+most {count} facts of at most {words} words each:
 - merge facts that say the same thing;
 - when two facts conflict, keep the newer one;
 - never add a fact or change its meaning.
