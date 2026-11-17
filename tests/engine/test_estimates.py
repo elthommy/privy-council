@@ -115,6 +115,7 @@ async def test_estimate_lines_run_through_a_session(
     first_update = moderate[0].messages[0].content
     assert "- @Rigor: 12% (7-20%)" in first_update
     assert "devil's advocate: gives no estimate" in first_update
+    assert "In a forecast the question's terms come first" in first_update
     assert "- split: null, unless the members disagree" in first_update
     assert "split: always null: the split is already set" not in first_update
     assert "Engine flags on estimate lines" not in moderate[1].messages[0].content
@@ -171,6 +172,7 @@ async def test_councils_without_estimates_are_unchanged(
     assert "Fresh facts:" not in turn_task(h, "rigor", 0)  # no research, no tag rule
     moderate = next(r for r in h.requests() if r.tag.purpose == "moderate")
     assert "- split: always null." in moderate.messages[0].content
+    assert "the question's terms come first" not in moderate.messages[0].content
     rt = h.engine.meta.runtime
     assert rt.split is None and rt.estimates == {}
     assert not any(f.kind is FlawKind.MISSING_ESTIMATE for f in rt.flaws)

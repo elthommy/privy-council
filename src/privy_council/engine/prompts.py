@@ -13,7 +13,7 @@ from privy_council.models.session import DebateState, Message
 from privy_council.models.vote import Vote
 from privy_council.util.language import Language
 
-PROMPTS_VERSION = "70"
+PROMPTS_VERSION = "71"
 
 # Backends that accept a single user turn (the claude CLI on stdin) flatten a
 # multi-message conversation with these labels.
@@ -609,6 +609,17 @@ STILL_OPEN_RULE = (
 QUESTIONS_RULE_LAST = (
     "This is the last update and the debate ends after it: leave questions_for_user "
     "empty, since no member could use the answer."
+)
+# A forecast's terms first: the crux questions (which counterparty counts, which quarter,
+# whether a deal agreed before the question counts) reached only the synthesis (2026-11-16).
+QUESTIONS_RULE_TERMS = (
+    "In a forecast the question's terms come first. Check these against user_facts: "
+    "(a) what kind of event counts and who must be involved (any counterparty, or only "
+    "some); (b) the exact deadline, and whether a quarter or year is calendar or fiscal; "
+    "(c) whether something agreed, announced or dated before the question was asked "
+    "counts. For each one not settled where the answer would move a member's number, "
+    "ask the user now, the most decisive first, before any other question; don't leave "
+    "it for the synthesis."
 )
 ASKED_RULE = (
     "You already asked the user: {asked}. Never ask any of these again, even reworded "
@@ -1372,10 +1383,15 @@ def still_open_rule(judged: Sequence[str]) -> str:
     return STILL_OPEN_RULE.format(questions=numbered)
 
 
-def asked_rule(asked: Sequence[str], last_round: bool = False) -> str:
-    """Return the moderator's rules on asking: never re-ask, nothing on the last update."""
+def asked_rule(asked: Sequence[str], last_round: bool = False, forecast: bool = False) -> str:
+    """Return the moderator's rules on asking: never re-ask, nothing on the last update.
+
+    In a forecast, the question's unsettled terms are asked first.
+    """
     rule = ASKED_RULE.format(asked=_quoted(asked)) if asked else ASKED_RULE_NONE
-    return f"{rule} {QUESTIONS_RULE_LAST}" if last_round else rule
+    if last_round:
+        return f"{rule} {QUESTIONS_RULE_LAST}"
+    return f"{QUESTIONS_RULE_TERMS} {rule}" if forecast else rule
 
 
 def _quoted(questions: Sequence[str]) -> str:
