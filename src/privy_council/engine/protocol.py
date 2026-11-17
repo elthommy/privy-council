@@ -674,7 +674,8 @@ class DebateEngine(DocumentFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
             documents_rule=prompts.documents_rule(reading, bool(self._readable_block())),
             summon_rule=prompts.summon_rule([] if last_round else self._summon_candidates()),
             split_rule=prompts.split_rule(self._estimating() and not last_round, rt.split),
-            asked_rule=prompts.asked_rule(rt.asked_questions, last_round, self._estimating()),
+            asked_rule=prompts.asked_rule(rt.asked_questions, last_round),
+            terms_rule=prompts.terms_rule(self._estimating(), last_round),
             still_open_rule=prompts.still_open_rule(judged),
             flaw_rule=prompts.flaw_rule(
                 self.settings.engine.max_flaw_prompts_per_round, last_round

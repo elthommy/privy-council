@@ -13,7 +13,7 @@ from privy_council.models.session import DebateState, Message
 from privy_council.models.vote import Vote
 from privy_council.util.language import Language
 
-PROMPTS_VERSION = "71"
+PROMPTS_VERSION = "72"
 
 # Backends that accept a single user turn (the claude CLI on stdin) flatten a
 # multi-message conversation with these labels.
@@ -497,7 +497,7 @@ of timing on a seven-month horizon).
 - stop / stop_reason: {stop_rule}
 - questions_for_user: at most {questions_cap} where the user's answer would change the \
 advice, rephrased for the user from what members said they need to know or from \
-open_questions. Only what the user personally knows (their situation, goals, \
+open_questions. {terms_rule}Only what the user personally knows (their situation, goals, \
 preferences), never a fact the web can answer. Each question asks one thing, \
 since the user answers them one at a time: never join two with "and" or "or" ("How \
 much do you spend a month, and do you rent?" is two questions; keep the one that \
@@ -619,7 +619,10 @@ QUESTIONS_RULE_TERMS = (
     "(c) whether something agreed, announced or dated before the question was asked "
     "counts. For each one not settled where the answer would move a member's number, "
     "ask the user now, the most decisive first, before any other question; don't leave "
-    "it for the synthesis."
+    "it for the synthesis: an unsettled term is always important enough. When members "
+    "disagree on what the user's own words cover "
+    '(does this event count under their test, how big is "a lot"), that is the '
+    "user's call, not a debate: ask the user, rather than giving it to the members."
 )
 ASKED_RULE = (
     "You already asked the user: {asked}. Never ask any of these again, even reworded "
@@ -1383,15 +1386,19 @@ def still_open_rule(judged: Sequence[str]) -> str:
     return STILL_OPEN_RULE.format(questions=numbered)
 
 
-def asked_rule(asked: Sequence[str], last_round: bool = False, forecast: bool = False) -> str:
-    """Return the moderator's rules on asking: never re-ask, nothing on the last update.
-
-    In a forecast, the question's unsettled terms are asked first.
-    """
+def asked_rule(asked: Sequence[str], last_round: bool = False) -> str:
+    """Return the moderator's rules on asking: never re-ask, nothing on the last update."""
     rule = ASKED_RULE.format(asked=_quoted(asked)) if asked else ASKED_RULE_NONE
-    if last_round:
-        return f"{rule} {QUESTIONS_RULE_LAST}"
-    return f"{QUESTIONS_RULE_TERMS} {rule}" if forecast else rule
+    return f"{rule} {QUESTIONS_RULE_LAST}" if last_round else rule
+
+
+def terms_rule(forecast: bool, last_round: bool) -> str:
+    """Return the forecast-terms rule that leads the questions rule ("" if none applies).
+
+    It leads: placed after "leave it empty if nothing is that important", it was
+    asked in 1 of 7 replays of a round where members split on the user's own words.
+    """
+    return f"{QUESTIONS_RULE_TERMS} " if forecast and not last_round else ""
 
 
 def _quoted(questions: Sequence[str]) -> str:
