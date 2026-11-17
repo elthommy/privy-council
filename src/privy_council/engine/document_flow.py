@@ -93,6 +93,7 @@ class DocumentFlow(ResearchFlow):
                         url=request.url, look_for=request.look_for, reason=reason
                     )
                 )
+                self.lookups_for_user += 1
                 continue
             await self._read_safely(request.url, request.look_for, auto=True)
         return relayed

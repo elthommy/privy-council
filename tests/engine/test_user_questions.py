@@ -290,7 +290,7 @@ async def test_past_the_auto_limit_the_chair_asks_first(
     assert len(h.engine.meta.runtime.research) == 1
     assert questions_posted(h) == [
         "@User I'd like to look up: Nasdaq close (web searches so far this session: 1). "
-        "Type /research Nasdaq close to allow it."
+        "To allow it: /research Nasdaq close"
     ]
     await h.engine.research("Nasdaq close")  # the user allows it: it runs
     assert [n.focus for n in h.engine.meta.runtime.research] == ["VIX close", "Nasdaq close"]
@@ -307,7 +307,7 @@ async def test_the_chair_keeps_asking_after_many_user_searches(
     await h.engine.step()
     assert questions_posted(h) == [
         "@User I'd like to look up: VIX close (web searches so far this session: 6). "
-        "Type /research VIX close to allow it."
+        "To allow it: /research VIX close"
     ]
 
 
@@ -338,7 +338,7 @@ async def test_budget_worries_make_the_chair_ask(
     assert not h.engine.meta.runtime.research
     assert questions_posted(h) == [
         "@User I'd like to look up: VIX close (the Claude budget is getting tight). "
-        "Type /research VIX close to allow it."
+        "To allow it: /research VIX close"
     ]
 
 

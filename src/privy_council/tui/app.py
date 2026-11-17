@@ -41,6 +41,7 @@ from privy_council.tui.commands import (
     STILL_TYPING,
     STOPPED_WAITING,
     WAITING_ANSWER,
+    WAITING_LOOKUPS,
     WAITING_PLACEHOLDER,
     Command,
     Judgment,
@@ -127,6 +128,8 @@ class CouncilApp(App[None]):
         self._asked_next = False  # the answer brought the Chair's next question: wait again
         self._paused = False  # Esc during the current /run
         self._answered: asyncio.Event | None = None  # set while a /run waits for an answer
+        self._said = False  # the user said something during the current wait
+        self._wait_jobs: list[EngineJob] = []  # /research or /read typed during a wait
 
     def compose(self) -> ComposeResult:
         """Lay out bar, chat, state pane, nick list and input."""
@@ -283,8 +286,8 @@ class CouncilApp(App[None]):
             "summon": self.engine.summon,
             "kick": self.engine.kick,
             "attach": lambda arg: self.start(lambda: self.engine.attach(arg)),
-            "research": lambda arg: self.start(lambda: self.engine.research(arg or None)),
-            "read": lambda arg: self.start(lambda: self.engine.read(arg)),
+            "research": lambda arg: self.lookup(lambda: self.engine.research(arg or None)),
+            "read": lambda arg: self.lookup(lambda: self.engine.read(arg)),
             "vote": lambda _: self.start(self.engine.vote),
             "summary": lambda _: self.start(self.engine.summary),
             "state": lambda _: self.action_toggle_state(),
@@ -365,10 +368,35 @@ class CouncilApp(App[None]):
             left -= await self.engine.run(left)
             if not self.should_wait(left):
                 return
-            self._asked_next = True
-            while self._asked_next:  # each question gets its own wait
-                self._asked_next = False
-                await self.wait_answer()
+            await self.wait_user()
+
+    async def wait_user(self) -> None:
+        """Wait for the answers and the lookups the Chair asked for, then return.
+
+        Each question gets its own wait. A relayed lookup holds the /run too, until the
+        user runs it (`/research`, `/read`), skips it (`/step`, `/run N`) or the timeout:
+        a /run that went on after the answer alone left them for a round later (2026-11-16).
+        """
+        lookups = self.engine.lookups_for_user
+        answer_due = self.engine.lines_for_user > lookups
+        while answer_due or lookups > 0:
+            self._said, self._asked_next, self._wait_jobs = False, False, []
+            notice = WAITING_ANSWER if answer_due else WAITING_LOOKUPS.format(count=lookups)
+            if not await self.wait_answer(notice):
+                return
+            for job in self._wait_jobs:
+                await job()
+                lookups = max(lookups - 1, 0)
+            if self._said:
+                answer_due = self._asked_next
+
+    def lookup(self, job: EngineJob) -> None:
+        """Run `/research` or `/read`; during a /run's wait it runs there, and the /run goes on."""
+        if self._answered is None:
+            self.start(job)
+            return
+        self._wait_jobs.append(job)
+        self._answered.set()
 
     def should_wait(self, left: int) -> bool:
         """Return whether the /run stopped on a Chair question and should wait, then go on."""
@@ -380,12 +408,15 @@ class CouncilApp(App[None]):
             and self.engine.phase not in (Phase.SYNTHESIS, Phase.DONE)
         )
 
-    async def wait_answer(self) -> None:
-        """Wait for the user's answer up to the timeout; a half-typed one is waited for."""
+    async def wait_answer(self, notice: str = WAITING_ANSWER) -> bool:
+        """Wait for the user up to the timeout; False if it passed with nothing sent.
+
+        A half-typed answer is waited for.
+        """
         timeout = self.engine.settings.engine.question_timeout_s
         answered = self._answered = asyncio.Event()
         self.query_one(ChatInput).placeholder = WAITING_PLACEHOLDER
-        self.chat.notice(WAITING_ANSWER.format(minutes=max(round(timeout / 60), 1)), ORANGE)
+        self.chat.notice(notice.format(minutes=max(round(timeout / 60), 1)), ORANGE)
         try:
             await asyncio.wait_for(answered.wait(), timeout)
         except TimeoutError:
@@ -394,9 +425,11 @@ class CouncilApp(App[None]):
                 await answered.wait()
             else:
                 self.chat.notice(NO_ANSWER, ORANGE)
+                return False
         finally:
             if self._answered is answered:
                 self._answered = None
+        return True
 
     def stop_waiting(self) -> None:
         """End a /run's wait for an answer; the rest of the /run is dropped."""
@@ -425,7 +458,7 @@ class CouncilApp(App[None]):
         elif arg:
             asked_next = self.engine.say(arg)
             if self._answered is not None:  # the answer a /run waits for: it goes on
-                self._asked_next = asked_next
+                self._said, self._asked_next = True, asked_next
                 self._answered.set()
         else:
             self.chat.notice("usage: /say <text>", RED)

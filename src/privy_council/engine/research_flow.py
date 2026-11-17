@@ -146,10 +146,12 @@ class ResearchFlow(EngineCore):
         research = self.meta.runtime.research
         if sum(n.auto for n in research) >= cfg.auto_max_per_session:
             reason = prompts.REASON_AUTO_LIMIT.format(count=len(research))
-            return prompts.LOOKUP_ASK.format(focus=focus, reason=reason)
-        if self.budget_warnings(1):
-            return prompts.LOOKUP_ASK.format(focus=focus, reason=prompts.REASON_BUDGET)
-        return None
+        elif self.budget_warnings(1):
+            reason = prompts.REASON_BUDGET
+        else:
+            return None
+        self.lookups_for_user += 1  # only the user's /research can run it
+        return prompts.LOOKUP_ASK.format(focus=focus, reason=reason)
 
     def _research_unavailable(self) -> Literal["off", "needs_claude", "needs_search"] | None:
         """Return why no search can run now, or None if one can."""

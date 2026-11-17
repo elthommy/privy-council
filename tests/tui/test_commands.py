@@ -19,6 +19,15 @@ def test_parse() -> None:
     assert parse("/ask @Rigor worst case?") == Command("ask", "@Rigor worst case?")
 
 
+def test_parse_a_wrapped_copy_of_a_command() -> None:
+    wrapped = "/research\n     oil price\n     forecasts for 2027"
+    assert parse(wrapped) == Command("research", "oil price forecasts for 2027")
+    assert parse("/read\thttps://example.org  rates") == Command(
+        "read", "https://example.org rates"
+    )
+    assert parse("/say first\nsecond") == Command("say", "first\nsecond")  # a paste stays whole
+
+
 def test_proposal_text() -> None:
     facts = proposal_text(["- 2026-10-17 (finance): The user rents.", "- b"], None)
     assert facts.splitlines() == [

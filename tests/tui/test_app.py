@@ -25,7 +25,7 @@ from tests.engine.test_protocol import Harness, decision, standard_responder
 from tests.engine.test_protocol import personas as personas
 from tests.engine.test_resume import Resumed
 from tests.engine.test_topic import topicless
-from tests.engine.test_user_questions import QUESTION, asking
+from tests.engine.test_user_questions import FACT, QUESTION, asking
 
 SIZE = (160, 50)
 
@@ -457,6 +457,70 @@ async def test_escape_or_a_command_stops_the_wait(
         await submit(pilot, "/step")  # nothing waits any more: no "Busy"
         assert "Busy" not in chat_text(app)
         assert h.engine.meta.runtime.round == 2
+
+
+def relaying_harness(
+    tmp_path: Path, personas: dict[str, Persona], *questions: str, timeout: float = 60
+) -> Harness:
+    """After the blind round the Chair asks `questions` and relays a lookup it can't run."""
+    first = {**asking([("rigor", "go")], *questions), "research": ["VIX close"]}
+    base = standard_responder([first, *[decision([("rigor", "go")]) for _ in range(6)]])
+
+    def respond(req: CompletionRequest) -> Any:
+        """Answer research calls with a fact, else the standard replies."""
+        return FACT if req.tag.purpose == "research" else base(req)
+
+    config: dict[str, Any] = {"research": {"auto_max_per_session": 0}}
+    h = Harness(tmp_path, personas, respond, config=config)
+    h.settings.engine.question_timeout_s = timeout
+    return h
+
+
+async def test_the_answer_alone_doesnt_end_a_wait_for_a_lookup(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    h = relaying_harness(tmp_path, personas, QUESTION)
+    app = CouncilApp(h.engine)
+    async with app.run_test(size=SIZE) as pilot:
+        await start_run_until_waiting(pilot, app)
+        asked = [m.text for m in h.engine.messages if m.to_user]
+        assert asked[-1].endswith("To allow it: /research VIX close")
+        first_wait = app._answered
+        app.query_one(ChatInput).value = "2 months"
+        await pilot.press("enter")
+        await wait_until(pilot, lambda: app._answered not in (None, first_wait))
+        assert "for the Chair's 1 lookup(s)" in chat_text(app)
+        assert h.engine.meta.runtime.round == 1  # the answer alone doesn't resume it
+        await submit(pilot, "/research VIX close")  # runs inside the /run, which goes on
+        await app.workers.wait_for_complete()
+        assert [n.focus for n in h.engine.meta.runtime.research] == ["VIX close"]
+        assert h.engine.meta.runtime.round == 3
+        assert "Stopped waiting" not in chat_text(app)
+
+
+async def test_a_lookup_alone_holds_the_run_until_skipped(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    h = relaying_harness(tmp_path, personas)
+    app = CouncilApp(h.engine)
+    async with app.run_test(size=SIZE) as pilot:
+        await start_run_until_waiting(pilot, app)
+        assert "for the Chair's 1 lookup(s)" in chat_text(app)
+        await submit(pilot, "/step")  # skips the lookup: the next round runs without it
+        assert not h.engine.meta.runtime.research
+        assert h.engine.meta.runtime.round == 2
+
+
+async def test_a_timeout_skips_a_relayed_lookup(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    h = relaying_harness(tmp_path, personas, timeout=0.05)
+    app = CouncilApp(h.engine)
+    async with app.run_test(size=SIZE) as pilot:
+        await app.workers.wait_for_complete()
+        await submit(pilot, "/run 3")
+        assert h.engine.meta.runtime.round == 3
+        assert not h.engine.meta.runtime.research
 
 
 def unread_line(app: CouncilApp) -> Static:

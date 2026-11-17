@@ -13,7 +13,7 @@ from privy_council.models.session import DebateState, Message
 from privy_council.models.vote import Vote
 from privy_council.util.language import Language
 
-PROMPTS_VERSION = "67"
+PROMPTS_VERSION = "68"
 
 # Backends that accept a single user turn (the claude CLI on stdin) flatten a
 # multi-message conversation with these labels.
@@ -584,12 +584,11 @@ READABLE_PAGE = "- {url}"
 READABLE_PAGE_READ = "- {url} (already read for: {look_for})"
 DOCUMENTS_RULE_OFF = "the document reader is off: always empty."
 # The moderator relaying a page read it couldn't run on its own (a chat line).
-READ_ASK = (
-    "I'd like to read {url} for: {look_for} ({reason}). Type /read {url} {look_for} to allow it."
-)
+# The command comes last, so a copy from it to the end of the line holds nothing else.
+READ_ASK = "I'd like to read {url} for: {look_for} ({reason}). To allow it: /read {url} {look_for}"
 
 # The moderator relaying a search it couldn't run on its own (a chat line to the user).
-LOOKUP_ASK = "I'd like to look up: {focus} ({reason}). Type /research {focus} to allow it."
+LOOKUP_ASK = "I'd like to look up: {focus} ({reason}). To allow it: /research {focus}"
 LOOKUP_ANSWER = "I can't look up {focus} ({reason}); answer if you know."
 REASON_AUTO_LIMIT = "web searches so far this session: {count}"
 REASON_BUDGET = "the Claude budget is getting tight"
@@ -637,7 +636,7 @@ SUMMON_RULE_ON = (
 SUMMON_RULE_OFF = "always null."
 SUMMON_CANDIDATE = "{slug} (@{name}: {role}{expertise})"
 # The moderator relaying its summon proposal to the user (a chat line).
-SUMMON_ASK = "I'd like to bring in @{nick}: {reason}. Type /summon {slug} to allow it."
+SUMMON_ASK = "I'd like to bring in @{nick}: {reason}. To allow it: /summon {slug}"
 
 # --- Debate dynamics, counted by the engine (M7) -------------------------------
 

@@ -253,7 +253,7 @@ async def test_moderator_proposes_a_summon(tmp_path: Path, personas: dict[str, P
     assert ask.speaker == "chair"
     assert ask.text == (
         "@User I'd like to bring in @Optimist: nobody argues the upside. "
-        "Type /summon optimist to allow it."
+        "To allow it: /summon optimist"
     )
     assert h.engine.meta.runtime.proposed_summons == ["optimist"]
     await h.engine.step()

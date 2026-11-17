@@ -149,6 +149,10 @@ class EngineCore:
         self._pause_requested = False
         self._forget_pending: str | None = None
         self._asked_user = False  # set when the moderator forwards questions to the user
+        # The last update's message to the user: how many lines it held, and how many
+        # were lookups only the user can allow (a UI waits for those, 2026-11-16).
+        self.lines_for_user = 0
+        self.lookups_for_user = 0
         # Each member turn's (sources, given) by (slug, round), for the moderator's flags.
         self._turn_sources: dict[tuple[str, int], tuple[str, str]] = {}
         self._save()

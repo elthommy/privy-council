@@ -598,6 +598,7 @@ class DebateEngine(DocumentFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
             [d.url for d in decision.documents],
         )
         relayed: list[str] = []
+        self.lookups_for_user = 0
         if not ending:
             # Decided before the lookups run: each one adds a note the rule would count.
             documents = decision.documents or self._reads_for_repeats(decision.research)
@@ -612,6 +613,7 @@ class DebateEngine(DocumentFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
         questions = [] if ending else decision.questions_for_user
         first, later = split_questions(questions, self.user_name, self.guests)
         self._forward_questions([*first, *relayed, *summon])
+        self.lines_for_user = len(first) + len(relayed) + len(summon)
         if later:
             self._notice(NOTICE_NEXT_QUESTION)
         rt.asked_questions.extend(questions)

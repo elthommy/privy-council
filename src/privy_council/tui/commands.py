@@ -57,6 +57,10 @@ WAITING_ANSWER = (
     "Waiting up to {minutes} min for your answer: send it and the /run goes on; "
     "past that it goes on without it (Esc stops waiting)"
 )
+WAITING_LOOKUPS = (
+    "Waiting up to {{minutes}} min for the Chair's {count} lookup(s): the /research or "
+    "/read from its line runs one, and the /run goes on; /step or /run N skips them"
+)
 NO_ANSWER = "No answer from you: the debate goes on with what it knows"
 STILL_TYPING = "You're typing: the /run waits for your answer"
 STOPPED_WAITING = "Stopped waiting for your answer: /step or /run N to continue"
@@ -211,6 +215,11 @@ class Command:
     arg: str = ""
 
 
+# Commands whose argument is one line: a copied chat line can carry the chat's
+# wrap points (a line break plus indent), which mustn't reach a search focus or URL.
+ONE_LINE_ARGS = frozenset({"research", "read", "summon"})
+
+
 def parse(line: str) -> Command | None:
     """Parse one input line; plain text is `/say`, blank lines are None."""
     text = line.strip()
@@ -218,8 +227,11 @@ def parse(line: str) -> Command | None:
         return None
     if not text.startswith("/"):
         return Command("say", text)
-    name, _, arg = text[1:].partition(" ")
-    return Command(name.lower(), arg.strip())
+    # Any whitespace ends the name: "/research\n   focus" is a wrapped copy (2026-11-16).
+    name, *rest = text[1:].split(None, 1)
+    name = name.lower()
+    arg = rest[0].strip() if rest else ""
+    return Command(name, " ".join(arg.split()) if name in ONE_LINE_ARGS else arg)
 
 
 def split_ask(arg: str) -> tuple[str, str] | None:
