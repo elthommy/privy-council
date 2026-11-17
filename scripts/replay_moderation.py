@@ -144,6 +144,9 @@ def _report(
         print(f"     - {d.url} for: {d.look_for}")
     if not decision.documents:
         print("     - (none)")
+    print("   next_turns:")
+    for turn in decision.next_turns:
+        print(f"     - @{turn.speaker}: {turn.prompt}")
     print("   new_arguments:")
     for arg in decision.new_arguments or ["(none)"]:
         print(f"     - {arg}")

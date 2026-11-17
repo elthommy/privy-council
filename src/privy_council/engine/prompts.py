@@ -13,7 +13,7 @@ from privy_council.models.session import DebateState, Message
 from privy_council.models.vote import Vote
 from privy_council.util.language import Language
 
-PROMPTS_VERSION = "69"
+PROMPTS_VERSION = "70"
 
 # Backends that accept a single user turn (the claude CLI on stdin) flatten a
 # multi-message conversation with these labels.
@@ -340,7 +340,11 @@ ESTIMATES_HEAD = (
 ESTIMATES_SPLIT_EVENT = "Split event: {event}"
 ESTIMATES_MEMBER = "- @{nick}: {history}"
 ESTIMATES_NONE = "no estimate line yet"
-ESTIMATES_DEVIL = "devil's advocate: gives no estimate"
+# The Chair asked a devil's advocate for a probability twice and got none (2026-11-16).
+ESTIMATES_DEVIL = (
+    "devil's advocate: gives no estimate, by design. Never ask them for a probability, "
+    "a range or any number: ask which link the others misprice, which way and why"
+)
 ESTIMATES_FLAGS = "Engine flags on estimate lines (members may have to explain them):"
 ESTIMATES_FLAG = "- @{nick}: {note}"
 ESTIMATE_TEXT = "{value}%"
