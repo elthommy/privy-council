@@ -91,6 +91,23 @@ def test_topic_units_are_the_words_after_the_facts_numbers() -> None:
     assert checks.topic_units(facts) == {"pull", "astrite", "event"}
 
 
+def test_a_multi_word_name_after_a_number_is_no_unit_in_a_turn() -> None:
+    given = "- The Executive Board sets it. A pull costs Astrite or Stellar Jade.\n"
+    text = "It has 6 Executive Board members; a pull is 160 Astrite or 160 Stellar Jade."
+    assert checks.turn_units(text, given) == {"astrite"}
+
+
+def test_a_two_word_unit_in_the_facts_stays_a_unit() -> None:
+    assert checks.topic_units("A pull costs 160 Stellar Jade.") == {"stellar"}
+
+
+def test_a_count_before_a_board_name_is_not_in_the_wrong_unit() -> None:
+    given = "# Fresh facts\n- [F1] Nominations for the Executive Board close on 6 Nov (https://x)\n"
+    text = "The Governing Council has 6 Executive Board members plus the governors."
+    kinds = [f.kind for f in checks.figure_flaws(text, given, given, "Insider")]
+    assert "wrong_unit" not in kinds
+
+
 def test_estimate_label_belongs_to_the_nearest_figure() -> None:
     figs = checks.figures("Over 3 years that is €60 a year (estimate, from memory).")
     assert [(f.text, f.labelled) for f in figs] == [("3 years", False), ("€60", True)]

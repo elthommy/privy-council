@@ -151,6 +151,10 @@ _SENTENCE_END = re.compile(r"[!?\n]|\.(?!\d)")
 # A topic's own units ("25,600 Astrite", "160 pulls"): the word after a number in the
 # facts. Words that only join or compare are no unit ("2026 alongside", "80 more").
 _WORD_AFTER = re.compile(rf"(?<![\w.,])(?:{_NUM})(?:\s?{_MULT}(?!\w))?\s(?P<w>[^\W\d_]{{3,}})")
+# A word followed by a capitalized one: the start of a name ("6 Executive Board
+# members", a false WRONG_UNIT in the 2026-11-19 live check) or a two-word unit
+# ("160 Stellar Jade"). Only the facts can tell them apart, by giving an amount of it.
+_STARTS_NAME = re.compile(r"[ \t]+[A-Z]")
 # In a turn the unit may also follow a hyphen: "a 50-pull pity" (also U+2010/U+2011).
 _NEXT_WORD = re.compile(r"[\s\-\u2010\u2011]?(?P<w>[^\W\d_]{3,})")
 _NOT_UNIT_WORDS = (
@@ -252,9 +256,16 @@ def _multiplier(word: str | None) -> float:
     return _MULTIPLIERS.get(key, _MULTIPLIERS.get(key[:1], 1.0))
 
 
-def topic_units(text: str) -> frozenset[str]:
-    """Return the units a text puts after its numbers beyond the usual ones ("astrite")."""
-    words = {_fold(m["w"]) for m in _WORD_AFTER.finditer(text)}
+def topic_units(text: str, names: bool = True) -> frozenset[str]:
+    """Return the units a text puts after its numbers beyond the usual ones ("astrite").
+
+    `names=False` skips a word that starts a longer name (`_STARTS_NAME`).
+    """
+    words = {
+        _fold(m["w"])
+        for m in _WORD_AFTER.finditer(text)
+        if names or not _STARTS_NAME.match(text, m.end())
+    }
     usual = {w for w in words if re.fullmatch(_UNIT, w) or re.fullmatch(_MULT, w)}
     return frozenset(words - usual - _NOT_UNITS)
 
@@ -268,12 +279,13 @@ def turn_units(text: str, given: str) -> frozenset[str]:
     """Return the units a turn puts after its numbers that the facts write as names.
 
     "40-80 Astrite" makes Astrite a unit even when the facts never give an amount of
-    it. Only names (capitalized, never in lowercase): a game's currency, not "average".
+    it. Only names (capitalized, never in lowercase): a game's currency, not "average";
+    and not the first word of a longer name ("6 Executive Board members").
     """
     words = set(re.findall(r"[^\W\d_]{3,}", given))
     return frozenset(
         u
-        for u in topic_units(text)
+        for u in topic_units(text, names=False)
         if not words & {u, f"{u}s"} and words & {u.capitalize(), f"{u.capitalize()}s"}
     )
 
