@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
+from datetime import date
 
 from privy_council.backends.base import ChatMessage
+from privy_council.engine import deadlines
 from privy_council.engine.dynamics import REPEAT_THRESHOLD, MemberStats
 from privy_council.models.estimate import Estimate, EstimateRecord
 from privy_council.models.flaw import CITATION_KINDS, Flaw, FlawKind
@@ -13,7 +15,7 @@ from privy_council.models.session import DebateState, Message
 from privy_council.models.vote import Vote
 from privy_council.util.language import Language
 
-PROMPTS_VERSION = "72"
+PROMPTS_VERSION = "73"
 
 # Backends that accept a single user turn (the claude CLI on stdin) flatten a
 # multi-message conversation with these labels.
@@ -242,13 +244,70 @@ STATE_SIDE = "{nick}: {stance}"
 
 # --- Tasks ---------------------------------------------------------------------
 
+# Today's date and the round count: a local Chair told the members "you have one
+# round" and called a six-month window "18 months" (2026-11-19), and three of them
+# repeated it.
 OPENING_TASK = """\
-Open the debate on the question above, in a few lines for the chat:
-1. Restate the question in one sentence.
+Today is {today}. The debate has up to {rounds} rounds: in round 1 every member \
+answers independently, then they challenge each other.
+{dates}Open the debate on the question above, in a few lines for the chat:
+1. Restate the question in one sentence, with its deadline and the time left from today.
 2. List the 2-4 key sub-questions.
 3. Say what a good answer must cover.
-Don't answer the question yourself, and don't call on anyone: every member answers \
-the first round independently."""
+{terms}Don't answer the question yourself, and don't call on any member: every member \
+answers round 1 independently."""
+# A forecast's terms in the opening: the same local Chair read an ambiguous release
+# date one way and never asked (a Claude Chair asked in its opening).
+OPENING_TERMS = """\
+4. If a term of the question can be read in two ways and the reading would change \
+the answer (what counts as the event, which period, release or date is meant, \
+whether something already announced counts), ask {user} which reading they mean, \
+in one line addressed to them, the most decisive term only. Don't settle it \
+yourself. Ask nothing if the terms are clear.
+"""
+OPENING_TERMS_PEOPLE = "the people in the chat"
+# Counted by the engine (engine/deadlines.py): with today's date alone, the same local
+# Chair still wrote "approx. 16 months" for about six.
+OPENING_DATES = (
+    "Time left to the dates in the question, counted by the engine:\n{dates}\n"
+    "Wherever you speak of the time left or the forecast's horizon, use these "
+    "numbers; never count it yourself.\n"
+)
+DATE_PAST = "- {date}: already past"
+DATE_DAY = "- {date}: {days} days, about {months} months from today"
+DATE_SPAN = "- {date}: {first}-{last} days, about {first_months}-{last_months} months from today"
+
+
+def render_dates(dates: Sequence[tuple[str, int, int]]) -> str:
+    """Return the opening's line on the question's dates ("" if it names none)."""
+    lines: list[str] = []
+    for text, first, last in dates:
+        if last < 0:
+            lines.append(DATE_PAST.format(date=text))
+        elif first == last:
+            lines.append(DATE_DAY.format(date=text, days=first, months=deadlines.months(first)))
+        else:
+            first = max(first, 0)
+            lines.append(
+                DATE_SPAN.format(
+                    date=text,
+                    first=first,
+                    last=last,
+                    first_months=deadlines.months(first),
+                    last_months=deadlines.months(last),
+                )
+            )
+    return OPENING_DATES.format(dates="\n".join(lines)) if lines else ""
+
+
+def opening_task(
+    today: date, rounds: int, forecast: bool, user: str | None, question: str = ""
+) -> str:
+    """Return the moderator's opening task; `user` None in a shared chat."""
+    terms = OPENING_TERMS.format(user=user or OPENING_TERMS_PEOPLE) if forecast else ""
+    dates = render_dates(deadlines.time_left(question, today))
+    return OPENING_TASK.format(today=today.isoformat(), rounds=rounds, dates=dates, terms=terms)
+
 
 BLIND_TASK = """\
 Round 1, blind: give your independent take. You have not seen the other members' \
@@ -587,6 +646,30 @@ READ_FOR_CHARS = 100  # of each earlier `look_for` shown beside a page
 READABLE_PAGE = "- {url}"
 READABLE_PAGE_READ = "- {url} (already read for: {look_for})"
 DOCUMENTS_RULE_OFF = "the document reader is off: always empty."
+# A local Chair asked for no read in a whole session, though its facts cited the
+# official projections table that held the figure their Missing lines named
+# (2026-11-19 local-only run). One narrow question, asked only when its update asked
+# for no read, is what a small model follows.
+READ_PICK_SYSTEM = """\
+You are the research assistant of a debate moderator. You choose a web page to read \
+in full. You never give opinions or advice."""
+READ_PICK_TASK = """\
+Figures the research has not found yet:
+{missing}
+
+Official pages the fresh facts cite, not yet read in full:
+{pages}
+
+The document reader can read one of these pages in full before the next round. Pick \
+the page most likely to hold one of the missing figures itself: an official release's \
+tables, a statistics or projections page, a filing. Judge from what the fresh facts \
+say each page contains. Not a page that only gives dates or announces a release, and \
+not for a figure that can't exist yet (data for a period that hasn't ended).
+Return only a JSON object: {{"page": N, "look_for": "..."}}, where N is the page's \
+number and look_for names the figure in a few words, as the page would label it, with \
+the table's scope if the page has several. If no page fits: {{"page": 0, "look_for": ""}}"""
+READ_PICK_PAGE = "{index}. {url}"
+READ_PICK_MISSING = "- {item}"
 # The moderator relaying a page read it couldn't run on its own (a chat line).
 # The command comes last, so a copy from it to the end of the line holds nothing else.
 READ_ASK = "I'd like to read {url} for: {look_for} ({reason}). To allow it: /read {url} {look_for}"

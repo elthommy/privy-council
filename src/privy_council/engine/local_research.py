@@ -35,13 +35,21 @@ _YEAR = re.compile(r"^(?:19|20)\d{2}$")
 
 
 _MISSING = re.compile(r"^\s*(?:[-*•]\s*)?\**missing\**\s*:\s*\**\s*(?P<facts>.+?)\s*$", re.I | re.M)
+_INNER_MISSING = re.compile(r"\bmissing\s*:\s*", re.I)
 MAX_MISSING_CHARS = 200
 
 
 def missing_line(note: str) -> str:
-    """Return a summary's whole "Missing: …" line (the last one), or ""."""
+    """Return a summary's whole "Missing: …" line (the last one), or "".
+
+    Only what follows the line's last "Missing:": a local summary wrote "Missing:
+    Result [12] gives ... Missing: <the fact>" on one line (2026-11-19), and the
+    whole of it became the next search's focus.
+    """
     found = _MISSING.findall(note)
-    return " ".join(found[-1].split()) if found else ""
+    if not found:
+        return ""
+    return " ".join(_INNER_MISSING.split(found[-1])[-1].split())
 
 
 def missing_facts(note: str) -> str:

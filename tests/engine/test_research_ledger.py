@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from privy_council.config import PRIMARY_DOMAINS
 from privy_council.engine import context, facts, prompts
 from privy_council.engine.research_ledger import (
@@ -136,6 +138,21 @@ def test_readable_pages_are_the_official_html_pages_newest_first() -> None:
     assert [u for u, _ in readable_pages(notes, PRIMARY_DOMAINS, ["stats.example.gov"])] == [
         "https://bank.example.gov/rates/"
     ]
+
+
+@pytest.mark.parametrize(
+    ("url", "readable"),
+    [
+        ("https://stats.example.gov/schedule/2027/05_sched.htm", False),
+        ("https://stats.example.gov/release-calendar.htm", False),
+        ("https://bank.example.gov/calendars/fomc.htm", False),
+        ("https://stats.example.gov/news.release/empsit.t01.htm", True),
+        ("https://stats.example.gov/tables/rescheduled-loans.htm", True),
+    ],
+)
+def test_a_release_calendar_is_not_readable(url: str, readable: bool) -> None:
+    notes = [cited("release", f"- Released on 4 May ({url})")]
+    assert bool(readable_pages(notes, PRIMARY_DOMAINS)) is readable
 
 
 def test_a_repeated_lookup_gets_the_official_page_its_searches_cite() -> None:

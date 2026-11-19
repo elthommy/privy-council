@@ -36,6 +36,9 @@ MAX_NOT_FINDABLE = 5
 MAX_READABLE_PAGES = 6
 # The document reader takes HTML and plain text only.
 _UNREADABLE = (".pdf", ".xls", ".xlsx", ".csv", ".zip", ".doc", ".docx", ".ppt", ".pptx")
+# A release calendar holds dates, not figures: a local Chair's page pick read one for
+# a figure (2026-11-19). Path words, matched whole between separators.
+_CALENDAR_PATH = re.compile(r"(?:^|[/_.-])(?:schedule|schedules|calendar|calendars)(?:$|[/_.-])")
 _NUMBER = re.compile(r"\d+")
 _ITEM_SPLIT = re.compile(r"\s*;\s*")
 
@@ -145,12 +148,14 @@ def _note_urls(note: ResearchNote) -> dict[str, str]:
 def _readable(url: str, primary_domains: Collection[str], refusing: Collection[str]) -> bool:
     """Tell whether a URL is an official page the reader can take.
 
-    No PDF or data file, and no site that refuses the reader (`refusing`).
+    No PDF or data file, no release calendar, and no site that refuses the reader
+    (`refusing`).
     """
     path = urlsplit(url).path.lower()
     data_file = path.endswith(_UNREADABLE) or path.rstrip("/").endswith("/pdf")
     official = tier(url, primary_domains) == "primary"
-    return official and not data_file and not on_domains(url, refusing)
+    dates_only = bool(_CALENDAR_PATH.search(path))
+    return official and not data_file and not dates_only and not on_domains(url, refusing)
 
 
 def _read_pages(notes: Sequence[ResearchNote]) -> dict[str, list[str]]:

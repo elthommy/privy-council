@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 from typing import Any
 
 from privy_council.backends.base import CompletionRequest
 from privy_council.backends.fake import Reply
+from privy_council.engine import prompts
 from privy_council.models.council import ProtocolSettings
 from privy_council.models.flaw import FlawKind
 from privy_council.models.persona import Persona
@@ -176,3 +178,25 @@ async def test_councils_without_estimates_are_unchanged(
     rt = h.engine.meta.runtime
     assert rt.split is None and rt.estimates == {}
     assert not any(f.kind is FlawKind.MISSING_ESTIMATE for f in rt.flaws)
+
+
+async def test_the_opening_gives_the_date_the_rounds_and_asks_about_terms(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    h = harness(tmp_path, personas)
+    await h.engine.step()
+    opening = next(r for r in h.requests() if r.tag.purpose == "opening")
+    task = opening.messages[0].content
+    assert "Today is 20" in task and "up to 2 rounds" in task
+    assert f"ask {h.engine.user_name} which reading they mean" in task
+
+
+def test_the_opening_asks_about_terms_only_in_a_forecast() -> None:
+    plain = prompts.opening_task(date(2026, 1, 2), 4, forecast=False, user="Ana", question="x")
+    assert "Today is 2026-01-02" in plain and "up to 4 rounds" in plain
+    assert "which reading" not in plain and "counted by the engine" not in plain
+    shared = prompts.opening_task(
+        date(2026, 1, 2), 4, forecast=True, user=None, question="by 2 March 2026?"
+    )
+    assert "- 2 March 2026: 59 days, about 2 months from today" in shared
+    assert f"ask {prompts.OPENING_TERMS_PEOPLE} which reading" in shared

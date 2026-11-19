@@ -10,6 +10,10 @@ ended, and only the moderator's update is sent. Each round costs one Claude call
 
 Use a --root whose data dir is a scratch dir: calls go into its usage.jsonl, and
 the moderator reads its memory from there (an empty one keeps the replay clean).
+
+--pick-read: when an update asks for no page read, also ask a local moderator which
+cited page holds a missing figure (the engine's page pick; one more local call, no
+page is fetched). Needs a root with the document reader on.
 """
 
 from __future__ import annotations
@@ -188,6 +192,9 @@ async def main() -> None:
     parser.add_argument("--rounds", default="2-6", help='Rounds to replay, e.g. "3-6"')
     parser.add_argument("--root", type=Path, default=None, help="Directory with config.toml")
     parser.add_argument("--dry-run", action="store_true", help="Build prompts, call nothing")
+    parser.add_argument(
+        "--pick-read", action="store_true", help="Also run a local moderator's page pick"
+    )
     args = parser.parse_args()
     settings = load_settings(args.root)
     store = SessionStore.open(args.session, {})
@@ -215,6 +222,13 @@ async def main() -> None:
         _report(decision, round_, stalled, protocol.stall_rounds, round_ >= protocol.max_rounds)
         print(f"   update markers that count: {marked or '(none)'}")
         print(f"   position_changes (moderator): {decision.position_changes}")
+        if args.pick_read and not decision.documents and round_ < protocol.max_rounds:
+            picks = await engine._picked_reads()
+            print("   page pick (local moderator):")
+            for d in picks or []:
+                print(f"     - {d.url} for: {d.look_for}")
+            if not picks:
+                print("     - (none)")
 
 
 if __name__ == "__main__":

@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Mapping, Sequence
+from datetime import datetime
 from typing import Any
 
 from privy_council.backends.base import (
@@ -388,7 +389,13 @@ class DebateEngine(DocumentFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
             facts_share=self.settings.research.context_share,
             dossier=self._dossier(),
             dossier_share=self.settings.dossier.context_share,
-            task=prompts.OPENING_TASK,
+            task=prompts.opening_task(
+                datetime.now().astimezone().date(),  # the owner's day
+                self.max_rounds,
+                self._estimating(),
+                None if self.guests else self.user_name,
+                self.meta.topic,
+            ),
             budget_tokens=self._budget(self.moderator),
             memory=self._memory(self.moderator),
             memory_share=self.settings.memory.context_share,
@@ -601,7 +608,11 @@ class DebateEngine(DocumentFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
         self.lookups_for_user = 0
         if not ending:
             # Decided before the lookups run: each one adds a note the rule would count.
-            documents = decision.documents or self._reads_for_repeats(decision.research)
+            documents = (
+                decision.documents
+                or self._reads_for_repeats(decision.research)
+                or await self._picked_reads()
+            )
             relayed = await self._auto_research(decision.research)
             relayed += await self._auto_documents(documents)
         if self._drop_answered_flaws(rt.research[searched:]):

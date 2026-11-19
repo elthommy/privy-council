@@ -208,3 +208,81 @@ async def test_the_moderator_does_not_read_a_site_that_refuses_the_reader(
     assert any("refuses the document reader" in t for t in h.texts("system"))
     await h.engine.read(f"{FILING_URL} principal by year")  # the owner's /read still tries
     assert fetched == [FILING_URL]
+
+
+def picking(pick: str) -> Any:
+    """Standard replies, the page summary, and `pick` for the read-pick call."""
+    base = responder([decision([("rigor", "x")]), decision([("rigor", "y")])])
+
+    def respond(req: CompletionRequest) -> Reply:
+        """Answer the read-pick call with `pick`."""
+        return pick if req.tag.purpose == "read_pick" else base(req)
+
+    return respond
+
+
+def with_missing_figure(h: Harness) -> None:
+    """Add a note citing the filing, whose Missing line names a figure."""
+    h.engine.meta.runtime.research.append(
+        ResearchNote(
+            focus="Widget Corp debt",
+            text=f"- The filing has a debt note ({FILING_URL})\nMissing: principal due in 2027",
+            auto=True,
+            missing=["principal due in 2027"],
+        )
+    )
+
+
+@pytest.mark.parametrize(
+    ("pick", "reads"),
+    [
+        ('{"page": 1, "look_for": "principal maturities by year"}', [FILING_URL]),
+        ('{"page": 1, "look_for": ""}', [FILING_URL]),  # the missing item is looked for
+        ('{"page": 0, "look_for": ""}', []),
+        ('{"page": 2, "look_for": "debt"}', []),  # not a listed page
+        ("I would read the filing.", []),  # not JSON: no read, the debate goes on
+    ],
+)
+async def test_a_local_moderator_is_asked_which_page_holds_a_missing_figure(
+    tmp_path: Path,
+    personas: dict[str, Persona],
+    fetched: list[str],
+    monkeypatch: pytest.MonkeyPatch,
+    pick: str,
+    reads: list[str],
+) -> None:
+    monkeypatch.setattr(document_flow.DocumentFlow, "_local_moderator", lambda self: True)
+    h = Harness(tmp_path, personas, picking(pick), config=ON)
+    with_missing_figure(h)
+    await h.engine.step()
+    await h.engine.step()
+    (call,) = [r for r in h.claude.requests if r.tag.purpose == "read_pick"]
+    task = call.messages[0].content
+    assert "- principal due in 2027" in task and f"1. {FILING_URL}" in task
+    assert fetched == reads
+    if reads:
+        note = h.engine.meta.runtime.research[-1]
+        assert note.source == "document" and note.auto
+        assert note.focus in ("principal maturities by year", "principal due in 2027")
+    assert h.engine.meta.runtime.phase.value == "round"  # the debate goes on
+
+
+async def test_no_page_pick_for_a_claude_moderator_or_once_the_page_was_read(
+    tmp_path: Path, personas: dict[str, Persona], fetched: list[str]
+) -> None:
+    pick = '{"page": 1, "look_for": "principal"}'
+    h = Harness(tmp_path / "claude", personas, picking(pick), config=ON)
+    with_missing_figure(h)
+    await h.engine.step()
+    await h.engine.step()
+    assert not [r for r in h.claude.requests if r.tag.purpose == "read_pick"]
+
+    local = Harness(tmp_path / "local", personas, picking(pick), config=ON)
+    with_missing_figure(local)
+    local.engine.meta.runtime.research.append(
+        ResearchNote(
+            focus="principal", text="- Principal 2,222", fetched=[FILING_URL], source="document"
+        )
+    )
+    local.engine._local_moderator = lambda: True  # type: ignore[method-assign]
+    assert await local.engine._picked_reads() == []

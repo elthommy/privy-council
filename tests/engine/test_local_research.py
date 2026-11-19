@@ -248,6 +248,7 @@ MISSING = (
         ("- a fact\n**Missing:** the price of one pull", "the price of one pull"),
         ("- Results do not state the pity rules.", ""),
         ("- Missing pieces are common in gacha", ""),
+        ("- Missing: Result [3] has 2025 only. Missing: the 2027 rate", "the 2027 rate"),
     ],
 )
 def test_missing_facts(note: str, facts: str) -> None:
