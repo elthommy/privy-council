@@ -106,7 +106,7 @@ change an entry point (a command, a front end, a network call, a file read);
 ## Tech stack
 
 - Python **3.12+**, managed with **uv**.
-- **Textual** for the TUI, **Typer** for the CLI, **Pydantic v2** for models and config, **httpx** (async) for Ollama, **python-frontmatter** (or PyYAML) for persona files, **Jinja2** optionally for prompt templates, and `tomllib` for config.
+- **Textual** for the TUI, **Typer** for the CLI, **Pydantic v2** for models and config, **httpx** (async) for Ollama, **python-frontmatter** and **PyYAML** for persona and council files, **markdown-it-py** for the HTML export, **discord.py** for the Discord front end (`chat/discord_bot.py` only), **Jinja2** optionally for prompt templates, and `tomllib` for config.
 - Testing: **pytest**, **pytest-asyncio**, **pytest-httpx**. Style: **ruff** (lint + format). Types: **mypy** in strict mode on `src/`.
 - Use asyncio throughout the engine and backends. No threads, except where Textual requires them.
 
@@ -132,14 +132,15 @@ Before considering a task done, run `ruff check`, `ruff format`, `mypy src` and 
 
 ```
 src/privy_council/
-  cli.py, config.py
+  cli.py config.py doctor.py repl.py (--no-tui) local_only.py persona_draft.py
   models/      persona.py council.py session.py moderator.py
   loaders/     personas.py councils.py
   backends/    base.py claude_cli.py ollama.py fake.py registry.py
-  engine/      protocol.py (DebateEngine) core.py memory_flow.py research_flow.py
-               state_machine.py prompts.py notices.py context.py moderation.py
-               research.py local_research.py resume.py scheduler.py budget.py
-               research_ledger.py document_flow.py
+  engine/      protocol.py (DebateEngine) core.py state_machine.py prompts.py
+               context.py moderation.py notices.py scheduler.py budget.py resume.py
+               research.py local_research.py research_ledger.py
+               *_flow.py: one module per feature (memory, research, document,
+               dossier, flaw, review, roster, estimate)
   search/      base.py searxng.py (local web search, local-only sessions)
                fetch.py (URL guard) extract.py bm25.py (document reader)
   chat/        frontend.py render.py names.py store.py launch.py cli.py
@@ -147,7 +148,9 @@ src/privy_council/
   memory/      store.py distill.py
   storage/     sessions.py
   tui/         app.py widgets.py commands.py
-  util/        tokens.py time.py
+  compare/     council-composition comparisons (one question, several variants)
+  export/      session export to Markdown or HTML
+  util/        tokens.py logs.py language.py
 personas/      example persona .md files (committed)
 councils/      example council .yaml presets (committed)
 docs/          spike-notes.md, design notes
@@ -211,7 +214,7 @@ When implementing or changing the backend, make sure:
 - [ ] it calls `POST {base_url}/api/chat` via a shared `httpx.AsyncClient`, passing `model`, `messages`, `stream`, `options.temperature`, `options.num_ctx` and `keep_alive`;
 - [ ] the health check verifies the server is up and the models are pulled, and prints the `ollama pull <model>` hint otherwise;
 - [ ] all calls go through the global semaphore;
-- [ ] streaming support comes later (M6), as an async iterator for the TUI typing effect.
+- [ ] chat turns stream through the `on_text` callback (the TUI typing effect); JSON calls stay non-streamed.
 
 ## Coding conventions
 
@@ -243,7 +246,7 @@ When implementing or changing the backend, make sure:
 
 ## Workflow for Claude Code in this repo
 
-- Work **milestone by milestone** (see `PROJECT_BRIEF.md` §14). Start with **M0** (spike) and record its findings in `docs/spike-notes.md` before building backends.
+- Work **milestone by milestone**. `PROJECT_BRIEF.md` §14 defines M0–M7; later milestones are planned in `docs/plan-*.md` and tracked in `docs/STATUS.md`.
 - **Read `docs/STATUS.md` at the start of a session, if present.** It's the owner's private dev log (progress, decisions made with the user that supersede the brief), gitignored and never committed. Update it at the end of each milestone, and add user-facing changes to `CHANGELOG.md`.
 - **This repository is public.** Commits, messages and code must not quote real session questions, people's names or personal details; those stay in `docs/STATUS.md` and `data/`.
   - That includes the owner's figures from real sessions (amounts, contributions, dates). When a test, docstring or commit message is built from a real turn, use made-up numbers that give the same arithmetic.
