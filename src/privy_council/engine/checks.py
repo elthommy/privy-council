@@ -170,8 +170,10 @@ _SPELLED_VALUES = {
 _SPACED_WORD = re.compile(r"\s(?P<w>[^\W\d_]{3,})")
 _YEARS = re.compile(r"(?:19|20)\d\d")
 _SPELLED = re.compile(rf"\b(?P<n>{'|'.join(_SPELLED_VALUES)})\b", re.IGNORECASE)
-# Units whose numbers can't be in the wrong unit: shares, multiples, bare multipliers.
-_UNITLESS_FAMILIES = frozenset({"", "%", "x", _TIMES})
+# Units whose numbers can't be in the wrong unit: shares, multiples, bare multipliers,
+# and durations: "over 7 months", "one per 4-5 years" are the member's own framing,
+# and every duration flagged so far was false (4 of 4: labelled rounds, 2026-11-19 run).
+_UNITLESS_FAMILIES = frozenset({"", "%", "x", _TIMES, "time"})
 
 
 @dataclass(frozen=True)

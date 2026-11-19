@@ -184,6 +184,14 @@ text = "Spending 40–80 Shards now could leave you short."
 flaws = ["wrong_unit:40–80 Shards"]
 
 [[turn]]
+name = "a duration the member frames itself is no wrong unit"
+nick = "Fan"
+given = "Output grew 7% and 4% in the last two years; the plan has 5 stages."
+sources = "Output grew 7% and 4% in the last two years; the plan has 5 stages."
+text = "That is one event per 4-5 years, so over 7 months the odds are low."
+flaws = []
+
+[[turn]]
 name = "a price written as a word"
 nick = "Fan"
 given = "Shards buy pulls; hard pity is at 80 pulls."
