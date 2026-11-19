@@ -56,6 +56,15 @@ def test_parse_skips_hits_without_url_and_trims_snippets() -> None:
     assert len(found[0].snippet) == MAX_SNIPPET_CHARS
 
 
+@pytest.mark.parametrize(
+    "url",
+    ["http:///go/v1/AbCd", "/go/v1/AbCd", "javascript:alert(1)", "ftp://x.org/f", "http://[x"],
+)
+def test_parse_skips_hits_without_a_usable_url(url: str) -> None:
+    hits = [{"title": "bad", "url": url}, {"title": "good", "url": "https://x.org/a"}]
+    assert [r.url for r in parse_results({"results": hits}, 5)] == ["https://x.org/a"]
+
+
 @pytest.mark.parametrize("payload", [[], {"results": "none"}, {"answers": []}])
 def test_parse_rejects_a_reply_without_results(payload: object) -> None:
     with pytest.raises(BackendOutputError):

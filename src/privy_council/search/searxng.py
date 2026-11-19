@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -20,13 +21,28 @@ JSON_HINT = "SearXNG refused JSON output: add json to search.formats in its sett
 MAX_SNIPPET_CHARS = 400
 
 
+def _usable_url(url: Any) -> bool:
+    """Whether a hit's URL is http(s) with a host.
+
+    An engine's redirect wrapper came back as "http:///go/v1/..." (2026-11-19): no
+    host, so nobody could open it, yet the summary cited it as a source.
+    """
+    if not isinstance(url, str):
+        return False
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return False
+    return parts.scheme in ("http", "https") and bool(parts.hostname)
+
+
 def parse_results(payload: Any, limit: int) -> list[SearchResult]:
-    """Turn a SearXNG JSON reply into results, skipping hits without a URL."""
+    """Turn a SearXNG JSON reply into results, skipping hits without a usable URL."""
     if not isinstance(payload, dict) or not isinstance(payload.get("results"), list):
         raise BackendOutputError("SearXNG: no results list in the reply")
     out: list[SearchResult] = []
     for hit in payload["results"]:
-        if not isinstance(hit, dict) or not isinstance(hit.get("url"), str):
+        if not isinstance(hit, dict) or not _usable_url(hit.get("url")):
             continue
         snippet = " ".join(str(hit.get("content") or "").split())
         published = hit.get("publishedDate")
