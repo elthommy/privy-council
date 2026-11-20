@@ -426,3 +426,48 @@ async def test_a_third_lookup_of_the_same_thing_is_skipped(
     await h.engine._auto_research(["Acme 10-Q debt maturities by quarter 2028"])
     await h.engine.research(focus)
     assert len(research_requests(h)) == 4
+
+
+async def test_the_users_answer_to_the_opening_gets_a_lookup_before_round_1(
+    tmp_path: Path,
+    personas: dict[str, Persona],
+) -> None:
+    replies = [research_result(), research_result("- Index at 16,240 (2026-11-19, https://e.org)")]
+    h = Harness(
+        tmp_path,
+        personas,
+        responder([decision([("rigor", "x")])], replies),
+        research=ResearchMode.AUTO,
+        protocol=ProtocolSettings(max_rounds=2, estimate="probability"),
+    )
+    await h.engine.step()  # first search, then the opening
+    h.engine.say("a 10% fall from the record counts")
+    await h.engine.step()  # the terms lookup, then round 1
+    first, terms = research_requests(h)
+    assert "Focus: the terms as the user's answer" in terms.messages[0].content
+    assert "a 10% fall from the record counts" in terms.messages[0].content
+    assert "a 10% fall" not in first.messages[0].content
+    notes = h.engine.meta.runtime.research
+    assert [n.focus for n in notes] == [
+        "background for the question",
+        "where the question's terms stand today",
+    ]
+    assert "Chair looks up where your answer's terms stand today" in h.texts("system")
+    turns = [r for r in h.requests() if r.tag.purpose == "turn"]
+    assert turns and all("16,240" in r.messages[0].content for r in turns)
+
+
+async def test_no_answer_to_the_opening_no_terms_lookup(
+    tmp_path: Path,
+    personas: dict[str, Persona],
+) -> None:
+    h = Harness(
+        tmp_path,
+        personas,
+        responder([decision([("rigor", "x")])]),
+        research=ResearchMode.AUTO,
+        protocol=ProtocolSettings(max_rounds=2, estimate="probability"),
+    )
+    await h.engine.step()
+    await h.engine.step()
+    assert len(research_requests(h)) == 1

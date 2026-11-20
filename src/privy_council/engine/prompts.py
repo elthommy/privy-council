@@ -15,7 +15,7 @@ from privy_council.models.session import DebateState, Message
 from privy_council.models.vote import Vote
 from privy_council.util.language import Language
 
-PROMPTS_VERSION = "74"
+PROMPTS_VERSION = "75"
 
 # Backends that accept a single user turn (the claude CLI on stdin) flatten a
 # multi-message conversation with these labels.
@@ -80,6 +80,7 @@ LABELS: dict[Language, dict[str, str]] = {
         "h_open_disagreements": "Open disagreements",
         "h_open_questions": "Open questions",
         "research_opening": "background for the question",
+        "research_terms": "where the question's terms stand today",
         "primary": "primary",
     },
     "fr": {
@@ -106,6 +107,7 @@ LABELS: dict[Language, dict[str, str]] = {
         "h_open_disagreements": "Désaccords ouverts",
         "h_open_questions": "Questions ouvertes",
         "research_opening": "contexte de la question",
+        "research_terms": "où en sont les termes de la question",
         "primary": "primaire",
     },
 }
@@ -251,11 +253,13 @@ OPENING_TASK = """\
 Today is {today}. The debate has up to {rounds} rounds: in round 1 every member \
 answers independently, then they challenge each other.
 {dates}Open the debate on the question above, in a few lines for the chat:
-1. Restate the question in one sentence, with its deadline and the time left from today.
+1. Restate the question in one sentence, with its deadline and the time left from today. \
+Keep the question's own words for its conditions and how they combine.
 2. List the 2-4 key sub-questions.
 3. Say what a good answer must cover.
-{terms}Don't answer the question yourself, and don't call on any member: every member \
-answers round 1 independently."""
+{terms}Don't answer the question yourself, and don't call on any member (no @names, no \
+line asking the members to answer): the engine calls them, and every member answers \
+round 1 independently. End with your question to the user, or with item 3."""
 # A forecast's terms in the opening: the same local Chair read an ambiguous release
 # date one way and never asked (a Claude Chair asked in its opening). 2026-11-20: one
 # question with tangled readings ("(b) the fall, or the default, or both required?"),
@@ -938,6 +942,16 @@ RESEARCH_DEFAULT_FOCUS = "the current facts and figures the council will need"
 # Added to the first search's focus: a 2026-11-20 opening never looked up the index
 # the question resolved on; it was already past the threshold, found only after
 # round 1 had priced that leg as open.
+# The lookup before round 1, once the user answered the opening (the chat lines are in
+# the prompt): on 2026-11-20 the answer named the index, after the first search.
+RESEARCH_TERMS_FOCUS = (
+    "the terms as the user's answer to the moderator's opening defines them (see the "
+    "recent messages): for each measure they name (an index, a price, a rate, a "
+    "statistic, a count of events), its latest value with its date, the reference level "
+    "it is compared to (a record, a threshold, a baseline), and whether the condition is "
+    "already met; for each kind of event they name, whether one has already happened. "
+    "Skip what the fresh facts already give"
+)
 RESEARCH_OPENING_MEASURE = """
 First of all: if the question resolves on a measure (an index, a price, a rate, a \
 statistic, a count), its latest value with its date, the reference level the question \

@@ -382,7 +382,21 @@ class DebateEngine(DocumentFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
             searches = self._research_unavailable() is None
             self._notice(NOTICE_LOCAL_ONLY_SEARCH if searches else NOTICE_LOCAL_ONLY)
         await self._first_research()
-        prompt = context.build_prompt(
+        prompt = self._opening_prompt()
+        try:
+            result, fallback = await self._complete(self.moderator, prompt, "opening", stream=True)
+            self._post_result(self.moderator, result, fallback)
+        except (BackendRateLimitError, BackendAuthError):
+            raise
+        except BackendError as exc:
+            self._notice(NOTICE_OPENING_FAILED.format(error=exc), exc)
+        rt.phase = Phase.ROUND
+        rt.pending = [PendingTurn(speaker=s) for s in self.members]
+        self._save()
+
+    def _opening_prompt(self) -> context.Prompt:
+        """Build the moderator's opening prompt (also used by scripts/replay_opening.py)."""
+        return context.build_prompt(
             system=self._moderator_system(),
             topic=self.meta.topic,
             facts=self._facts(),
@@ -403,21 +417,14 @@ class DebateEngine(DocumentFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
                 context.blind_messages(self.messages, self.moderator.slug), self.nick
             ),
         )
-        try:
-            result, fallback = await self._complete(self.moderator, prompt, "opening", stream=True)
-            self._post_result(self.moderator, result, fallback)
-        except (BackendRateLimitError, BackendAuthError):
-            raise
-        except BackendError as exc:
-            self._notice(NOTICE_OPENING_FAILED.format(error=exc), exc)
-        rt.phase = Phase.ROUND
-        rt.pending = [PendingTurn(speaker=s) for s in self.members]
-        self._save()
 
     async def _round(self) -> None:
         """Run the pending turns of a round, then the moderator update."""
         rt = self.meta.runtime
         if not rt.round_in_progress:
+            first = rt.round == 0 and self._estimating() and rt.research
+            if first and (exchange := self._opening_exchange()):
+                await self._terms_research(exchange)
             self._budget_check()
             rt.round += 1
             rt.round_in_progress = True
@@ -435,6 +442,18 @@ class DebateEngine(DocumentFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
         await self._moderate()
         rt.round_in_progress = False
         self._save()
+
+    def _opening_exchange(self) -> list[str]:
+        """Return the opening and the users' answers to it as chat lines, [] if none."""
+        opening = next(
+            (i for i, m in enumerate(self.messages) if m.speaker == self.moderator.slug), None
+        )
+        if opening is None:
+            return []
+        answers = [m for m in self.messages[opening + 1 :] if m.speaker == "user"]
+        if not answers:
+            return []
+        return context.render_history([self.messages[opening], *answers], self.nick)
 
     async def _run_blind(self, turns: list[PendingTurn]) -> None:
         """Run independent turns: Claude concurrently, Ollama sequentially by model.

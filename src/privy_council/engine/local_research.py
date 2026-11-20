@@ -119,7 +119,9 @@ def fallback_query(focus: str, topic: str, standing: str = "") -> str:
     `standing`: the council's own first-search focus, a description like the default
     one rather than a query.
     """
-    standard = focus == prompts.RESEARCH_DEFAULT_FOCUS or (standing and focus == standing)
+    standard = focus in (prompts.RESEARCH_DEFAULT_FOCUS, prompts.RESEARCH_TERMS_FOCUS) or (
+        standing and focus == standing
+    )
     text = topic if standard else focus
     return " ".join(text.split())[:MAX_QUERY_CHARS]
 

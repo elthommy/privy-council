@@ -5,6 +5,9 @@ All notable changes, by milestone. Dates are when each milestone was built.
 ## Unreleased (2026-10-25 – 2026-11-20)
 
 - **The Chair's first search looks up what the question resolves on**: the latest value of the index, price or rate the question names, the level it is compared to (a record, a threshold), and whether the condition is already met. Applies to Claude research and to local search's queries.
+- **The Chair looks up where your terms stand before round 1**: in forecast councils with research, once you answer the opening, one search checks each measure your answer names (its latest value, the level it is compared to, whether the condition is already met) and each kind of event (has one happened yet). Round 1 then starts from it. Skipped when the Claude budget is tight.
+- **The opening keeps the question's own words** for its conditions and how they combine, and never calls on the members (no @names): a local Chair had read an "and" as "or" and asked the members to answer.
+- `scripts/replay_opening.py` replays a saved session's opening on local models (no Claude, no search) and counts lettered readings and @-mentions.
 - **The opening asks clearer terms questions** in forecast councils: up to two, each with complete, separate readings ("(a) ... or (b) ...?"). It checks which firms or borderline cases count, whether an event before today counts, and whether several conditions are all needed or any one.
 - **A small model's prompt keeps the opening's research** (the check of the user's premises): it now comes first among the fresh facts, so trimming cuts the oldest later notes instead.
 - A fact tag right after a plain number ("12% below the record close of 18,450.20 [F9]") vouches for that number, not for an earlier percentage, so the engine no longer reports it as miscited.

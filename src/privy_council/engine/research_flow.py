@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Literal
 
@@ -45,6 +46,7 @@ from privy_council.engine.notices import (
     NOTICE_RESEARCH_OFF,
     NOTICE_RESEARCH_READ,
     NOTICE_RESEARCH_SEARCHED,
+    NOTICE_TERMS_RESEARCH,
 )
 from privy_council.engine.research import (
     WEB_TOOLS,
@@ -227,10 +229,31 @@ class ResearchFlow(EngineCore):
         self._notice(NOTICE_LOCAL_FOLLOW_UP.format(nick=self.moderator.name, facts=facts))
         await self._research_safely(facts)  # part of the first search: not the Chair's quota
 
-    async def _research_safely(self, focus: str | None, *, auto: bool = False) -> None:
+    async def _terms_research(self, exchange: Sequence[str]) -> None:
+        """Look up the measure the user's answer to the opening defines, before round 1.
+
+        The first search runs before the user says what counts: on 2026-11-20 the index
+        the answer named was already past its threshold, and round 1 priced it as open.
+        `exchange` (the opening and the answer, as chat lines) goes in the prompt. Not
+        the Chair's quota, like the first search; skipped when the budget is tight.
+        """
+        if self._research_unavailable() is not None or self.budget_warnings(1):
+            return
+        self._notice(NOTICE_TERMS_RESEARCH.format(nick=self.moderator.name))
+        title = prompts.LABELS[self.meta.language]["research_terms"]
+        await self._research_safely(prompts.RESEARCH_TERMS_FOCUS, title=title, history=exchange)
+
+    async def _research_safely(
+        self,
+        focus: str | None,
+        *,
+        auto: bool = False,
+        title: str | None = None,
+        history: Sequence[str] = (),
+    ) -> None:
         """Run research; a failure (usage limit included) never stops the debate."""
         try:
-            await self._research_turn(focus, auto=auto)
+            await self._research_turn(focus, auto=auto, title=title, history=history)
         except NoSearchHits as exc:
             self._notice(NOTICE_LOCAL_NOTHING.format(nick=self.moderator.name, queries=exc))
         except BackendAuthError:
@@ -238,19 +261,26 @@ class ResearchFlow(EngineCore):
         except BackendError as exc:
             self._emit(ErrorEvent(text=NOTICE_RESEARCH_FAILED.format(error=exc)))
 
-    async def _research_turn(self, focus: str | None, *, auto: bool = False) -> None:
+    async def _research_turn(
+        self,
+        focus: str | None,
+        *,
+        auto: bool = False,
+        title: str | None = None,
+        history: Sequence[str] = (),
+    ) -> None:
         """Moderator searches the web; the note joins every later prompt.
 
         With no focus asked for, the note is titled with a short label: the council's
         research_focus is an instruction, too long for a heading (2026-10-27 Discord).
         """
-        title = focus or prompts.LABELS[self.meta.language]["research_opening"]
+        title = title or focus or prompts.LABELS[self.meta.language]["research_opening"]
         focus = focus or self.council.research_focus.strip() or prompts.RESEARCH_DEFAULT_FOCUS
         self._emit(TurnStarted(speaker=self.moderator.slug, round=self.meta.runtime.round))
         if self._local_search():
-            note = await self._local_research(focus, auto)
+            note = await self._local_research(focus, auto, history)
         else:
-            note = await self._claude_research(focus, auto)
+            note = await self._claude_research(focus, auto, history)
         self._add_note(note.model_copy(update={"focus": title}))
 
     def _add_note(self, note: ResearchNote) -> None:
@@ -264,9 +294,12 @@ class ResearchFlow(EngineCore):
         if note.truncated:
             self._notice(NOTICE_CUT_OFF.format(nick=self.moderator.name))
 
-    def _research_prompt(self, system: str, task: str, *, facts: bool = True) -> context.Prompt:
+    def _research_prompt(
+        self, system: str, task: str, *, facts: bool = True, history: Sequence[str] = ()
+    ) -> context.Prompt:
         """Build a research prompt: no dossier, since the user's files could leak into queries."""
         return context.build_prompt(
+            history=history,
             system=system,
             topic=self.meta.topic,
             facts=self._facts() if facts else None,  # earlier research: add, don't repeat
@@ -276,7 +309,9 @@ class ResearchFlow(EngineCore):
             state_text=context.state_text(self.meta.runtime.debate_state, self.nick),
         )
 
-    async def _claude_research(self, focus: str, auto: bool) -> ResearchNote:
+    async def _claude_research(
+        self, focus: str, auto: bool, history: Sequence[str] = ()
+    ) -> ResearchNote:
         """Search with the claude CLI's web tools."""
         cfg = self.settings.research
         read = list(dict.fromkeys(url for n in self.meta.runtime.research for url in n.fetched))
@@ -287,7 +322,7 @@ class ResearchFlow(EngineCore):
             today=_today(),
             read_before=read_before + self._earlier_searches(),
         )
-        prompt = self._research_prompt(prompts.RESEARCH_SYSTEM, task)
+        prompt = self._research_prompt(prompts.RESEARCH_SYSTEM, task, history=history)
         result, _ = await self._complete(
             self.moderator,
             prompt,
@@ -329,7 +364,9 @@ class ResearchFlow(EngineCore):
         block = prompts.RESEARCH_EARLIER.format(queries="; ".join(queries))
         return block + (prompts.RESEARCH_STILL_MISSING.format(missing=missing) if missing else "")
 
-    async def _local_research(self, focus: str, auto: bool) -> ResearchNote:
+    async def _local_research(
+        self, focus: str, auto: bool, history: Sequence[str] = ()
+    ) -> ResearchNote:
         """Search with SearXNG: the moderator writes queries, then summarizes the hits.
 
         Bullets whose figures or URLs aren't in the hits are dropped (see
@@ -338,7 +375,7 @@ class ResearchFlow(EngineCore):
         rt = self.meta.runtime
         if not self.meta.local_only and not any(n.source == "local" for n in rt.research):
             self._notice(NOTICE_LOCAL_SEARCH)  # local-only sessions say it at the opening
-        queries = await self._local_queries(focus)
+        queries = await self._local_queries(focus, history)
         hits = await self._local_hits(queries)
         nick = self.moderator.name
         self._notice(
@@ -382,13 +419,13 @@ class ResearchFlow(EngineCore):
             missing=missing_items(text),
         )
 
-    async def _local_queries(self, focus: str) -> list[str]:
+    async def _local_queries(self, focus: str, history: Sequence[str] = ()) -> list[str]:
         """Ask the moderator for search queries, repairing once; else search the focus."""
         local = self.settings.research.local
         task = prompts.LOCAL_QUERIES_TASK.format(
             count=local.max_queries, focus=focus, measure=self._opening_measure(), today=_today()
         )
-        prompt = self._research_prompt(prompts.LOCAL_QUERIES_SYSTEM, task)
+        prompt = self._research_prompt(prompts.LOCAL_QUERIES_SYSTEM, task, history=history)
         messages = [ChatMessage(role="user", content=prompt.user)]
         problem = ""
         for purpose in ("research_queries", "repair"):
