@@ -1284,11 +1284,15 @@ def floor_line(nick: str, prompt: str) -> str:
 def render_research(
     entries: Sequence[tuple[str, str, str]], missing: Sequence[tuple[str, int]] = ()
 ) -> str:
-    """Render research notes, given as (focus, date, text), newest first.
+    """Render research notes, given as (focus, date, text): the first, then newest first.
 
-    `missing` (fact, times searched) goes first, as one line.
+    `missing` (fact, times searched) goes first, as one line. The first note (the
+    opening's background, which checks the user's premises) comes right after it, so
+    trimming a small model's prompt cuts the oldest later notes instead (2026-11-20:
+    gemma lost the premise checks its argument rested on).
     """
-    notes = [RESEARCH_ENTRY.format(focus=f, date=d, text=t) for f, d, t in reversed(entries)]
+    rendered = [RESEARCH_ENTRY.format(focus=f, date=d, text=t) for f, d, t in entries]
+    notes = rendered[:1] + rendered[:0:-1]
     if missing:
         items = [
             (NOT_FINDABLE_ITEM if count > 1 else NOT_FINDABLE_ITEM_ONCE).format(

@@ -38,7 +38,7 @@ def test_prompts_show_each_bullet_with_its_tag() -> None:
     assert "- [F1] **Debt:** Acme owes $9.2bn" in text
     assert "  - [F2] Its main loan" in text
     assert "[F3] Rates rose" in text and "- [F4] Acme cut" in text
-    assert text.index("[F3]") < text.index("[F1]")  # newest note first, as before
+    assert text.index("[F1]") < text.index("[F3]")  # the first note stays first
     shown = facts.in_prompt(prompts.section(prompts.TITLE_FACTS, text))
     assert set(shown) == {"F1", "F2", "F3", "F4"}
     assert shown["F2"] == "Its main loan carries a 1.35x coverage test."
@@ -256,3 +256,12 @@ def test_a_sum_of_the_cited_facts_figures_passes() -> None:
     wrong = turn.replace("53%", "61%")
     flaws = checks.check_turn(wrong, member="m", nick="M", sources=sources, given=given, known=[])
     assert [f.note for f in flaws] == ["61% is not in [F1]."]
+
+
+def test_a_plain_number_before_the_tag_is_what_it_cites() -> None:
+    turn = "The close of 16,240 is about 12% below the May 3 record close of 18,450.20 [F1]."
+    assert [f for f in cite(turn) if f.startswith("miscited")] == []
+
+
+def test_a_year_before_the_tag_still_lets_it_vouch_for_the_amount() -> None:
+    assert cite("Acme owes $9.2bn by 2027 [F4].") == ["miscited: $9.2bn is in [F1], not in [F4]."]

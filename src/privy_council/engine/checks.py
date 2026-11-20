@@ -93,6 +93,14 @@ _MONTHS_A_YEAR = 12
 _VOUCHED_FAMILIES = frozenset({"money", "%", "x", _TIMES})
 _CLAUSE_BREAK = re.compile(r";|\s(?:or|and|but|while|whereas|ou|et|mais)\s", re.IGNORECASE)
 _VOUCH_WORDS = 8  # the cited figure sits right before its tag: 0-5 words in benches
+# A plain number with no unit nearer the tag is what the tag cites: in "12% below the
+# record close of 18,450.20 [F9]" F9 is cited for the close, not the member's 12%
+# (live session, 2026-11-20). Grouped thousands, decimals or 5+ digits only, so a year or a
+# day ("by 2027 [F1]", "Sept 21") still lets the tag vouch for the figure before it.
+_BARE_NUMBER = re.compile(
+    r"(?<![\w.,$€£¥])(?:\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+\.\d+|\d{5,})"
+    r"(?![\w.,]?\d|[^\W_]|\s?(?:%|x\b|\u00d7|[bmk]n?\b|bn\b|trillion|billion|million))"
+)
 # A percentage written as a share of something: "28.5% of savings", "12 % de l'épargne".
 _SHARE_OF = re.compile(r"\s?(?:of|de|du|des|d')(?=[\s'])", re.IGNORECASE)
 # A weighted sum written out: "0.3\u00d735% + 0.7\u00d720%", "30% x 35% + 70% x 20%".
@@ -1056,6 +1064,8 @@ def vouched(
     A tag vouches for the last money, percentage or multiple figure before it, after
     the previous tag of its sentence: in "$230 for a CPU + $90 for a 16GB kit [F5]"
     it is the $90, not the CPU's estimate nor the kit's size (bench 2026-11-14).
+    A plain number between them is what the tag cites instead ("12% below the record
+    close of 18,450.20 [F9]"), so the tag vouches for nothing.
     A tag with no such figure before it, or one across a clause break ("pass 6% or
     the firm cuts jobs [F4]") or many words away ("a 30% cut is unlikely, since it
     rests on ... the filings report [F1]"), vouches for nothing.
@@ -1069,7 +1079,12 @@ def vouched(
                 f for f in figures(sentence[lo : match.start()]) if f.family in _VOUCHED_FAMILIES
             ]
             gap = sentence[lo + figs[-1].end : match.start()] if figs else ""
-            if figs and len(gap.split()) <= _VOUCH_WORDS and not _CLAUSE_BREAK.search(gap):
+            if (
+                figs
+                and len(gap.split()) <= _VOUCH_WORDS
+                and not _CLAUSE_BREAK.search(gap)
+                and not _BARE_NUMBER.search(gap)
+            ):
                 ids = facts.tags(match.group())
                 out.append((start + lo + figs[-1].start, start + lo + figs[-1].end, ids))
             lo = match.end()

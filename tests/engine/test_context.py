@@ -132,16 +132,36 @@ def test_facts_come_after_the_question_and_respect_their_share() -> None:
     assert "<A> hi" in user and user.endswith("T.")
 
 
-def test_facts_text_newest_first() -> None:
+def test_facts_text_first_note_then_newest_first() -> None:
     from datetime import UTC, datetime
 
     from privy_council.models.session import ResearchNote
 
     assert context.facts_text([]) is None
-    old = ResearchNote(focus="old", text="a", ts=datetime(2026, 10, 1, tzinfo=UTC))
-    new = ResearchNote(focus="new", text="b", ts=datetime(2026, 10, 2, tzinfo=UTC))
-    text = context.facts_text([old, new])
-    assert text is not None and text.index("new (searched 2026-10-02)") < text.index("old")
+    first = ResearchNote(focus="first", text="a", ts=datetime(2026, 10, 1, tzinfo=UTC))
+    old = ResearchNote(focus="old", text="b", ts=datetime(2026, 10, 2, tzinfo=UTC))
+    new = ResearchNote(focus="new", text="c", ts=datetime(2026, 10, 3, tzinfo=UTC))
+    text = context.facts_text([first, old, new])
+    assert text is not None
+    order = [text.index(f"{n} (searched") for n in ("first", "new", "old")]
+    assert order == sorted(order)  # the opening's background first, then newest first
+
+
+def test_trimming_the_facts_keeps_the_first_note() -> None:
+    from datetime import UTC, datetime
+
+    from privy_council.models.session import ResearchNote
+
+    notes = [
+        ResearchNote(focus=f"note{i}", text="- " + "x" * 400, ts=datetime(2026, 10, i, tzinfo=UTC))
+        for i in range(1, 6)
+    ]
+    facts = context.facts_text(notes)
+    prompt = context.build_prompt(
+        system="s", topic="q", task="t", budget_tokens=1000, facts=facts, facts_share=0.3
+    )
+    assert "note1 (searched" in prompt.user and "note5 (searched" in prompt.user
+    assert "note2 (searched" not in prompt.user
 
 
 def test_memory_section_sits_after_facts_and_before_state() -> None:
