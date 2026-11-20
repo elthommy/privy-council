@@ -282,7 +282,10 @@ class ResearchFlow(EngineCore):
         read = list(dict.fromkeys(url for n in self.meta.runtime.research for url in n.fetched))
         read_before = prompts.RESEARCH_READ_BEFORE.format(urls="; ".join(read)) if read else ""
         task = prompts.RESEARCH_TASK.format(
-            focus=focus, today=_today(), read_before=read_before + self._earlier_searches()
+            focus=focus,
+            measure=self._opening_measure(),
+            today=_today(),
+            read_before=read_before + self._earlier_searches(),
         )
         prompt = self._research_prompt(prompts.RESEARCH_SYSTEM, task)
         result, _ = await self._complete(
@@ -311,6 +314,10 @@ class ResearchFlow(EngineCore):
             auto=auto,
             missing=missing_items(result.text),
         )
+
+    def _opening_measure(self) -> str:
+        """Return the first search's line on the measure the question resolves on."""
+        return "" if self.meta.runtime.research else prompts.RESEARCH_OPENING_MEASURE
 
     def _earlier_searches(self) -> str:
         """Return the research task's block on queries already run and facts not found."""
@@ -379,7 +386,7 @@ class ResearchFlow(EngineCore):
         """Ask the moderator for search queries, repairing once; else search the focus."""
         local = self.settings.research.local
         task = prompts.LOCAL_QUERIES_TASK.format(
-            count=local.max_queries, focus=focus, today=_today()
+            count=local.max_queries, focus=focus, measure=self._opening_measure(), today=_today()
         )
         prompt = self._research_prompt(prompts.LOCAL_QUERIES_SYSTEM, task)
         messages = [ChatMessage(role="user", content=prompt.user)]

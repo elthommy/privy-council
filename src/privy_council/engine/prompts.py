@@ -15,7 +15,7 @@ from privy_council.models.session import DebateState, Message
 from privy_council.models.vote import Vote
 from privy_council.util.language import Language
 
-PROMPTS_VERSION = "73"
+PROMPTS_VERSION = "74"
 
 # Backends that accept a single user turn (the claude CLI on stdin) flatten a
 # multi-message conversation with these labels.
@@ -257,13 +257,19 @@ answers independently, then they challenge each other.
 {terms}Don't answer the question yourself, and don't call on any member: every member \
 answers round 1 independently."""
 # A forecast's terms in the opening: the same local Chair read an ambiguous release
-# date one way and never asked (a Claude Chair asked in its opening).
+# date one way and never asked (a Claude Chair asked in its opening). 2026-11-20: one
+# question with tangled readings ("(b) the fall, or the default, or both required?"),
+# and which firms count and whether an event undone soon after counts came only in
+# the synthesis.
 OPENING_TERMS = """\
-4. If a term of the question can be read in two ways and the reading would change \
-the answer (what counts as the event, which period, release or date is meant, \
-whether something already announced counts), ask {user} which reading they mean, \
-in one line addressed to them, the most decisive term only. Don't settle it \
-yourself. Ask nothing if the terms are clear.
+4. If terms of the question can be read in several ways and the reading would change \
+the answer, ask {user} which reading they mean. Check: what counts as the event \
+(which firms, kinds or borderline cases qualify, such as one undone or cured soon \
+after), which period, release or date is meant, whether something that already \
+happened or was announced counts, and, when there are several conditions, whether \
+all are needed or any one. Ask about the 1-2 most decisive terms, addressed to them, \
+each as its own question with complete, separate readings: "(a) ... or (b) ...?". \
+Don't settle them yourself. Ask nothing if the terms are clear.
 """
 OPENING_TERMS_PEOPLE = "the people in the chat"
 # Counted by the engine (engine/deadlines.py): with today's date alone, the same local
@@ -880,7 +886,7 @@ facts. You never give opinions or advice."""
 
 RESEARCH_TASK = """\
 Search the web for fresh, verifiable facts that matter for the question above.
-Focus: {focus}
+Focus: {focus}{measure}
 Today is {today}.
 Return at most 8 bullets, about 1,200 characters in total, with no preamble:
 - each bullet: the fact, its date, and its source URL;
@@ -929,6 +935,14 @@ DOCUMENT_PASSAGE = "[{index}] {text}"
 DOCUMENT_SUMMARY_EMPTY = "- No fact from the page could be checked against its passages."
 
 RESEARCH_DEFAULT_FOCUS = "the current facts and figures the council will need"
+# Added to the first search's focus: a 2026-11-20 opening never looked up the index
+# the question resolved on; it was already past the threshold, found only after
+# round 1 had priced that leg as open.
+RESEARCH_OPENING_MEASURE = """
+First of all: if the question resolves on a measure (an index, a price, a rate, a \
+statistic, a count), its latest value with its date, the reference level the question \
+compares it to (a record, a threshold, a baseline), and whether the condition is \
+already met."""
 
 # --- Local web search (SearXNG, local-only sessions): queries, then a summary --------
 # The engine runs the searches; the model never browses. Snippets only, no pages.
@@ -940,7 +954,7 @@ You never give opinions or advice."""
 LOCAL_QUERIES_TASK = """\
 Write 1 to {count} web search queries that would find fresh, verifiable facts for the \
 question above.
-Focus: {focus}
+Focus: {focus}{measure}
 Today is {today}.
 - Short keyword queries, as you would type them into a search engine: 2 to 5 words, one \
 topic each. Search engines need every word to match: leave out "official", years and \

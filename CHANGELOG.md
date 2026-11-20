@@ -2,7 +2,12 @@
 
 All notable changes, by milestone. Dates are when each milestone was built.
 
-## Unreleased (2026-10-25 – 2026-11-19)
+## Unreleased (2026-10-25 – 2026-11-20)
+
+- **The Chair's first search looks up what the question resolves on**: the latest value of the index, price or rate the question names, the level it is compared to (a record, a threshold), and whether the condition is already met. Applies to Claude research and to local search's queries.
+- **The opening asks clearer terms questions** in forecast councils: up to two, each with complete, separate readings ("(a) ... or (b) ...?"). It checks which firms or borderline cases count, whether an event before today counts, and whether several conditions are all needed or any one.
+- **A small model's prompt keeps the opening's research** (the check of the user's premises): it now comes first among the fresh facts, so trimming cuts the oldest later notes instead.
+- A fact tag right after a plain number ("12% below the record close of 18,450.20 [F9]") vouches for that number, not for an earlier percentage, so the engine no longer reports it as miscited.
 
 - **Forecast councils give numbers the engine can read** (`economics`, `geopolitics`; council option `estimate: probability`): each member ends every turn with `**Estimate:** N% (low–high%)`. The engine keeps each member's numbers, flags a value outside its own range and a number moved without "I update:", and shows the Chair and the synthesis the parsed numbers, so neither re-reads them from the prose. The synthesis gets the council's median and range from the engine.
 - **The Chair can split a forecast on one event** the members weigh differently (say, whether lenders extend a loan). Members then also write their probability of the event and of the outcome with and without it, and the engine checks that these add up to their estimate.
