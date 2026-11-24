@@ -351,8 +351,10 @@ class ResearchFlow(EngineCore):
         )
 
     def _opening_measure(self) -> str:
-        """Return the first search's line on the measure the question resolves on."""
-        return "" if self.meta.runtime.research else prompts.RESEARCH_OPENING_MEASURE
+        """Return the first search's lines: the question's measure and stated events."""
+        if self.meta.runtime.research:
+            return ""
+        return prompts.RESEARCH_OPENING_MEASURE + prompts.RESEARCH_OPENING_PREMISE
 
     def _earlier_searches(self) -> str:
         """Return the research task's block on queries already run and facts not found."""

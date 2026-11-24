@@ -15,7 +15,7 @@ from privy_council.models.session import DebateState, Message
 from privy_council.models.vote import Vote
 from privy_council.util.language import Language
 
-PROMPTS_VERSION = "75"
+PROMPTS_VERSION = "76"
 
 # Backends that accept a single user turn (the claude CLI on stdin) flatten a
 # multi-message conversation with these labels.
@@ -257,6 +257,10 @@ answers independently, then they challenge each other.
 Keep the question's own words for its conditions and how they combine.
 2. List the 2-4 key sub-questions.
 3. Say what a good answer must cover.
+If the facts don't confirm an event the question states as having happened, say that \
+your search didn't confirm it and give the date of your newest fact on it: it may be \
+more recent. Take the event as stated, and ask for its date or a source. Say it didn't \
+happen only if a fact dated after it says so.
 {terms}Don't answer the question yourself, and don't call on any member (no @names, no \
 line asking the members to answer): the engine calls them, and every member answers \
 round 1 independently. End with your question to the user, or with item 3."""
@@ -961,6 +965,14 @@ already met."""
 # --- Local web search (SearXNG, local-only sessions): queries, then a summary --------
 # The engine runs the searches; the model never browses. Snippets only, no pages.
 
+# A 2026-11-24 opening told the user that an event of the day before hadn't happened:
+# its searches named the subject, not the event, and found older reports only.
+RESEARCH_OPENING_PREMISE = """
+If the question states that something happened (an appointment, a return, a deal, a \
+law, a result), search for that event itself, in the question's words, and for the \
+newest reports on it up to today. Report it as confirmed, with its date, or as "not \
+confirmed", with the date of the newest report you found. A report older than the \
+event can't show that it didn't happen."""
 LOCAL_QUERIES_SYSTEM = """\
 You are the research assistant of a debate moderator. You write web search queries. \
 You never give opinions or advice."""
