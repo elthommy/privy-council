@@ -77,7 +77,11 @@ think = false   # thinks by default
 # nemotron-3.5-bolt: NVIDIA's compression of Super, 74B hybrid MoE (~9B active), IQ2 experts
 # (quantization-aware distillation), 25 GB; ~13 tok/s, ~30 s turns. Rigor and Skeptic since
 # 2026-11-07: Super-like accuracy in a seat bench at ~1/3 of the time (STATUS.md).
+# Its draft model is off: llama.cpp leaves its ~1.3 GB out of the VRAM fit, so every
+# first load ran out of memory, and on Ollama 0.40.17 the retry too. Without it: loads
+# at once and ~31 tok/s instead of ~18 (scripts/load_gate.py, 2026-11-24).
 [ollama.models."nemotron-3.5-bolt:latest"]
+draft_num_predict = 0
 repair = true   # M19 bench 2026-11-15: fixes its flagged drafts (gemma 21/21, Bolt 24/25, qwen 17/17)
 num_ctx = 12288
 think = false   # thinking via the template's enable_thinking

@@ -131,6 +131,8 @@ class OllamaBackend:
         }
         if opts.num_batch is not None:
             payload["options"]["num_batch"] = opts.num_batch
+        if opts.draft_num_predict is not None:
+            payload["options"]["draft_num_predict"] = opts.draft_num_predict
         if opts.think is not None:
             payload["think"] = opts.think
         if req.json_schema is not None:

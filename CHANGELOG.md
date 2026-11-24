@@ -2,8 +2,10 @@
 
 All notable changes, by milestone. Dates are when each milestone was built.
 
-## Unreleased (2026-10-25 – 2026-11-20)
+## Unreleased (2026-10-25 – 2026-11-24)
 
+- **`nemotron-3.5-bolt` loads again on Ollama 0.40.17**, where every turn on it failed with "out of memory": its draft model, whose memory Ollama's fit leaves out, is now off (`[ollama.models] draft_num_predict = 0`, a new per-model option). It also loads on the first try and answers faster (31 tok/s instead of 18 on real turns).
+- `scripts/load_gate.py` checks that local models load on the first try, on saved turn prompts, against any Ollama server (no Claude).
 - **The Chair's first search looks up what the question resolves on**: the latest value of the index, price or rate the question names, the level it is compared to (a record, a threshold), and whether the condition is already met. Applies to Claude research and to local search's queries.
 - **The Chair looks up where your terms stand before round 1**: in forecast councils with research, once you answer the opening, one search checks each measure your answer names (its latest value, the level it is compared to, whether the condition is already met) and each kind of event (has one happened yet). Round 1 then starts from it. Skipped when the Claude budget is tight.
 - **The opening keeps the question's own words** for its conditions and how they combine, and never calls on the members (no @names): a local Chair had read an "and" as "or" and asked the members to answer.

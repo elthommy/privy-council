@@ -138,6 +138,19 @@ async def test_num_batch_is_sent_only_when_configured(httpx_mock: HTTPXMock) -> 
     assert "num_batch" not in second["options"]
 
 
+async def test_draft_num_predict_zero_is_sent_and_unset_is_not(httpx_mock: HTTPXMock) -> None:
+    models = {"big:120b": OllamaModelConfig(draft_num_predict=0), "qwen3:8b": OllamaModelConfig()}
+    b = OllamaBackend(OllamaConfig(models=models))
+    httpx_mock.add_response(url=CHAT_URL, json=chat_response())
+    httpx_mock.add_response(url=CHAT_URL, json=chat_response())
+    await b.complete(request(model="big:120b"))
+    await b.complete(request())
+    await b.aclose()
+    first, second = (json.loads(r.content) for r in httpx_mock.get_requests())
+    assert first["options"]["draft_num_predict"] == 0
+    assert "draft_num_predict" not in second["options"]
+
+
 async def test_json_schema_sets_format(backend: OllamaBackend, httpx_mock: HTTPXMock) -> None:
     httpx_mock.add_response(url=CHAT_URL, json=chat_response('{"stop": true}'))
     schema = {"type": "object"}

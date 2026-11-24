@@ -57,6 +57,9 @@ class OllamaModelConfig(_Section):
     # each batch copies those layers to the GPU, so bigger batches read prompts
     # faster (spike 6). None leaves Ollama's default.
     num_batch: int | None = Field(default=None, gt=0)
+    # Tokens a model's own draft model proposes ahead; 0 doesn't load the draft model,
+    # whose memory llama.cpp may leave out of its fit. None leaves the model's default.
+    draft_num_predict: int | None = Field(default=None, ge=0)
     # M19: this model may fix a flagged draft before it is posted, when
     # [engine] repair_turns = "local". Opt-in per model, after a bench shows it helps.
     repair: bool = False
