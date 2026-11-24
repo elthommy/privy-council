@@ -394,6 +394,7 @@ class ResearchFlow(EngineCore):
             today=_today(),
             results=render_results(hits),
             missing_example=prompts.LOCAL_MISSING_EXAMPLE,
+            premise="" if rt.research else prompts.LOCAL_SUMMARY_PREMISE,
         )
         prompt = self._research_prompt(prompts.LOCAL_SUMMARY_SYSTEM, task, facts=False)
         result, _ = await self._complete(

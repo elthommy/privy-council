@@ -15,7 +15,7 @@ from privy_council.models.session import DebateState, Message
 from privy_council.models.vote import Vote
 from privy_council.util.language import Language
 
-PROMPTS_VERSION = "76"
+PROMPTS_VERSION = "77"
 
 # Backends that accept a single user turn (the claude CLI on stdin) flatten a
 # multi-message conversation with these labels.
@@ -253,14 +253,17 @@ OPENING_TASK = """\
 Today is {today}. The debate has up to {rounds} rounds: in round 1 every member \
 answers independently, then they challenge each other.
 {dates}Open the debate on the question above, in a few lines for the chat:
-1. Restate the question in one sentence, with its deadline and the time left from today. \
+1. Restate the question in one sentence, with its deadline and the time left from today \
+(if it gives no deadline, say so and ask for one: never choose one). \
 Keep the question's own words for its conditions and how they combine.
 2. List the 2-4 key sub-questions.
 3. Say what a good answer must cover.
-If the facts don't confirm an event the question states as having happened, say that \
-your search didn't confirm it and give the date of your newest fact on it: it may be \
-more recent. Take the event as stated, and ask for its date or a source. Say it didn't \
-happen only if a fact dated after it says so.
+4. Only if the question states that something happened and no fact confirms it, write: \
+"My search didn't confirm that [event]; my newest fact on it is dated [date], so it may \
+be more recent. I take it as stated: when did it happen, and where did you read it?" An \
+older fact can't show that it didn't happen: don't call it a contradiction, a false \
+premise or hypothetical, and don't offer those as readings. Say it didn't happen only \
+if a fact dated after it says so.
 {terms}Don't answer the question yourself, and don't call on any member (no @names, no \
 line asking the members to answer): the engine calls them, and every member answers \
 round 1 independently. End with your question to the user, or with item 3."""
@@ -270,7 +273,7 @@ round 1 independently. End with your question to the user, or with item 3."""
 # and which firms count and whether an event undone soon after counts came only in
 # the synthesis.
 OPENING_TERMS = """\
-4. If terms of the question can be read in several ways and the reading would change \
+5. If terms of the question can be read in several ways and the reading would change \
 the answer, ask {user} which reading they mean. Check: what counts as the event \
 (which firms, kinds or borderline cases qualify, such as one undone or cured soon \
 after), which period, release or date is meant, whether something that already \
@@ -974,6 +977,12 @@ newest reports on it up to today. Report it as confirmed, with its date, or as "
 confirmed", with the date of the newest report you found. A report older than the \
 event can't show that it didn't happen."""
 
+# The same for the local summary of the first search, which can't search again.
+LOCAL_SUMMARY_PREMISE = """
+- if the question states that something happened and no result reports it, say "not \
+confirmed", with the date of the newest result on it; never say that it didn't happen: \
+older results can't show that;"""
+
 # --- Local web search (SearXNG, local-only sessions): queries, then a summary --------
 # The engine runs the searches; the model never browses. Snippets only, no pages.
 
@@ -1013,7 +1022,7 @@ Focus: {focus}
 Today is {today}.
 Return at most 8 bullets, about 1,200 characters in total, with no preamble:
 - each bullet: one fact stated in the results, its date if the result gives one, and \
-the URL of the result it comes from, copied exactly;
+the URL of the result it comes from, copied exactly;{premise}
 - copy figures exactly as the result gives them; never compute, convert or round them;
 - use only these results, never your own memory; skip a result that says nothing \
 useful;

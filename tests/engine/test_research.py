@@ -172,7 +172,7 @@ async def test_auto_research_before_opening_reaches_blind_round(
     assert req.timeout_s == 300 and req.max_output_tokens == 3000
     assert "Search the web" in req.messages[0].content
     assert "search for that event itself" in req.messages[0].content
-    assert "Say it didn't happen only if" in h.claude.requests[1].messages[0].content
+    assert "My search didn't confirm that [event]" in h.claude.requests[1].messages[0].content
     assert "Chair searched the web: gold price" in h.texts("system")
     assert any(isinstance(e, ResearchAdded) for e in h.events)
     assert h.phase() is Phase.ROUND

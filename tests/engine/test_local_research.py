@@ -553,6 +553,10 @@ async def test_local_only_sessions_ignore_the_provider_and_never_reach_claude(
     await h.engine.research("inflation")
     assert h.claude.requests == []
     assert {n.source for n in h.engine.meta.runtime.research} == {"local"}
+    # The first summary may not deny an event it found no report of; later ones aren't told.
+    first, *later = [r for r in h.requests() if r.tag.purpose == "research"]
+    assert "never say that it didn't happen" in first.messages[0].content
+    assert not any("never say that it didn't" in r.messages[0].content for r in later)
 
 
 @pytest.mark.parametrize("provider", ["local", "auto"])
