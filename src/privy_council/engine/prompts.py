@@ -448,6 +448,22 @@ FALLBACK_TURN_PROMPT: dict[Language, str] = {
     "en": "Respond to the strongest argument against your current position, or update it.",
     "fr": ("Réponds à l'argument le plus fort contre ta position actuelle, ou fais-la évoluer."),
 }
+# The last turn of a member whose estimate predates the newest facts (2026-11-24: the
+# price that settled a leg came after two members' last turns, and the synthesis took
+# their numbers as they were).
+LATE_FACTS_PROMPT: dict[Language, str] = {
+    "en": (
+        "fresh facts arrived since your last turn: {facts}. Say in a few sentences which "
+        "of them changes a part of your estimate, and give your final number; keep it if "
+        "none does."
+    ),
+    "fr": (
+        "de nouveaux faits sont arrivés depuis ton dernier tour : {facts}. Dis en quelques "
+        "phrases lequel change une partie de ton estimation, et donne ton chiffre final ; "
+        "garde-le si aucun ne la change."
+    ),
+}
+LATE_FACTS_SEPARATOR = "; "
 # The floor prompt of a member the moderator left out for too long (M7 guard).
 SILENT_TURN_PROMPT: dict[Language, str] = {
     "en": (

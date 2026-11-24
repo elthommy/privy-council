@@ -62,6 +62,7 @@ from privy_council.engine.notices import (
     NOTICE_ENDED,
     NOTICE_ENDED_EARLY,
     NOTICE_LANGUAGE,
+    NOTICE_LATE_FACTS,
     NOTICE_LOCAL_ONLY,
     NOTICE_LOCAL_ONLY_SEARCH,
     NOTICE_MODERATOR_FALLBACK,
@@ -935,6 +936,7 @@ class DebateEngine(DocumentFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
     async def _synthesis(self) -> None:
         """Moderator writes the final synthesis; the session closes."""
         rt = self.meta.runtime
+        await self._run_late_facts()
         prompt = self._synthesis_prompt()
         for text in self.budget_warnings(self.estimate_close_calls()):
             self._emit(BudgetWarning(text=text))
@@ -950,6 +952,29 @@ class DebateEngine(DocumentFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
         review = rt.memory_review
         if review.pending:
             self._emit(MemoryProposed(facts=review.facts, rewrite=review.rewrite))
+
+    async def _run_late_facts(self) -> None:
+        """Run the last turns of members whose estimate predates the newest facts.
+
+        A retried synthesis skips those who had theirs: they spoke after the facts.
+        """
+        out = self._sitting_out()
+        turns = [t for t in self._late_facts_turns() if t.speaker not in out]
+        if not turns:
+            return
+        self._notice(NOTICE_LATE_FACTS.format(speakers=self._speaker_list(turns)))
+        for text in self.budget_warnings(self._claude_turns(turns)):
+            self._emit(BudgetWarning(text=text))
+        self.meta.runtime.pending = list(turns)
+        for turn in turns:
+            await self._member_turn(turn)
+
+    def _claude_turns(self, turns: list[PendingTurn]) -> int:
+        """Return how many of these turns call Claude."""
+        kinds = [
+            self.registry.route(self.members[t.speaker], self.claude_exhausted).kind for t in turns
+        ]
+        return kinds.count(BackendKind.CLAUDE_CLI)
 
     def _synthesis_prompt(self) -> context.Prompt:
         """Build the synthesis prompt: the task, questions asked, latest vote, errors caught."""

@@ -88,6 +88,9 @@ class EngineConfig(_Section):
     # Show the engine's estimate flaws (M17) to the moderator; off until the bench
     # shows they are precise enough. They are always logged and listed by /flaws.
     estimate_flaws_to_moderator: bool = False
+    # Forecast councils: before the synthesis, one last turn for each member whose
+    # estimate predates the newest facts.
+    late_facts_turns: bool = True
     # M19: a local member whose draft trips a precise check (models.flaw.REPAIR_KINDS)
     # rewrites it once before it is posted, if its model opts in ([ollama.models]
     # `repair`). Claude members are never repaired (quota). Those drafts aren't streamed.

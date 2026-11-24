@@ -10,6 +10,9 @@ NOTICE_LANGUAGE_LOCKED = "The debate language ({name}) can't change once members
 NOTICE_LANGUAGE_USAGE = "usage: /lang en | fr"
 NOTICE_CUT_OFF = "{nick} was cut off (hit the output cap)"
 NOTICE_NO_ANSWER = "{nick} couldn't answer: {error}"
+NOTICE_LATE_FACTS = (
+    "Facts arrived after the last turn of {speakers}: a final turn each before the synthesis"
+)
 NOTICE_SITS_OUT = (
     "{nick} sits out the next {rounds} rounds: its model failed {count} turns in a row. "
     "/ask {nick} tries it again at once"

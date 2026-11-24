@@ -16,6 +16,7 @@ from privy_council.models.estimate import EstimateRecord
 from privy_council.models.flaw import ESTIMATE_KINDS, REPAIR_KINDS, Flaw
 from privy_council.models.moderator import ModeratorDecision
 from privy_council.models.persona import Persona, Role
+from privy_council.models.session import PendingTurn
 
 
 class EstimateFlow(FlawFlow):
@@ -126,6 +127,28 @@ class EstimateFlow(FlawFlow):
             self._round_estimate_flaws(),
         )
         return f"\n\n{table}"
+
+    def _late_facts_turns(self) -> list[PendingTurn]:
+        """Return a last turn for each member whose estimate predates the newest facts.
+
+        Not after round 1 alone: a blind prompt shows no earlier turn to react to.
+        """
+        rt = self.meta.runtime
+        on = self.settings.engine.late_facts_turns and self._estimating() and rt.round > 1
+        if not on:
+            return []
+        devils = self._devils()
+        turns = []
+        for slug in self.members:
+            if slug in devils or not rt.estimates.get(slug):
+                continue
+            spoke = max(m.ts for m in self.messages if m.speaker == slug)
+            late = list(dict.fromkeys(n.focus for n in rt.research if n.ts > spoke))
+            if late:
+                facts = prompts.LATE_FACTS_SEPARATOR.join(late)
+                prompt = prompts.LATE_FACTS_PROMPT[self.meta.language].format(facts=facts)
+                turns.append(PendingTurn(speaker=slug, prompt=prompt))
+        return turns
 
     def _synthesis_estimates(self) -> list[str]:
         """Return the synthesis's estimate table and devil's-advocate rule, if any."""

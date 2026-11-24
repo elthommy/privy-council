@@ -401,6 +401,49 @@ async def test_members_see_fact_tags_and_a_wrong_citation_is_logged(
     assert '$3,900 is not in [F1]. In "' in update.messages[-1].content  # the Chair sees it
 
 
+async def forecast_with_late_facts(
+    tmp_path: Path, personas: dict[str, Persona], config: dict[str, Any] | None = None
+) -> Harness:
+    """Run two rounds of a forecast, then the user's lookup, then the close."""
+    floor = [("rigor", "go"), ("contrarian", "go")]
+    base = responder([decision(floor), decision(floor)])
+
+    def respond(req: CompletionRequest) -> Reply:
+        """Give every member turn an estimate line."""
+        return "Same view.\n**Estimate:** 12% (7-20%)" if req.tag.purpose == "turn" else base(req)
+
+    protocol = ProtocolSettings(estimate="probability")
+    h = Harness(tmp_path, personas, respond, protocol=protocol, config=config)
+    for _ in range(3):  # opening, blind round, round 2
+        await h.engine.step()
+    await h.engine.research("the closing price")
+    await h.engine.close()
+    return h
+
+
+async def test_members_get_a_last_turn_on_facts_that_came_after_their_estimate(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    h = await forecast_with_late_facts(tmp_path, personas)
+    late = [r for r in h.requests() if "fresh facts arrived" in r.messages[0].content]
+    late = [r for r in late if r.tag.purpose == "turn"]
+    speakers = sorted(str(r.tag.persona) for r in late)
+    assert speakers == ["compounder", "pragmatist", "rigor"]  # no devil
+    assert "the closing price" in late[0].messages[0].content
+    assert "Gold is about $4,170" in late[0].messages[0].content
+    assert any(t.startswith("Facts arrived after the last turn of") for t in h.texts("system"))
+    assert h.state() is SessionState.CLOSED
+    assert len(h.engine.meta.runtime.estimates["pragmatist"]) == 2
+
+
+async def test_late_facts_turns_can_be_turned_off(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    config = {"engine": {"late_facts_turns": False}}
+    h = await forecast_with_late_facts(tmp_path, personas, config)
+    assert not any("fresh facts arrived" in r.messages[0].content for r in h.requests())
+
+
 async def test_a_third_lookup_of_the_same_thing_is_skipped(
     tmp_path: Path, personas: dict[str, Persona]
 ) -> None:
