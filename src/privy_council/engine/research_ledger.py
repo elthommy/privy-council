@@ -75,10 +75,18 @@ def repeat_count(focus: str, notes: Sequence[ResearchNote]) -> int:
 
 
 def repeat_notes(focus: str, notes: Sequence[ResearchNote]) -> list[ResearchNote]:
-    """Return the Chair's earlier lookups of this focus (none if it names a new number)."""
+    """Return the Chair's earlier lookups of this focus (none if it names a new number).
+
+    Searches only: reading one page isn't a search (on 2026-11-24 it counted as one, and
+    the second search for a closing price was skipped).
+    """
     words = _fact_words(focus)
     matched = [
-        n for n in notes if n.auto and _overlap(words, _fact_words(n.focus)) >= REPEAT_OVERLAP
+        n
+        for n in notes
+        if n.auto
+        and n.source != "document"
+        and _overlap(words, _fact_words(n.focus)) >= REPEAT_OVERLAP
     ]
     seen = {num for n in matched for num in _NUMBER.findall(n.focus)}
     if set(_NUMBER.findall(focus)) - seen:

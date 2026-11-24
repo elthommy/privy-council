@@ -55,6 +55,12 @@ def test_a_new_date_is_a_new_lookup() -> None:
     assert not repeat_focus("Index close Oct 19 2026", notes)
 
 
+def test_a_page_read_is_not_a_search() -> None:
+    read = note("Index close Oct 16 2026").model_copy(update={"source": "document"})
+    notes = [note("Index close Oct 16 2026"), read]
+    assert repeat_count("Index official close Oct 16 2026", notes) == 1
+
+
 def test_only_the_chairs_own_lookups_count() -> None:
     notes = [note("Widget Corp price list", auto=False), note("Widget Corp price list")]
     assert repeat_count("Widget Corp price list", notes) == 1
