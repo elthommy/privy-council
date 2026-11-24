@@ -60,6 +60,15 @@ GPU_LINE_CHARS = 120  # process names can be whole command lines
 THINK_END = "</think>"
 
 
+def load_problem(body: str, model: str) -> str | None:
+    """Return a short message for an error body saying a model didn't run, else None."""
+    if OUT_OF_MEMORY in body:
+        return f"{model} ran {OUT_OF_MEMORY} on the GPU (Ollama's error is in the log)"
+    if LOAD_TIMEOUT in body:
+        return f"{model} didn't load in time: Ollama {LOAD_TIMEOUT}"
+    return None
+
+
 async def gpu_snapshot() -> str:
     """Return nvidia-smi's VRAM use and the processes holding it ("" if unavailable)."""
     lines: list[str] = []
@@ -230,9 +239,11 @@ class OllamaBackend:
         if resp.status_code == 404:
             raise BackendUnavailableError(f"Ollama model {model!r} not found; {pull_hint(model)}")
         if resp.status_code >= 400:
-            retryable = LOAD_TIMEOUT in resp.text or OUT_OF_MEMORY in resp.text
-            error = ModelLoadError if retryable else BackendError
-            raise error(f"Ollama error {resp.status_code}: {resp.text[:300]}")
+            if problem := load_problem(resp.text, model):
+                # llama-server's output: long and cryptic in the chat, needed to debug.
+                logger.warning("Ollama error %d (%s): %s", resp.status_code, model, resp.text)
+                raise ModelLoadError(problem)
+            raise BackendError(f"Ollama error {resp.status_code}: {resp.text[:300]}")
 
     async def _post_chat(
         self, payload: dict[str, Any], model: str, timeout: float

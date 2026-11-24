@@ -292,8 +292,9 @@ async def test_oom_three_times_fails(
 
     monkeypatch.setattr(asyncio, "sleep", no_sleep)
     httpx_mock.add_response(url=CHAT_URL, status_code=500, text=OOM, is_reusable=True)
-    with pytest.raises(ModelLoadError, match="out of memory"):
+    with pytest.raises(ModelLoadError, match="ran out of memory on the GPU") as failure:
         await backend.complete(request())
+    assert "CUDA" not in str(failure.value)  # the raw output stays in the log
     assert len(httpx_mock.get_requests()) == 3
 
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
 from datetime import date
 
 from privy_council.backends.base import ChatMessage
@@ -759,6 +759,10 @@ TITLE_DYNAMICS = "Debate dynamics (counted by the engine)"
 DYNAMICS_TURNS = "{turns} turn(s)"
 DYNAMICS_SPOKE = "spoke this round"
 DYNAMICS_SILENT = "quiet for {count} round(s)"
+DYNAMICS_UNAVAILABLE = (
+    "can't answer (its model doesn't run; this is not a position): plan no turn for it, "
+    "ask it nothing and don't wait for its view"
+)
 DYNAMICS_UPDATED = "said they changed position"
 DYNAMICS_REPEAT = "largely repeated an earlier message ({percent}% overlap)"
 DYNAMICS_MEMBER = "- @{nick}: {facts}"
@@ -961,10 +965,6 @@ First of all: if the question resolves on a measure (an index, a price, a rate, 
 statistic, a count), its latest value with its date, the reference level the question \
 compares it to (a record, a threshold, a baseline), and whether the condition is \
 already met."""
-
-# --- Local web search (SearXNG, local-only sessions): queries, then a summary --------
-# The engine runs the searches; the model never browses. Snippets only, no pages.
-
 # A 2026-11-24 opening told the user that an event of the day before hadn't happened:
 # its searches named the subject, not the event, and found older reports only.
 RESEARCH_OPENING_PREMISE = """
@@ -973,6 +973,10 @@ law, a result), search for that event itself, in the question's words, and for t
 newest reports on it up to today. Report it as confirmed, with its date, or as "not \
 confirmed", with the date of the newest report you found. A report older than the \
 event can't show that it didn't happen."""
+
+# --- Local web search (SearXNG, local-only sessions): queries, then a summary --------
+# The engine runs the searches; the model never browses. Snippets only, no pages.
+
 LOCAL_QUERIES_SYSTEM = """\
 You are the research assistant of a debate moderator. You write web search queries. \
 You never give opinions or advice."""
@@ -1380,10 +1384,12 @@ def render_dynamics(
     stalled: int,
     stall_limit: int,
     flaws: Sequence[Flaw] = (),
+    unavailable: Collection[str] = (),
 ) -> str:
     """Render the engine's debate dynamics for the moderator (stall line if limit > 0).
 
     `flaws`: the figures the engine flagged in the round's turns (M11).
+    `unavailable`: the members whose model doesn't run (no turn next round).
     """
     lines = []
     for s in stats:
@@ -1393,6 +1399,8 @@ def render_dynamics(
             if s.silent_rounds == 0
             else DYNAMICS_SILENT.format(count=s.silent_rounds)
         )
+        if s.slug in unavailable:
+            facts.append(DYNAMICS_UNAVAILABLE)
         if s.updated:
             facts.append(DYNAMICS_UPDATED)
         if s.repeat >= REPEAT_THRESHOLD:

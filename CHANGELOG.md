@@ -5,6 +5,10 @@ All notable changes, by milestone. Dates are when each milestone was built.
 ## Unreleased (2026-10-25 – 2026-11-24)
 
 - **`nemotron-3.5-bolt` loads again on Ollama 0.40.17**, where every turn on it failed with "out of memory": its draft model, whose memory Ollama's fit leaves out, is now off (`[ollama.models] draft_num_predict = 0`, a new per-model option). It also loads on the first try and answers faster (31 tok/s instead of 18 on real turns).
+- **The opening no longer denies an event its search missed**: the first search looks for the event the question states, up to today, and reports it as confirmed or not confirmed. The Chair says what it couldn't confirm and takes the event as stated, unless a fact dated after it says it didn't happen.
+- **A member whose model keeps failing sits out**: after two failed turns in a row (out of memory, model not loading, Ollama down) it gets no turn for two rounds, then another chance. The Chair is told not to wait for its view; `/ask` tries it at once, and a resumed session tries everyone again.
+- An out-of-memory or load failure shows one short line in the chat instead of llama-server's output, which goes to the local log.
+- A page the Chair read no longer counts as a search when the engine looks for repeated lookups, so a second search for the same figure isn't skipped.
 - `scripts/load_gate.py` checks that local models load on the first try, on saved turn prompts, against any Ollama server (no Claude).
 - **The Chair's first search looks up what the question resolves on**: the latest value of the index, price or rate the question names, the level it is compared to (a record, a threshold), and whether the condition is already met. Applies to Claude research and to local search's queries.
 - **The Chair looks up where your terms stand before round 1**: in forecast councils with research, once you answer the opening, one search checks each measure your answer names (its latest value, the level it is compared to, whether the condition is already met) and each kind of event (has one happened yet). Round 1 then starts from it. Skipped when the Claude budget is tight.

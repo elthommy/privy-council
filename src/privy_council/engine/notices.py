@@ -10,6 +10,10 @@ NOTICE_LANGUAGE_LOCKED = "The debate language ({name}) can't change once members
 NOTICE_LANGUAGE_USAGE = "usage: /lang en | fr"
 NOTICE_CUT_OFF = "{nick} was cut off (hit the output cap)"
 NOTICE_NO_ANSWER = "{nick} couldn't answer: {error}"
+NOTICE_SITS_OUT = (
+    "{nick} sits out the next {rounds} rounds: its model failed {count} turns in a row. "
+    "/ask {nick} tries it again at once"
+)
 NOTICE_OPENING_FAILED = "Opening failed ({error}); continuing without it"
 NOTICE_MODERATOR_PROBLEM = "Moderator reply rejected, retrying: {problem}"
 NOTICE_MODERATOR_FALLBACK = "Moderator failed twice; falling back to round-robin turns"

@@ -15,8 +15,10 @@ from privy_council.backends.base import (
     BackendOutputError,
     BackendRateLimitError,
     BackendTimeoutError,
+    BackendUnavailableError,
     CompletionRequest,
     CompletionResult,
+    ModelLoadError,
 )
 from privy_council.backends.fake import FakeBackend, Reply
 from privy_council.backends.registry import BackendRegistry
@@ -472,6 +474,84 @@ async def test_member_error_skips_turn(tmp_path: Path, personas: dict[str, Perso
     assert h.state() is SessionState.PAUSED
     assert "Pragmatist couldn't answer: took too long" in h.texts("system")
     assert not h.engine.meta.runtime.round_in_progress
+
+
+def failing(name: str, decisions: list[dict[str, Any] | str], error: Exception) -> Responder:
+    """Answer as usual, but one member's calls fail."""
+    base = standard_responder(decisions)
+    return lambda req: error if req.tag.persona == name else base(req)
+
+
+def everyone() -> dict[str, Any]:
+    """Build a decision giving every member the floor."""
+    return decision([(slug, "go on") for slug in MEMBERS])
+
+
+async def test_a_member_whose_model_keeps_failing_sits_out_then_gets_another_chance(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    respond = failing("rigor", [everyone() for _ in range(5)], ModelLoadError("no memory"))
+    h = Harness(tmp_path, personas, respond, protocol=ProtocolSettings(max_rounds=8))
+    rt = h.engine.meta.runtime
+    speakers = []
+    for _ in range(6):  # opening, rounds 1 to 5
+        await h.engine.step()
+        speakers.append([t.speaker for t in rt.pending])
+    rest = [m for m in MEMBERS if m != "rigor"]
+    assert speakers[1] == MEMBERS  # one failure: still asked
+    assert speakers[2] == speakers[3] == rest  # two in a row: out of rounds 3 and 4
+    assert speakers[4] == MEMBERS  # round 5: another chance
+    assert speakers[5] == rest  # it failed again
+    assert any(t.startswith("Rigor sits out the next 2 rounds") for t in h.texts("system"))
+    updates = [r.messages[0].content for r in h.requests() if r.tag.purpose == "moderate"]
+    assert "can't answer (its model doesn't run" not in updates[0]
+    assert "can't answer (its model doesn't run" in updates[1]
+
+
+async def test_asking_a_member_that_answers_ends_its_sitting_out(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    broken = True
+    base = standard_responder([everyone() for _ in range(4)])
+
+    def respond(req: CompletionRequest) -> Reply:
+        """Fail Rigor until its model is back."""
+        if broken and req.tag.persona == "rigor":
+            return ModelLoadError("no memory")
+        return base(req)
+
+    h = Harness(tmp_path, personas, respond, protocol=ProtocolSettings(max_rounds=8))
+    for _ in range(3):
+        await h.engine.step()
+    broken = False
+    await h.engine.ask("rigor", "Are you back?")
+    await h.engine.step()
+    assert "rigor" in [t.speaker for t in h.engine.meta.runtime.pending]
+
+
+async def test_a_timeout_never_sits_a_member_out(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    respond = failing("rigor", [everyone() for _ in range(4)], BackendTimeoutError("slow"))
+    h = Harness(tmp_path, personas, respond, protocol=ProtocolSettings(max_rounds=8))
+    for _ in range(4):
+        await h.engine.step()
+    assert "rigor" in [t.speaker for t in h.engine.meta.runtime.pending]
+
+
+async def test_members_stay_planned_when_every_model_fails(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    base = standard_responder([everyone() for _ in range(3)])
+
+    def respond(req: CompletionRequest) -> Reply:
+        """Fail every member."""
+        return BackendUnavailableError("down") if req.tag.purpose == "turn" else base(req)
+
+    h = Harness(tmp_path, personas, respond, protocol=ProtocolSettings(max_rounds=8))
+    for _ in range(3):
+        await h.engine.step()
+    assert [t.speaker for t in h.engine.meta.runtime.pending] == MEMBERS
 
 
 @pytest.mark.parametrize(

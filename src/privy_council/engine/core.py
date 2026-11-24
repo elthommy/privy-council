@@ -155,6 +155,9 @@ class EngineCore:
         self.lookups_for_user = 0
         # Each member turn's (sources, given) by (slug, round), for the moderator's flags.
         self._turn_sources: dict[tuple[str, int], tuple[str, str]] = {}
+        # Each member's failed turns in a row and the round of the last one. Not saved: a
+        # resumed session tries everyone again.
+        self._failed_turns: dict[str, tuple[int, int]] = {}
         self._save()
 
     @property

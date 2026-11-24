@@ -22,8 +22,10 @@ from privy_council.backends.base import (
     BackendAuthError,
     BackendError,
     BackendRateLimitError,
+    BackendUnavailableError,
     ChatMessage,
     CompletionResult,
+    ModelLoadError,
 )
 from privy_council.backends.registry import BackendRegistry
 from privy_council.config import Settings
@@ -80,6 +82,7 @@ from privy_council.engine.notices import (
     NOTICE_RESUMED_CLOSING,
     NOTICE_RUN_AT_END,
     NOTICE_SILENT_ADDED,
+    NOTICE_SITS_OUT,
     NOTICE_STEP_FAILED,
     NOTICE_SYNTHESIS_MODEL_LIMITED,
     NOTICE_UNKNOWN_MEMBER,
@@ -116,6 +119,12 @@ PEOPLE_LINES_MAX_CHARS = 4000
 # and a full debate state reached Chair's 4000-token cap in several live sessions
 # (cut off, then a repair call).
 MODERATE_MIN_OUTPUT_TOKENS = 8000
+
+# A member whose model failed this many turns in a row (load or server errors, after the
+# backend's own retries) sits out SIT_OUT_ROUNDS rounds, then gets another chance: on
+# 2026-11-24 two members failed all six rounds, about 50 s each time.
+FAILURES_TO_SIT_OUT = 2
+SIT_OUT_ROUNDS = 2
 
 PHASE_STATES = {
     Phase.OPENING: SessionState.OPENING,
@@ -239,6 +248,7 @@ class DebateEngine(DocumentFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
         self.busy = True
         try:
             await self._ask_turn(persona, question)
+            self._failed_turns.pop(slug, None)
         except BackendError as exc:
             self._emit(ErrorEvent(text=NOTICE_NO_ANSWER.format(nick=persona.name, error=exc)))
         finally:
@@ -509,12 +519,46 @@ class DebateEngine(DocumentFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
             self._post_result(persona, result, fallback)
             self._check_turn(persona, prompt, result.text)
             self._track_estimate(persona, result.text)
+            self._failed_turns.pop(persona.slug, None)
         except (BackendRateLimitError, BackendAuthError):
             raise
         except BackendError as exc:
             self._notice(NOTICE_NO_ANSWER.format(nick=persona.name, error=exc), exc)
+            self._count_failure(persona, exc)
         rt.pending.remove(turn)
         self._save()
+
+    def _count_failure(self, persona: Persona, error: BackendError) -> None:
+        """Count a turn lost to a model that doesn't run; sit the member out if it repeats."""
+        if not isinstance(error, ModelLoadError | BackendUnavailableError):
+            return
+        count = self._failed_turns.get(persona.slug, (0, 0))[0] + 1
+        self._failed_turns[persona.slug] = (count, self.meta.runtime.round)
+        if count >= FAILURES_TO_SIT_OUT:
+            self._notice(
+                NOTICE_SITS_OUT.format(nick=persona.name, rounds=SIT_OUT_ROUNDS, count=count)
+            )
+
+    def _sitting_out(self) -> set[str]:
+        """Return the members who get no turn next round: their model keeps failing."""
+        next_round = self.meta.runtime.round + 1
+        return {
+            slug
+            for slug, (count, failed_in) in self._failed_turns.items()
+            if count >= FAILURES_TO_SIT_OUT and next_round - failed_in <= SIT_OUT_ROUNDS
+        }
+
+    def _able(self, turns: list[PendingTurn]) -> list[PendingTurn]:
+        """Return the turns of members who aren't sitting out (a round robin if none).
+
+        When every member is sitting out, the turns stay: there is nobody else to ask.
+        """
+        out = self._sitting_out()
+        able = [t for t in turns if t.speaker not in out]
+        if able:
+            return able
+        rest = [slug for slug in self.members if slug not in out]
+        return round_robin(rest, self.meta.language) if rest else turns
 
     def _member_prompt(self, persona: Persona, turn: PendingTurn) -> context.Prompt:
         """Build a member's prompt: blind rounds see only the moderator and the user."""
@@ -685,7 +729,12 @@ class DebateEngine(DocumentFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
             if self.guests
             else prompts.QUESTIONS_CAP_ONE,
             dynamics=prompts.render_dynamics(
-                stats, self.nick, rt.stalled_rounds, stall_limit, self._round_figure_flaws()
+                stats,
+                self.nick,
+                rt.stalled_rounds,
+                stall_limit,
+                self._round_figure_flaws(),
+                self._sitting_out(),
             )
             + self._estimates_block()
             + ("" if last_round else self._readable_block()),
@@ -834,7 +883,8 @@ class DebateEngine(DocumentFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
         if not turns or self.council.protocol.rebuttal_style is RebuttalStyle.ROUND_ROBIN:
             return round_robin(list(self.members), self.meta.language)
         limit = self.council.protocol.max_silent_rounds
-        for slug in dynamics.silent_members(stats, {t.speaker for t in turns}, limit):
+        skip = {t.speaker for t in turns} | self._sitting_out()
+        for slug in dynamics.silent_members(stats, skip, limit):
             turns.append(
                 PendingTurn(speaker=slug, prompt=prompts.SILENT_TURN_PROMPT[self.meta.language])
             )
@@ -846,7 +896,7 @@ class DebateEngine(DocumentFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
         """Return the planned turns with the round's flaw checks in front."""
         cap = self.settings.engine.max_flaw_prompts_per_round
         flaws = self._round_moderator_flaws()
-        return with_flaw_turns(turns, flaws, cap, self.meta.language)
+        return self._able(with_flaw_turns(turns, flaws, cap, self.meta.language))
 
     def _stop_reason(self, decision: ModeratorDecision | None, last_round: bool) -> str | None:
         """Return why the debate ends after this update, or None to go on.
