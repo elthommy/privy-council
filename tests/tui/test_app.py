@@ -433,11 +433,18 @@ async def test_half_typed_answer_holds_the_run_past_the_timeout(
 ) -> None:
     h = asking_harness(tmp_path, personas, timeout=0.2)
     app = CouncilApp(h.engine)
+    wait_answer = app.wait_answer
+
+    async def type_then_wait(*args: Any) -> bool:
+        """Type as the wait starts: on a slow CI runner a poll missed the whole 0.2 s."""
+        app.query_one(ChatInput).value = "2 mon"
+        return await wait_answer(*args)
+
+    app.wait_answer = type_then_wait  # type: ignore[method-assign]
     async with app.run_test(size=SIZE) as pilot:
         await start_run_until_waiting(pilot, app)
-        app.query_one(ChatInput).value = "2 mon"
-        await pilot.pause(0.4)
-        assert "You're typing: the /run waits for your answer" in chat_text(app)
+        held = "You're typing: the /run waits for your answer"
+        assert await wait_until(pilot, lambda: held in chat_text(app))
         assert h.engine.meta.runtime.round == 1
         await submit(pilot, "2 months")
         assert h.engine.meta.runtime.round == 3
