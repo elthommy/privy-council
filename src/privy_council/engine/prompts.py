@@ -15,7 +15,7 @@ from privy_council.models.session import DebateState, Message
 from privy_council.models.vote import Vote
 from privy_council.util.language import Language
 
-PROMPTS_VERSION = "78"
+PROMPTS_VERSION = "79"
 
 # Backends that accept a single user turn (the claude CLI on stdin) flatten a
 # multi-message conversation with these labels.
@@ -236,7 +236,9 @@ USER_NICK = "User"
 TRIMMED_MARK = "\n[…trimmed]"
 EMPTY = "(nothing yet)"
 
-STATE_USER_FACTS = "What the user said about their situation:"
+# Members see shared memory beside the state: a past session's stricter definition sat
+# next to the user's new one, unreconciled (2026-11-24).
+STATE_USER_FACTS = "What the user said this session (where memory differs, this holds):"
 STATE_POSITIONS = "Positions:"
 STATE_AGREEMENTS = "Agreements:"
 STATE_DISAGREEMENTS = "Disagreements:"
@@ -547,10 +549,14 @@ MODERATE_TASK = """\
 Round {round} of at most {max_rounds} just ended. Update the debate state and plan the \
 next round. Return a JSON object matching the schema. Keep it compact: every position, \
 stance, agreement and question is one short sentence.
-- debate_state.user_facts: every fact the user stated about their own situation, in the \
-question or their messages, one short line each (e.g. "shaves every 4 days", "fixed \
-costs: 1,900 € a month"). Copy the earlier user_facts word for word and add the new \
-ones; change or drop one only when the user corrected it. Never a member's guess.
+- debate_state.user_facts: every fact the user stated this session, in the question or \
+their messages, one short line each: their situation ("shaves every 4 days", "fixed \
+costs: 1,900 € a month") and what they decided the question's terms mean. Copy the \
+earlier user_facts word for word and add the new ones; change or drop one only when the \
+user corrected it. An answer that widens, narrows or replaces what an earlier line says \
+counts as a correction: rewrite that line, so that no two lines define the same thing \
+differently. An answer to your question is always recorded, even a bare "yes": write \
+out what it decided. Never a member's guess, nor a line from memory.
 - debate_state.positions: each member's current position in one sentence, keyed by slug.
 - debate_state.agreements: points the members actually agree on.
 - debate_state.disagreements: the 1-3 sharpest disagreements; `sides` maps slug to stance.
@@ -576,7 +582,9 @@ amount or timing) that leave the recommended course of action the same.
 even when you stop. `speaker` is a slug; `prompt` is your instruction, e.g. \
 "respond to @Compounder's claim that ...". When a prompt states something about \
 the user, take it from user_facts or the user's own words: never add a detail they \
-didn't give (a number of years, a skill, a role). A flaw you report below is put to the \
+didn't give (a number of years, a skill, a role). When a prompt says, or offers as an \
+option, what another member holds or assumes, take it from that member's own words or \
+numbers, never from an opponent's description of them. A flaw you report below is put to the \
 member first, so their prompt must not repeat it: ask only what comes next. \
 Target the sharpest disagreements and make members who disagree answer each other. \
 Use the dynamics above: give the floor to members who have been quiet, and call on a \
@@ -601,7 +609,8 @@ matters more). Leave it empty if nothing is that important. {asked_rule}
 - split: {split_rule}
 - flaws: clear errors in this round's member messages, most serious first, at most 4. \
 `member` is a slug; `kind` is "arithmetic" (a wrong sum, conversion or unit), \
-"contradiction" (the member contradicts their own earlier statement), "logic" (a \
+"contradiction" (the member contradicts their own earlier statement, or \
+misstates another member's: see below), "logic" (a \
 conclusion that doesn't follow, a rule turned upside down, or a trigger, condition or \
 signal to wait for that user_facts show has already happened or can't happen, e.g. \
 "wait for a written signal" when the user said nothing gets written), "unsourced" (a figure \
@@ -617,7 +626,11 @@ established; a date or figure given a meaning the facts don't, such as an end of
 funding called a deadline); `quote` is the member's exact \
 words, short; `note` says what is wrong in one sentence, impersonally, since it is \
 pasted into the floor line to that member: no name, no he, she or they ("The chain \
-gives 3.6 %, below the 8-12 % held"). Only errors you can show, \
+gives 3.6 %, below the 8-12 % held"). Where a member tells \
+another what they assume, treat, price or ignore, compare it with that other member's \
+own words and numbers: if those contradict it ("you ignore the fees" to one whose total \
+includes them), report a "contradiction", even from the devil's advocate, whose job is \
+to attack a position, not to misstate it. Only errors you can show, \
 never a difference of judgment or a labelled estimate that is plausible. A figure of \
 speech or an idiom ("keep your head down", "X is suicide") is no contradiction: read \
 it for what it means, and two pieces of advice that can both be followed don't \

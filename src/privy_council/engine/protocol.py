@@ -41,6 +41,7 @@ from privy_council.engine.moderation import (
     drop_answered,
     drop_asked,
     drop_quoted_facts,
+    drop_remembered_facts,
     guest_question,
     judged_open,
     keep_user_facts,
@@ -98,6 +99,7 @@ from privy_council.models.moderator import ModeratorDecision
 from privy_council.models.persona import BackendKind, Persona, Role
 from privy_council.models.session import (
     BudgetWarning,
+    DebateState,
     ErrorEvent,
     MemoryProposed,
     Message,
@@ -876,9 +878,7 @@ class DebateEngine(DocumentFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
         Round 1 never counts as stalled: nobody has challenged anybody yet.
         """
         rt = self.meta.runtime
-        state = keep_user_facts(rt.debate_state, decision.debate_state)
-        sources = "\n".join(t for t in (self._facts(), self._dossier()) if t)
-        rt.debate_state = drop_quoted_facts(rt.debate_state, state, sources)
+        rt.debate_state = self._settled_state(decision)
         rt.consensus = decision.consensus
         rt.new_arguments, rt.decision_open = decision.new_arguments, decision.decision_open
         progress = rt.round == 1 or not dynamics.stalled(
@@ -896,6 +896,25 @@ class DebateEngine(DocumentFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
                 decision_open=rt.decision_open,
             )
         )
+
+    def _settled_state(self, decision: ModeratorDecision) -> DebateState:
+        """Return the decision's debate state, its user facts limited to the user's own."""
+        before = self.meta.runtime.debate_state
+        state = keep_user_facts(before, decision.debate_state)
+        sources = "\n".join(t for t in (self._facts(), self._dossier()) if t)
+        state = drop_quoted_facts(before, state, sources)
+        shared = self._memory(self.moderator)[1]
+        return drop_remembered_facts(before, state, shared, self._said(), self.user_name)
+
+    def _said(self) -> list[str]:
+        """Return the question, the user's messages and what the moderator asked the user."""
+        asked = [
+            m.text
+            for m in self.messages
+            if m.speaker == "user"
+            or (m.speaker == self.moderator.slug and (m.to_user or m.round == 0))
+        ]
+        return [self.meta.topic, *asked]
 
     def _plan(
         self, decision: ModeratorDecision | None, stats: list[dynamics.MemberStats]

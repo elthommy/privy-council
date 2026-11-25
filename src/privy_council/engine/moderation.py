@@ -55,6 +55,18 @@ _FACT_FILLER = frozenset(
         *("that", "the", "their", "them", "they", "this", "to", "was", "which", "who", "with"),
     }
 )
+# Words every user fact opens with ("The user counts ..."): no evidence of a copy.
+_TELLING = frozenset(
+    {
+        *("user", "wants", "want", "counts", "count", "defines", "define", "says", "said"),
+        *("considers", "believes", "question"),
+    }
+)
+_CLAUSE = re.compile(r";|, |\band\b|\bet\b")
+# Share of a clause's words one memory line must hold for it to be a copy of that line.
+FACT_REMEMBERED_OVERLAP = 0.7
+# ... and one message holding this share means the user said it again this session.
+FACT_SAID_OVERLAP = 0.8
 # A user fact this long found word for word in the research or the dossier is a copy
 # (shorter ones, "40 pity", the user may well have said too).
 _MIN_QUOTED_CHARS = 30
@@ -253,6 +265,42 @@ def drop_quoted_facts(previous: DebateState, new: DebateState, sources: str) -> 
     if len(kept) == len(new.user_facts):
         return new
     return new.model_copy(update={"user_facts": kept})
+
+
+def drop_remembered_facts(
+    previous: DebateState, new: DebateState, memory: str, said: Sequence[str], user: str
+) -> DebateState:
+    """Drop new user facts that copy a memory line rather than what was said this session.
+
+    A remembered definition copied into user_facts became the user's word on a new
+    question, and stayed beside the answer that widened it. `said`: the user's messages,
+    the question and the questions put to the user (an answer may be a bare "yes").
+    A fact as close to one of those as to memory stays, and so does an earlier fact.
+    """
+    old = set(previous.user_facts)
+    common = _TELLING | _fact_words(user)
+    lines = [_fact_words(line) for line in memory.splitlines() if line.strip()]
+    spoken = [_fact_words(text) for text in said]
+
+    def remembered(fact: str) -> bool:
+        """Whether every clause is nearer to a memory line than to what was said."""
+        clauses = [w for c in _CLAUSE.split(fact) if (w := _fact_words(c) - common)]
+        return bool(clauses) and all(
+            (known := _coverage(w, lines)) >= FACT_REMEMBERED_OVERLAP
+            and known > (told := _coverage(w, spoken))
+            and told < FACT_SAID_OVERLAP
+            for w in clauses
+        )
+
+    kept = [f for f in new.user_facts if f in old or not remembered(f)]
+    if len(kept) == len(new.user_facts):
+        return new
+    return new.model_copy(update={"user_facts": kept})
+
+
+def _coverage(words: set[str], texts: Sequence[set[str]]) -> float:
+    """Return the largest share of `words` found in one of `texts`."""
+    return max((len(words & text) / len(words) for text in texts), default=0.0)
 
 
 def _folded(text: str) -> str:

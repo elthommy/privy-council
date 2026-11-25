@@ -9,7 +9,9 @@ ended, and only the moderator's update is sent. Each round costs one Claude call
     uv run python scripts/replay_moderation.py SESSION_DIR --rounds 3-6 [--root DIR]
 
 Use a --root whose data dir is a scratch dir: calls go into its usage.jsonl, and
-the moderator reads its memory from there (an empty one keeps the replay clean).
+without --memory the moderator's memory is empty. --memory DIR replays with the
+memory under DIR/memory (a copy of it as it stood then; the replay never writes it).
+--runs N sends each round's update N times; the stall count follows the last run.
 
 --pick-read: when an update asks for no page read, also ask a local moderator which
 cited page holds a missing figure (the engine's page pick; one more local call, no
@@ -88,6 +90,9 @@ def _meta_at(meta: SessionMeta, events: list[Event], round_: int, stalled: int) 
     rt.moderated_upto = len(messages_of(events[: updates[round_ - 2] + 1])) if prior else 0
     rt.stalled_rounds, rt.early_stop, rt.stop_reason = stalled, False, None
     rt.asked_questions, rt.proposed_summons = asked, summons
+    rt.estimates = {
+        slug: [r for r in records if r.round <= round_] for slug, records in rt.estimates.items()
+    }
     # Only the research done by then: later notes would answer what the update asks for.
     rt.research = [e.note for e in before if isinstance(e, ResearchAdded)]
     return out
@@ -117,8 +122,14 @@ async def _replay(engine: DebateEngine, round_: int, dry_run: bool) -> Moderator
     decision, problems = await decide(call, request.user, engine.members)
     for problem in problems:
         print(f"   problem: {problem}")
-    # As the engine does: per-person caps, answered questions, a guest question.
-    return None if decision is None else engine._settle_questions(decision)
+    if decision is None:
+        return None
+    # As the engine does: user facts limited to the user's own, then per-person caps,
+    # answered questions, a guest question.
+    state = engine._settled_state(decision)
+    dropped = [f for f in decision.debate_state.user_facts if f not in state.user_facts]
+    print(f"   user_facts dropped by the engine: {dropped or '(none)'}")
+    return engine._settle_questions(decision.model_copy(update={"debate_state": state}))
 
 
 def _report(
@@ -151,6 +162,11 @@ def _report(
     print("   next_turns:")
     for turn in decision.next_turns:
         print(f"     - @{turn.speaker}: {turn.prompt}")
+    print("   flaws:")
+    for flaw in decision.flaws:
+        print(f'     - {flaw.member} ({flaw.kind}) "{flaw.quote}": {flaw.note}')
+    if not decision.flaws:
+        print("     - (none)")
     print("   new_arguments:")
     for arg in decision.new_arguments or ["(none)"]:
         print(f"     - {arg}")
@@ -161,10 +177,13 @@ def _report(
         print("   => the engine would stop the debate early here")
 
 
-def _engine(settings: Settings, meta: SessionMeta, events: list[Event]) -> DebateEngine:
-    """Build an engine on the saved session's transcript, with no store and empty memory.
+def _engine(
+    settings: Settings, meta: SessionMeta, events: list[Event], memory_dir: Path | None = None
+) -> DebateEngine:
+    """Build an engine on the saved session's transcript, with no store.
 
-    A local-only session replays local-only too (its seat map, no call to Claude).
+    Memory is empty unless `memory_dir` is given. A local-only session replays local-only
+    too (its seat map, no call to Claude).
     """
     personas, _ = load_personas(settings.personas_dir)
     councils, _ = load_councils(settings.councils_dir, personas)
@@ -173,7 +192,7 @@ def _engine(settings: Settings, meta: SessionMeta, events: list[Event]) -> Debat
         settings, personas = apply_local_only(settings, personas, moderators)
     ledger = Ledger.in_data_dir(settings.data_dir)
     registry = BackendRegistry(settings, ledger, local_only=meta.local_only)
-    memory = MemoryStore(Path(tempfile.mkdtemp(prefix="council-replay-")))
+    memory = MemoryStore(memory_dir or Path(tempfile.mkdtemp(prefix="council-replay-")))
     return DebateEngine(
         settings=settings,
         council=councils[meta.council],
@@ -191,6 +210,8 @@ async def main() -> None:
     parser.add_argument("session", type=Path, help="Session directory (data/sessions/...)")
     parser.add_argument("--rounds", default="2-6", help='Rounds to replay, e.g. "3-6"')
     parser.add_argument("--root", type=Path, default=None, help="Directory with config.toml")
+    parser.add_argument("--memory", type=Path, default=None, help="Read DIR/memory")
+    parser.add_argument("--runs", type=int, default=1, help="Updates sent per round")
     parser.add_argument("--dry-run", action="store_true", help="Build prompts, call nothing")
     parser.add_argument(
         "--pick-read", action="store_true", help="Also run a local moderator's page pick"
@@ -202,12 +223,16 @@ async def main() -> None:
     rounds = _rounds(args.rounds)
     first = [e for e in events if isinstance(e, StateUpdated)][rounds[0] - 2 : rounds[0] - 1]
     stalled = first[0].stalled_rounds if first and rounds[0] > 1 else 0
-    for round_ in rounds:
+    at, before_round = 0, stalled
+    for round_ in [r for r in rounds for _ in range(args.runs)]:
+        if round_ != at:
+            at, before_round = round_, stalled
         updates = [i for i, e in enumerate(events) if isinstance(e, StateUpdated)]
         engine = _engine(
             settings,
-            _meta_at(meta, events, round_, stalled),
+            _meta_at(meta, events, round_, before_round),
             events[: updates[round_ - 1]],
+            args.memory,
         )
         decision = await _replay(engine, round_, args.dry_run)
         if decision is None:
@@ -216,7 +241,7 @@ async def main() -> None:
         progress = round_ == 1 or not dynamics.stalled(
             decision.new_arguments, decision.decision_open, stats, decision.position_changes
         )
-        stalled = 0 if progress else stalled + 1
+        stalled = 0 if progress else before_round + 1
         protocol = engine.council.protocol
         marked = [s.slug for s in stats if s.updated]
         _report(decision, round_, stalled, protocol.stall_rounds, round_ >= protocol.max_rounds)

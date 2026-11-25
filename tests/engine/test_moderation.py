@@ -20,6 +20,7 @@ from privy_council.engine.moderation import (
     drop_answered,
     drop_asked,
     drop_quoted_facts,
+    drop_remembered_facts,
     guest_question,
     judged_open,
     keep_user_facts,
@@ -319,3 +320,47 @@ def test_a_reply_answers_only_the_questions_put_to_its_author() -> None:
     assert asked_of(questions, {"Ada"}, "Ada") == ["How much is saved?", "@Ada Your horizon?"]
     assert asked_of(questions, {"ben"}, "Ada") == ["@Ben Which bank?"]
     assert asked_of(questions, set(), "Ada") == []
+
+
+MEMORY = (
+    "- 2026-01-05 (economics): The user counts a strike as any walkout of one full day.\n"
+    "- 2026-01-09 (career): The user owns a red canoe.\n"
+)
+SAID = ["Will the ferry crews strike by May?", "only a walkout of three days", "yes it should"]
+
+
+def _after_memory(facts: list[str], before: list[str] | None = None) -> list[str]:
+    previous = DebateState(user_facts=before or [])
+    state = DebateState(user_facts=facts)
+    return drop_remembered_facts(previous, state, MEMORY, SAID, "Alex").user_facts
+
+
+def test_memory_copied_into_user_facts_is_dropped() -> None:
+    said = "Alex counts only a walkout of three days."
+    copies = [
+        "Alex counts a strike as any walkout of one full day.",
+        "Owns a red canoe, and counts a strike as any walkout of one full day",
+    ]
+    assert _after_memory([said, *copies]) == [said]
+
+
+def test_a_fact_said_again_or_already_kept_is_not_a_memory_copy() -> None:
+    canoe = "The user owns a red canoe."
+    assert _after_memory([canoe], before=[canoe]) == [canoe]
+    state = DebateState(user_facts=[canoe])
+    again = drop_remembered_facts(
+        DebateState(), state, MEMORY, ["my household owns a red canoe"], "Alex"
+    )
+    assert again.user_facts == [canoe]
+
+
+def test_without_memory_no_user_fact_is_dropped() -> None:
+    state = DebateState(user_facts=["owns a red canoe"])
+    assert drop_remembered_facts(DebateState(), state, "", SAID, "Alex") is state
+
+
+def test_an_answer_to_the_moderators_question_is_not_a_memory_copy() -> None:
+    state = DebateState(user_facts=["Alex counts a walkout of one full day as a strike"])
+    asked = ["Alex, does a walkout of one full day count as a strike?", "yes it should"]
+    kept = drop_remembered_facts(DebateState(), state, MEMORY, asked, "Alex")
+    assert kept.user_facts == state.user_facts
