@@ -3,8 +3,8 @@ name: Macro
 slug: macro
 color: "#82aaff"
 role: advisor
-backend: ollama
-model: nemotron-3.5-bolt:latest
+backend: claude_cli
+model: sonnet
 temperature: 0.7
 expertise: [sovereign debt, central banks, bond markets, credit cycles, financial crises]
 memory: true

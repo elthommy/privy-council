@@ -171,3 +171,5 @@ specialist = "nemotron-3.5-super:latest"
 empiricist = "nemotron-3.5-super:latest"
 counsel = "qwen3.6:27b"
 kindness = "qwen3.6:27b"
+analyst = "nemotron-3.5-bolt:latest"   # its local model until 2026-11-25
+macro = "nemotron-3.5-bolt:latest"     # same

@@ -3,8 +3,8 @@ name: Analyst
 slug: analyst
 color: "#ffcb6b"
 role: advisor
-backend: ollama
-model: nemotron-3.5-bolt:latest
+backend: claude_cli
+model: sonnet
 temperature: 0.7
 expertise: [company balance sheets, credit analysis, cash flow, debt maturities, corporate restructuring]
 memory: true
