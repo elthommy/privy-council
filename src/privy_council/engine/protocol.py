@@ -433,9 +433,8 @@ class DebateEngine(DocumentFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
         """Run the pending turns of a round, then the moderator update."""
         rt = self.meta.runtime
         if not rt.round_in_progress:
-            first = rt.round == 0 and self._estimating() and rt.research
-            if first and (exchange := self._opening_exchange()):
-                await self._terms_research(exchange)
+            if self._estimating() and rt.research:
+                await self._look_up_answers()
             self._budget_check()
             rt.round += 1
             rt.round_in_progress = True
@@ -453,6 +452,28 @@ class DebateEngine(DocumentFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
         await self._moderate()
         rt.round_in_progress = False
         self._save()
+
+    async def _look_up_answers(self) -> None:
+        """Search for what the user's answers change, before the round that uses them."""
+        if self.meta.runtime.round == 0:
+            if exchange := self._opening_exchange():
+                await self._terms_research(exchange)
+        elif exchange := self._answer_exchange():
+            await self._answer_research(exchange)
+
+    def _answer_exchange(self) -> list[str]:
+        """Return the questions put to the user since the update and the answers, [] if none.
+
+        Answers the update saw are its own to research (`decision.research`).
+        """
+        new = self.messages[self.meta.runtime.moderated_upto :]
+        asked = next((i for i, m in enumerate(new) if m.to_user), None)
+        if asked is None:
+            return []
+        lines = [m for m in new[asked:] if m.to_user or m.speaker == "user"]
+        if not any(m.speaker == "user" for m in lines):
+            return []
+        return context.render_history(lines, self.nick)
 
     def _opening_exchange(self) -> list[str]:
         """Return the opening and the users' answers to it as chat lines, [] if none."""

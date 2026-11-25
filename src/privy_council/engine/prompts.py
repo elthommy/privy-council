@@ -15,7 +15,7 @@ from privy_council.models.session import DebateState, Message
 from privy_council.models.vote import Vote
 from privy_council.util.language import Language
 
-PROMPTS_VERSION = "77"
+PROMPTS_VERSION = "78"
 
 # Backends that accept a single user turn (the claude CLI on stdin) flatten a
 # multi-message conversation with these labels.
@@ -979,6 +979,30 @@ RESEARCH_TERMS_FOCUS = (
     "already met; for each kind of event they name, whether one has already happened. "
     "Skip what the fresh facts already give"
 )
+# A later answer gets its own lookup (2026-11-24): the user said that a wider kind of
+# event counts, and nobody looked up how often it happens; the members guessed.
+ANSWER_LOOKUP_SYSTEM = """\
+You are the research assistant of a debate moderator. You decide what to look up on \
+the web. You never give opinions or advice."""
+ANSWER_LOOKUP_TASK = """\
+Today is {today}. The moderator asked the user a question, and the user answered:
+{exchange}
+The members estimate next, with that answer.
+1. "answer": "decides" if the user picked a reading: yes, no, a lettered option, a date, \
+a number, or words that say what counts. "declines" if the user leaves it to you ("I \
+leave it to you", "you decide"), says they don't know, or only gives a preference or a \
+personal detail.
+2. "focus": empty if the user declines, or if the fresh facts already give what the \
+members need. Otherwise what to look up, in at most 30 words, as one search focus:
+- a kind of event the answer lets in, or the one left: how often it happened in the \
+past few years up to today (a count or rate, named cases with dates), and whether one \
+that counts already has;
+- a measure, threshold or date: its latest value and how often it was reached before.
+Look back over years, not days, and never past today: what hasn't happened can't be \
+found. Name the event or measure in full; don't write "the user" or "the answer". \
+Nothing about the user personally: only public facts.
+Return only a JSON object: {{"answer": "decides", "focus": "..."}} or \
+{{"answer": "declines", "focus": ""}}"""
 RESEARCH_OPENING_MEASURE = """
 First of all: if the question resolves on a measure (an index, a price, a rate, a \
 statistic, a count), its latest value with its date, the reference level the question \

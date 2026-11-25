@@ -82,6 +82,8 @@ NOTICE_LOCAL_QUERY_FAILED = "Local search failed for {query!r} ({error})"
 NOTICE_LOCAL_FOLLOW_UP = "{nick} searches again for what is missing: {facts}"
 # Before round 1, after the user answered the opening's terms question.
 NOTICE_TERMS_RESEARCH = "{nick} looks up where your answer's terms stand today"
+# Between rounds, after the user answered one of the Chair's questions.
+NOTICE_ANSWER_RESEARCH = "{nick} looks up what your answer changes: {focus}"
 NOTICE_LOCAL_RETRY = "No result: {nick} searches again with shorter queries: {queries}"
 NOTICE_LOCAL_NOTHING = "{nick}'s search found nothing ({queries}); the debate continues without it"
 NOTICE_LOCAL_QUERIES_FALLBACK = (

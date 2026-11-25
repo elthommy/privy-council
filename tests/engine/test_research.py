@@ -516,3 +516,79 @@ async def test_no_answer_to_the_opening_no_terms_lookup(
     await h.engine.step()
     await h.engine.step()
     assert len(research_requests(h)) == 1
+
+
+async def answer_session(
+    tmp_path: Path, personas: dict[str, Persona], focus: str, answer: str | None
+) -> Harness:
+    """Run a forecast whose Chair asks after round 1; the user answers (or not)."""
+    asks = {**decision([("rigor", "x")]), "questions_for_user": ["Does a delayed launch count?"]}
+    replies = [research_result(), research_result("- 7 delays in 2025 (https://e.org/w)")]
+    base = responder([asks, *[decision([("rigor", "x")])] * 2], replies)
+
+    def respond(req: CompletionRequest) -> Reply:
+        """Answer the lookup call with `focus`."""
+        if req.tag.purpose == "answer_lookup":
+            return focus
+        return base(req)
+
+    h = Harness(
+        tmp_path,
+        personas,
+        respond,
+        research=ResearchMode.AUTO,
+        protocol=ProtocolSettings(max_rounds=3, estimate="probability"),
+    )
+    await h.engine.step()
+    await h.engine.step()
+    if answer:
+        h.engine.say(answer)
+    await h.engine.step()
+    return h
+
+
+def lookup_calls(h: Harness) -> list[CompletionRequest]:
+    """Return the calls asking what an answer changes."""
+    return [r for r in h.requests() if r.tag.purpose == "answer_lookup"]
+
+
+async def test_an_answer_between_rounds_gets_a_lookup_before_the_next_round(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    reply = '{"answer": "decides", "focus": "delayed rocket launches, count in 2025"}'
+    h = await answer_session(tmp_path, personas, reply, "yes, delays count")
+    (call,) = lookup_calls(h)
+    assert not call.tools
+    assert "Does a delayed launch count?" in call.messages[0].content
+    assert "yes, delays count" in call.messages[0].content
+    note = h.engine.meta.runtime.research[-1]
+    assert note.focus == "delayed rocket launches, count in 2025" and not note.auto
+    last_turn = [r for r in h.requests() if r.tag.purpose == "turn"][-1]
+    assert "7 delays in 2025" in last_turn.messages[0].content
+    # The next round has no new answer, so nothing more is asked.
+    await h.engine.step()
+    assert len(lookup_calls(h)) == 1
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        '{"answer": "decides", "focus": ""}',
+        '{"answer": "declines", "focus": "delays"}',
+        '{"focus": "delays"}',
+        "no idea",
+    ],
+)
+async def test_an_answer_that_changes_nothing_gets_no_search(
+    tmp_path: Path, personas: dict[str, Persona], reply: str
+) -> None:
+    h = await answer_session(tmp_path, personas, reply, "I leave it to you")
+    assert len(lookup_calls(h)) == 1
+    assert len(research_requests(h)) == 1
+
+
+async def test_no_answer_between_rounds_no_lookup(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    h = await answer_session(tmp_path, personas, '{"answer": "decides", "focus": "x"}', None)
+    assert not lookup_calls(h)

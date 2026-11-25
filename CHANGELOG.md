@@ -2,8 +2,9 @@
 
 All notable changes, by milestone. Dates are when each milestone was built.
 
-## Unreleased (2026-10-25 – 2026-11-24)
+## Unreleased (2026-10-25 – 2026-11-25)
 
+- **The Chair looks up what your answer changes** (forecast councils with research): when you answer one of its questions between rounds, one short call decides whether the answer changes what counts, and if so one search runs before the next round (how often that kind of event has happened, whether one already has). Nothing is searched when you leave it to the Chair. Skipped when the Claude budget is tight. `scripts/replay_answer.py` replays it on a saved session.
 - **`nemotron-3.5-bolt` loads again on Ollama 0.40.17**, where every turn on it failed with "out of memory": its draft model, whose memory Ollama's fit leaves out, is now off (`[ollama.models] draft_num_predict = 0`, a new per-model option). It also loads on the first try and answers faster (31 tok/s instead of 18 on real turns).
 - **The opening no longer denies an event its search missed**: the first search looks for the event the question states, up to today, and reports it as confirmed or not confirmed. The Chair says what it couldn't confirm and takes the event as stated, unless a fact dated after it says it didn't happen. Local search's summary follows the same rule, and the opening never picks a deadline the question doesn't give.
 - **Members get a last turn on late facts** (forecast councils, `[engine] late_facts_turns`, on by default): before the synthesis, each member whose estimate predates the newest facts says which one changes it and gives a final number.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -22,6 +23,19 @@ class ReadPick(BaseModel):
 
     page: int = Field(ge=0)  # a number from the listed pages; out of range means none
     look_for: str = ""
+
+
+class AnswerLookup(BaseModel):
+    """What to look up after the user's answer to a question.
+
+    `answer` comes first so a small model judges the answer before writing a focus:
+    asked for the focus alone, it searched even after "I leave it to you".
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    answer: Literal["decides", "declines"]  # "declines" means no lookup
+    focus: str  # "" when the facts already hold it
 
 
 class SearchResult(BaseModel):

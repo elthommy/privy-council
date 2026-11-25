@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Any, Literal
+
+from pydantic import ValidationError
 
 from privy_council.backends.base import (
     BackendAuthError,
@@ -25,8 +28,9 @@ from privy_council.engine.local_research import (
     render_results,
     shorter_queries,
 )
-from privy_council.engine.moderation import MAX_RESEARCH_REQUESTS, DecisionError
+from privy_council.engine.moderation import MAX_RESEARCH_REQUESTS, DecisionError, json_object
 from privy_council.engine.notices import (
+    NOTICE_ANSWER_RESEARCH,
     NOTICE_AUTO_RESEARCH,
     NOTICE_AUTO_RESEARCH_REPEAT,
     NOTICE_BUSY,
@@ -63,9 +67,14 @@ from privy_council.engine.research_ledger import (
     repeat_focus,
 )
 from privy_council.models.persona import BackendKind
-from privy_council.models.research import LocalSearchRecord, SearchResult
+from privy_council.models.research import AnswerLookup, LocalSearchRecord, SearchResult
 from privy_council.models.session import ErrorEvent, Phase, ResearchAdded, ResearchNote, TurnStarted
 
+log = logging.getLogger(__name__)
+
+ANSWER_LOOKUP_SCHEMA: dict[str, Any] = AnswerLookup.model_json_schema()
+ANSWER_LOOKUP_MAX_OUTPUT = 300  # one search focus
+MAX_ANSWER_FOCUS_CHARS = 300
 QUERIES_MAX_OUTPUT = 600  # a few short queries; the JSON never needs more
 
 
@@ -242,6 +251,45 @@ class ResearchFlow(EngineCore):
         self._notice(NOTICE_TERMS_RESEARCH.format(nick=self.moderator.name))
         title = prompts.LABELS[self.meta.language]["research_terms"]
         await self._research_safely(prompts.RESEARCH_TERMS_FOCUS, title=title, history=exchange)
+
+    async def _answer_research(self, exchange: Sequence[str]) -> None:
+        """Look up what the user's answer changes, before the round that uses it.
+
+        The moderator's update plans its searches before the user answers its
+        questions, so a kind of event an answer adds was never searched (2026-11-24).
+        One short call says what to look up, if anything. Not the Chair's quota;
+        skipped when the budget is tight.
+        """
+        if self._research_unavailable() is not None or self.budget_warnings(2):
+            return
+        focus = await self._answer_focus(exchange)
+        if not focus or repeat_focus(focus, self.meta.runtime.research):
+            return
+        self._notice(NOTICE_ANSWER_RESEARCH.format(nick=self.moderator.name, focus=focus))
+        await self._research_safely(focus, history=exchange)
+
+    async def _answer_focus(self, exchange: Sequence[str]) -> str:
+        """Ask the moderator what an answer makes worth a search; "" if nothing."""
+        task = prompts.ANSWER_LOOKUP_TASK.format(today=_today(), exchange="\n".join(exchange))
+        prompt = self._research_prompt(prompts.ANSWER_LOOKUP_SYSTEM, task)
+        try:
+            result, _ = await self._complete(
+                self.moderator,
+                prompt,
+                "answer_lookup",
+                json_schema=ANSWER_LOOKUP_SCHEMA,
+                timeout_s=self.settings.research.timeout_s,
+                max_output=ANSWER_LOOKUP_MAX_OUTPUT,
+            )
+            lookup = AnswerLookup.model_validate(json_object(result))
+        except BackendAuthError:
+            raise
+        except (BackendError, DecisionError, ValidationError) as exc:
+            log.info("answer lookup failed: %s", type(exc).__name__)
+            return ""
+        if lookup.answer == "declines":
+            return ""
+        return " ".join(lookup.focus.split())[:MAX_ANSWER_FOCUS_CHARS]
 
     async def _research_safely(
         self,
