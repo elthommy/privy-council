@@ -153,6 +153,12 @@ def _note_urls(note: ResearchNote) -> dict[str, str]:
     return out
 
 
+def data_file(url: str) -> bool:
+    """Tell whether a URL is a PDF or data file, by its path."""
+    path = urlsplit(url).path.lower()
+    return path.endswith(_UNREADABLE) or path.rstrip("/").endswith("/pdf")
+
+
 def _readable(url: str, primary_domains: Collection[str], refusing: Collection[str]) -> bool:
     """Tell whether a URL is an official page the reader can take.
 
@@ -160,10 +166,9 @@ def _readable(url: str, primary_domains: Collection[str], refusing: Collection[s
     (`refusing`).
     """
     path = urlsplit(url).path.lower()
-    data_file = path.endswith(_UNREADABLE) or path.rstrip("/").endswith("/pdf")
     official = tier(url, primary_domains) == "primary"
     dates_only = bool(_CALENDAR_PATH.search(path))
-    return official and not data_file and not dates_only and not on_domains(url, refusing)
+    return official and not data_file(url) and not dates_only and not on_domains(url, refusing)
 
 
 def _read_pages(notes: Sequence[ResearchNote]) -> dict[str, list[str]]:

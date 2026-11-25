@@ -21,8 +21,18 @@ from pydantic import ValidationError
 from privy_council.backends.base import BackendAuthError, BackendError, BackendRateLimitError
 from privy_council.engine import prompts
 from privy_council.engine.facts import blocks, on_domains
-from privy_council.engine.local_research import check_summary, missing_line, unbacked_numbers
-from privy_council.engine.moderation import MAX_DOCUMENT_REQUESTS, DecisionError, json_object
+from privy_council.engine.local_research import (
+    check_summary,
+    missing_line,
+    normalize_url,
+    unbacked_numbers,
+)
+from privy_council.engine.moderation import (
+    MAX_DOCUMENT_REQUESTS,
+    MAX_RESEARCH_REQUESTS,
+    DecisionError,
+    json_object,
+)
 from privy_council.engine.notices import (
     NOTICE_BUSY,
     NOTICE_DOCUMENT_DROPPED,
@@ -39,13 +49,14 @@ from privy_council.engine.notices import (
 from privy_council.engine.research_flow import ResearchFlow, _today
 from privy_council.engine.research_ledger import (
     cited_url,
+    data_file,
     missing_items,
     not_findable,
     page_for_repeat,
     readable_pages,
     repeat_focus,
 )
-from privy_council.models.moderator import DocumentRequest
+from privy_council.models.moderator import DocumentRequest, ModeratorDecision
 from privy_council.models.persona import BackendKind
 from privy_council.models.research import DocumentRecord, ReadPick, SearchResult
 from privy_council.models.session import ErrorEvent, ResearchNote, TurnStarted
@@ -96,7 +107,7 @@ class DocumentFlow(ResearchFlow):
             if not cited_url(request.url, self.meta.runtime.research):
                 self._notice(NOTICE_DOCUMENT_NOT_IN_FACTS.format(nick=nick, url=request.url))
                 continue
-            if on_domains(request.url, self.settings.research.documents.unreadable_domains):
+            if self._unreadable(request.url):
                 self._notice(NOTICE_DOCUMENT_SITE_REFUSES.format(nick=nick, url=request.url))
                 continue
             reason = self._read_cap_reason()
@@ -110,6 +121,41 @@ class DocumentFlow(ResearchFlow):
                 continue
             await self._read_safely(request.url, request.look_for, auto=True)
         return relayed
+
+    def _unreadable(self, url: str) -> bool:
+        """Whether the reader can't take a page: its site, its type, or it failed before."""
+        refusing = self.settings.research.documents.unreadable_domains
+        return (
+            on_domains(url, refusing) or data_file(url) or normalize_url(url) in self._failed_reads
+        )
+
+    def _searches_for_unreadable(
+        self, focuses: list[str], requests: list[DocumentRequest]
+    ) -> list[str]:
+        """Return the searches to run: an unreadable page becomes one, if there is room.
+
+        The moderator asked for the same PDF three rounds in a row (2026-11-25).
+        """
+        out = list(focuses)
+        for request in requests[:MAX_DOCUMENT_REQUESTS]:
+            cited = cited_url(request.url, self.meta.runtime.research)
+            if self._document_problem() is None and cited and self._unreadable(request.url):
+                out.append(
+                    prompts.UNREADABLE_FOCUS.format(look_for=request.look_for, url=request.url)
+                )
+        return out[:MAX_RESEARCH_REQUESTS]
+
+    def _looks_up(self, decision: ModeratorDecision) -> bool:
+        """Whether a lookup the moderator asked for would really run."""
+        research = self.meta.runtime.research
+        if self._read_cap_reason() is not None or self._research_unavailable() is not None:
+            return False
+        focuses = self._searches_for_unreadable(decision.research, decision.documents)
+        if any(not repeat_focus(f, research) for f in focuses):
+            return True
+        return self._document_problem() is None and any(
+            cited_url(d.url, research) and not self._unreadable(d.url) for d in decision.documents
+        )
 
     def _reads_for_repeats(self, focuses: list[str]) -> list[DocumentRequest]:
         """Return a page read for the first lookup that will be skipped as a repeat.
@@ -227,6 +273,7 @@ class DocumentFlow(ResearchFlow):
         except BackendAuthError:
             raise
         except BackendError as exc:
+            self._failed_reads.add(normalize_url(url))
             self._emit(ErrorEvent(text=NOTICE_DOCUMENT_FAILED.format(error=exc)))
 
     async def _read_document(self, url: str, look_for: str, *, auto: bool) -> None:

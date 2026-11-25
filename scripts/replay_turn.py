@@ -40,6 +40,7 @@ from privy_council.models.session import (
     MessageEvent,
     PendingTurn,
     Phase,
+    ResearchAdded,
     SessionMeta,
     SessionState,
     StateUpdated,
@@ -99,7 +100,24 @@ def _meta_at(meta: SessionMeta, events: list[Event], round_: int) -> SessionMeta
     rt.phase, rt.round, rt.round_in_progress, rt.pending = Phase.ROUND, round_, True, []
     states = [e.state for e in events if isinstance(e, StateUpdated)]
     rt.debate_state = states[-1] if states else DebateState()
+    # As of the turn: later notes and answers must not leak into the prompt.
+    rt.research = [e.note for e in events if isinstance(e, ResearchAdded)]
+    rt.moderated_upto = _moderated_upto(events)
+    rt.estimates = {
+        slug: [r for r in records if r.round < round_] for slug, records in rt.estimates.items()
+    }
     return out
+
+
+def _moderated_upto(events: list[Event]) -> int:
+    """Return how many messages the moderator's last update had seen."""
+    seen = count = 0
+    for e in events:
+        if isinstance(e, MessageEvent):
+            count += 1
+        elif isinstance(e, StateUpdated):
+            seen = count
+    return seen
 
 
 def _engine(settings: Settings, meta: SessionMeta, events: list[Event]) -> DebateEngine:

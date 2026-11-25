@@ -11,7 +11,9 @@ from privy_council.backends.fake import Reply
 from privy_council.engine import prompts
 from privy_council.models.council import ProtocolSettings
 from privy_council.models.flaw import FlawKind
+from privy_council.models.moderator import ModeratorDecision
 from privy_council.models.persona import Persona
+from privy_council.models.session import ResearchNote
 from tests.engine.test_protocol import Harness, decision, standard_responder
 from tests.engine.test_protocol import personas as personas
 
@@ -200,3 +202,33 @@ def test_the_opening_asks_about_terms_only_in_a_forecast() -> None:
     )
     assert "- 2 March 2026: 59 days, about 2 months from today" in shared
     assert f"ask {prompts.OPENING_TERMS_PEOPLE} which reading" in shared
+
+
+async def test_a_moved_estimate_is_progress(tmp_path: Path, personas: dict[str, Persona]) -> None:
+    h = harness(tmp_path, personas)
+    assert not h.engine._estimates_moved()
+    for _ in range(3):  # round 2: rigor 12 -> 6, compounder 20 -> 30
+        await h.engine.step()
+    assert h.engine._estimates_moved()
+    assert prompts.ESTIMATE_MOVE_RULE not in turn_task(h, "rigor", 0)  # blind round
+    assert prompts.ESTIMATE_MOVE_RULE in turn_task(h, "rigor", 1)
+    assert prompts.ESTIMATE_MOVE_RULE not in turn_task(h, "contrarian", 1)
+
+
+async def test_an_engine_stop_gives_one_more_round_to_lookups(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    h = harness(tmp_path, personas)
+    rt = h.engine.meta.runtime
+    rt.round = 2
+    rt.research.append(ResearchNote(focus="opening", text="- a"))
+    limit = h.engine.council.protocol.stall_rounds
+    raw = {**decision(all_four()), "decision_open": False}
+    plain = ModeratorDecision.model_validate(raw)
+    asks = plain.model_copy(update={"research": ["the new ferry timetable"]})
+    rt.stalled_rounds = limit
+    assert h.engine._stop_reason(plain, False) is not None
+    h.engine._research_unavailable = lambda: None  # type: ignore[method-assign]
+    assert h.engine._stop_reason(asks, False) is None
+    rt.stalled_rounds = limit + 1
+    assert h.engine._stop_reason(asks, False) is not None

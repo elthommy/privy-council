@@ -205,7 +205,7 @@ async def test_the_moderator_does_not_read_a_site_that_refuses_the_reader(
     request = document_flow.DocumentRequest(url=FILING_URL, look_for="principal by year")
     await h.engine._auto_documents([request])
     assert fetched == []
-    assert any("refuses the document reader" in t for t in h.texts("system"))
+    assert any("the document reader can't take" in t for t in h.texts("system"))
     await h.engine.read(f"{FILING_URL} principal by year")  # the owner's /read still tries
     assert fetched == [FILING_URL]
 
@@ -286,3 +286,25 @@ async def test_no_page_pick_for_a_claude_moderator_or_once_the_page_was_read(
     )
     local.engine._local_moderator = lambda: True  # type: ignore[method-assign]
     assert await local.engine._picked_reads() == []
+
+
+async def test_an_unreadable_page_becomes_a_search_and_is_not_tried_again(
+    tmp_path: Path, personas: dict[str, Persona], fetched: list[str]
+) -> None:
+    h = Harness(tmp_path, personas, responder([]), config=ON)
+    pdf = "https://files.example.org/q3/filing.pdf"
+    h.engine.meta.runtime.research.append(
+        ResearchNote(focus="filing", text=f"- Debt $5B ({pdf}); leases ({FILING_URL})")
+    )
+    request = document_flow.DocumentRequest(url=pdf, look_for="principal by year")
+    await h.engine._auto_documents([request])
+    assert fetched == []
+    searches = h.engine._searches_for_unreadable(["a"], [request])
+    assert searches[0] == "a" and pdf in searches[1] and "principal by year" in searches[1]
+    assert h.engine._searches_for_unreadable(["a", "b"], [request]) == ["a", "b"]  # no room
+    elsewhere = document_flow.DocumentRequest(url="https://x.example/a.pdf", look_for="debt")
+    assert h.engine._searches_for_unreadable([], [elsewhere]) == []  # not in the facts
+    page = document_flow.DocumentRequest(url=FILING_URL, look_for="leases")
+    assert h.engine._searches_for_unreadable([], [page]) == []
+    h.engine._failed_reads.add(document_flow.normalize_url(FILING_URL))  # it failed before
+    assert len(h.engine._searches_for_unreadable([], [page])) == 1

@@ -25,6 +25,9 @@ SLUG_PATTERN = re.compile(r"[a-z0-9][a-z0-9_-]*")
 # A bullet written by `bullet()`; group 1 is its council.
 TAGGED_BULLET = re.compile(r"[-*] \d{4}-\d{2}-\d{2} \(([^)]*)\):")
 
+# A date and council the model copied from its earlier notes: `bullet()` adds its own.
+_OWN_DATE = re.compile(r"^(?:\d{4}-\d{2}-\d{2} \([^)]*\): *)+")
+
 
 class InvalidSlugError(ValueError):
     """A persona slug that can't name a memory directory."""
@@ -37,7 +40,7 @@ def size_bytes(text: str) -> int:
 
 def bullet(day: date, council: str, text: str) -> str:
     """Render one dated memory bullet; the text is folded onto a single line."""
-    one_line = " ".join(text.split())
+    one_line = _OWN_DATE.sub("", " ".join(text.split()))
     return f"- {day:%Y-%m-%d} ({council}): {one_line}"
 
 

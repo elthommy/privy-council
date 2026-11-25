@@ -265,3 +265,23 @@ def test_a_plain_number_before_the_tag_is_what_it_cites() -> None:
 
 def test_a_year_before_the_tag_still_lets_it_vouch_for_the_amount() -> None:
     assert cite("Acme owes $9.2bn by 2027 [F4].") == ["miscited: $9.2bn is in [F1], not in [F4]."]
+
+
+def test_short_facts_keep_the_site_and_put_the_named_facts_first() -> None:
+    ns = notes(
+        "- a [$4bn](https://www.x.org/long/path) loan\n- b https://y.org/p?q=1",
+        "- c\n- d",
+        "- e",
+    )
+    text = context.facts_text(ns, short=True, first=facts.cited_ids("test [F3]-[F4] and go"))
+    assert text is not None
+    assert "$4bn (x.org) loan" in text and "b y.org" in text and "http" not in text
+    order = [text.index(f"[F{n}]") for n in (3, 4, 1, 2, 5)]
+    assert order == sorted(order) and text.count("[F3]") == 1
+    long = context.facts_text(ns)
+    assert long is not None and "https://www.x.org/long/path" in long
+
+
+def test_cited_ids() -> None:
+    assert facts.cited_ids("see [F19]-[F21] and [F3, primary]") == ["F19", "F20", "F21", "F3"]
+    assert facts.cited_ids("nothing") == []

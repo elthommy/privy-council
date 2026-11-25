@@ -91,7 +91,9 @@ _MONTHS_A_YEAR = 12
 # The figures a fact tag vouches for (`vouched`): sizes, counts and years before a
 # tag describe the thing, they aren't what the fact is cited for.
 _VOUCHED_FAMILIES = frozenset({"money", "%", "x", _TIMES})
-_CLAUSE_BREAK = re.compile(r";|\s(?:or|and|but|while|whereas|ou|et|mais)\s", re.IGNORECASE)
+_CLAUSE_BREAK = re.compile(
+    r";|\s(?:or|and|but|while|whereas|if|unless|ou|et|mais|si)\s", re.IGNORECASE
+)
 _VOUCH_WORDS = 8  # the cited figure sits right before its tag: 0-5 words in benches
 # A plain number with no unit nearer the tag is what the tag cites: in "12% below the
 # record close of 18,450.20 [F9]" F9 is cited for the close, not the member's 12%

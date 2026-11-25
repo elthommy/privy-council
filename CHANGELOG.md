@@ -4,6 +4,14 @@ All notable changes, by milestone. Dates are when each milestone was built.
 
 ## Unreleased (2026-10-25 – 2026-11-25)
 
+- **A member sees your answer even when the Chair's prompt predates it**: the round's prompts are written with the Chair's questions, so they could name a window you then changed. Your answers now go into each prompt, and win over it. The Chair is told not to report a member who only followed its own wording.
+- **Small local models see every fact**: links are cut to their site name in their prompts (they were a third of the text), and the facts the Chair asks a member about come first. The note on your question's terms follows the opening's.
+- **A page the reader can't take (a PDF, a refused or failed page) becomes a web search** when there is room, and is never tried again.
+- **A forecast no longer stops while estimates still move**: an estimate that moved 3 points or more counts as progress, and the engine gives one more round to a lookup the Chair just asked for.
+- **The first search reports the cause each source gives for a market move**, the main one first, even when it supports your view.
+- A draft's rewrite drops a figure about the present that the facts don't give, instead of keeping it as "an estimate, from memory". A member that corrects an error its number rested on says what that does to the number.
+- Memory notes no longer carry their date twice; "12% if [F9] counts" isn't read as a citation of 12%; the council's median row says its range is the spread of the members' estimates.
+- `docs/session-flow.md` redrawn: the session, one round, one turn. `scripts/seat_compare.py` runs frozen prompts on several models; `scripts/replay_turn.py` no longer leaks later facts.
 - **Memory no longer passes for what you said this session**: the Chair copied definitions from past sessions into the debate state as if you had given them for the new question, where they stayed beside your new answer. The engine drops such copies; members still see memory itself, and the debate state says that what you said this session wins. The Chair also writes out what a bare "yes" decided.
 - **Shared memory no longer keeps a question's own definitions** (its deadline, what counts as the event): on a later question they passed for your view. Facts already on file stay until you remove them.
 - **The Chair checks what a member says another member assumes** ("you treat these as independent") against that member's own words and numbers, reports a misstatement, and takes such claims from the member concerned when it writes the next prompts.

@@ -21,6 +21,15 @@ def test_bullet_is_dated_and_single_line() -> None:
     )
 
 
+def test_bullet_drops_a_date_the_model_copied() -> None:
+    copied = "2026-10-17 (finance): 2026-10-16 (finance): The user rents."
+    assert (
+        bullet(date(2026, 10, 17), "finance", copied) == "- 2026-10-17 (finance): The user rents."
+    )
+    dated = "2026-10-17: the fund closed."  # a fact's own date stays
+    assert bullet(date(2026, 10, 17), "finance", dated).endswith(dated)
+
+
 def test_bullet_lines_and_size() -> None:
     assert bullet_lines("# title\n- one\n* two\nprose\n  - three") == ["one", "two", "three"]
     assert size_bytes("é") == 2

@@ -235,21 +235,31 @@ def facts_text(
     notes: Sequence[ResearchNote],
     primary_domains: Collection[str] = (),
     primary_label: str = "",
+    short: bool = False,
+    first: Collection[str] = (),
 ) -> str | None:
     """Render the session's research for prompts (newest first), or None if there is none.
 
-    The facts still not found after the lookups come first (M20).
+    The facts still not found after the lookups come first (M20). For a small model,
+    `short` cuts the URLs to their site, and the facts in `first` (those its floor line
+    names) come before the others, so trimming never takes them.
     """
     if not notes:
         return None
     texts = fact_tags.tagged_notes(
         [without_missing(n.text) for n in notes], primary_domains, primary_label
     )
-    entries = [
-        (n.focus, f"{n.ts.astimezone():%Y-%m-%d}", text)
-        for n, text in zip(notes, texts, strict=True)
-    ]
-    return prompts.render_research(entries, research_ledger.not_findable(notes))
+    if short:
+        texts = [fact_tags.without_urls(t) for t in texts]
+    days = [f"{n.ts.astimezone():%Y-%m-%d}" for n in notes]
+    named, rest = [], []
+    for note, day, text in zip(notes, days, texts, strict=True):
+        top, others = fact_tags.split_named(text, first)
+        if top:
+            named.append((note.focus, day, top))
+        if others:
+            rest.append((note.focus, day, others))
+    return prompts.render_research(rest, research_ledger.not_findable(notes), named)
 
 
 def research_facts(notes: Sequence[ResearchNote]) -> list[fact_tags.Fact]:

@@ -15,7 +15,7 @@ from privy_council.models.session import DebateState, Message
 from privy_council.models.vote import Vote
 from privy_council.util.language import Language
 
-PROMPTS_VERSION = "80"
+PROMPTS_VERSION = "81"
 
 # Backends that accept a single user turn (the claude CLI on stdin) flatten a
 # multi-message conversation with these labels.
@@ -262,7 +262,8 @@ Keep the question's own words for its conditions and how they combine.
 3. Say what a good answer must cover.
 4. Only if the question states that something happened and no fact confirms it, write: \
 "My search didn't confirm that [event]; my newest fact on it is dated [date], so it may \
-be more recent. I take it as stated: when did it happen, and where did you read it?" An \
+be more recent. I take it as stated: when did it happen, and where did you read it?" \
+(leave out "when" if the question says it, as in "today"). An \
 older fact can't show that it didn't happen: don't call it a contradiction, a false \
 premise or hypothetical, and don't offer those as readings. Say it didn't happen only \
 if a fact dated after it says so.
@@ -355,6 +356,13 @@ CROSS_TASK = """\
 Round {round}. @{moderator} asks you: {prompt}
 Reply in a few sentences. Address members by name, e.g. @{example}."""
 
+# The user answered after the round's floor prompts were written.
+ANSWERS_AFTER_FLOOR = """\
+Since that request was written, the moderator asked the user and they answered:
+{lines}
+Where the request or an earlier message differs from these answers (a date, a window, \
+what counts), the user's answers win."""
+
 ASK_TASK = """\
 The user asks you directly, outside the rounds: {question}
 Answer in a few sentences, as yourself."""
@@ -369,6 +377,11 @@ Answer in a few sentences, as yourself."""
 FACT_TAG_RULE = """\
 Fresh facts: when you state a fact or a figure from them, put its tag right after it, \
 as in "debt was $9.2bn [F7]". Tag only what that fact says."""
+# After round 1: a member conceded the error its number rested on and kept the number,
+# three rounds in a row (2026-11-25).
+ESTIMATE_MOVE_RULE = """\
+If you correct an error your number rested on, or the question's terms changed since, \
+say in one sentence how much that moves your number, or what else holds it up."""
 ESTIMATE_RULE = """\
 End with this line, alone: **{estimate}** N% (low-high%), where N is your probability \
 for the question as the moderator framed it and low-high your range."""
@@ -436,7 +449,9 @@ Members' last estimates, parsed by the engine from their estimate lines:
 {lines}
 Council estimate (engine): median {median}%, members' estimates from {low}% to {high}%.
 Report these numbers as they are in the confidence spread; the council estimate is the \
-median, with that range. Don't re-read other numbers from the prose."""
+median. That range is the spread of the members' numbers, not a range of the council's \
+own: say "estimates from {low}% to {high}%" in its row. Don't re-read other \
+numbers from the prose."""
 SYNTHESIS_ESTIMATE_LINE = "- @{nick} (round {round}): {estimate}"
 SYNTHESIS_DEVIL = (
     "@{nick} argued a devil's advocate role: report their arguments under the "
@@ -511,15 +526,20 @@ REPAIR_TURN_TASK: dict[Language, str] = {
     "en": (
         "Before your message is posted, the engine found these problems in it:\n"
         "{problems}\n"
-        "Rewrite the message with only these fixed: correct the tag, drop the claim, or "
-        "state it as your own estimate; add or fix the required line; make the numbers "
+        "Rewrite the message with only these fixed: correct the tag or drop the claim. Only "
+        "a forecast or a judgment can become your own estimate; a figure about what "
+        "already is (a firm's cash, sales, debt) that your facts don't give is dropped, "
+        "never kept as an estimate or from memory. Add or fix the required line; make the numbers "
         "agree. Change nothing else. Reply with the full corrected message and nothing more."
     ),
     "fr": (
         "Avant que ton message soit publié, le moteur y a trouvé ces problèmes :\n"
         "{problems}\n"
         "Réécris le message en corrigeant seulement ces points : corrige l'étiquette, "
-        "retire l'affirmation ou présente-la comme ta propre estimation ; ajoute ou corrige "
+        "ou retire l'affirmation. Seul un pronostic ou un jugement peut devenir ta propre "
+        "estimation ; un chiffre sur ce qui existe déjà (la trésorerie, les ventes, la "
+        "dette d'une entreprise) que tes faits ne donnent pas est retiré, jamais gardé "
+        "comme estimation ou de mémoire. Ajoute ou corrige "
         "la ligne demandée ; mets les chiffres en accord. Ne change rien d'autre. Réponds "
         "par le message corrigé en entier, et rien d'autre."
     ),
@@ -630,7 +650,10 @@ gives 3.6 %, below the 8-12 % held"). Where a member tells \
 another what they assume, treat, price or ignore, compare it with that other member's \
 own words and numbers: if those contradict it ("you ignore the fees" to one whose total \
 includes them), report a "contradiction", even from the devil's advocate, whose job is \
-to attack a position, not to misstate it. Only errors you can show, \
+to attack a position, not to misstate it. When a member asked to check an error \
+says their line stands while admitting what makes it wrong, report it again. If a \
+member only followed the wording of your own floor line, report nothing: fix the \
+wording in their next turn. Only errors you can show, \
 never a difference of judgment or a labelled estimate that is plausible. A figure of \
 speech or an idiom ("keep your head down", "X is suicide") is no contradiction: read \
 it for what it means, and two pieces of advice that can both be followed don't \
@@ -691,6 +714,8 @@ READABLE_PAGES = (
 READ_FOR_CHARS = 100  # of each earlier `look_for` shown beside a page
 READABLE_PAGE = "- {url}"
 READABLE_PAGE_READ = "- {url} (already read for: {look_for})"
+# A search for what a page the reader can't take would have held.
+UNREADABLE_FOCUS = "{look_for}: as reported in {url} or an HTML copy of that document"
 DOCUMENTS_RULE_OFF = "the document reader is off: always empty."
 # A local Chair asked for no read in a whole session, though its facts cited the
 # official projections table that held the figure their Missing lines named
@@ -1028,13 +1053,17 @@ If the question states that something happened (an appointment, a return, a deal
 law, a result), search for that event itself, in the question's words, and for the \
 newest reports on it up to today. Report it as confirmed, with its date, or as "not \
 confirmed", with the date of the newest report you found. A report older than the \
-event can't show that it didn't happen."""
+event can't show that it didn't happen.
+If the question is about a fall, a rise or another market move, report the cause each \
+source gives for it, the one it puts first before the others, even when it supports the \
+question's own view; name the sources that differ."""
 
 # The same for the local summary of the first search, which can't search again.
 LOCAL_SUMMARY_PREMISE = """
 - if the question states that something happened and no result reports it, say "not \
 confirmed", with the date of the newest result on it; never say that it didn't happen: \
-older results can't show that;"""
+older results can't show that;
+- if it is about a market move, give the cause the results put first, before the others;"""
 
 # --- Local web search (SearXNG, local-only sessions): queries, then a summary --------
 # The engine runs the searches; the model never browses. Snippets only, no pages.
@@ -1391,9 +1420,14 @@ def floor_line(nick: str, prompt: str) -> str:
 
 
 def render_research(
-    entries: Sequence[tuple[str, str, str]], missing: Sequence[tuple[str, int]] = ()
+    entries: Sequence[tuple[str, str, str]],
+    missing: Sequence[tuple[str, int]] = (),
+    named: Sequence[tuple[str, str, str]] = (),
 ) -> str:
     """Render research notes, given as (focus, date, text): the first, then newest first.
+
+    `named` (the facts the member was asked about) comes before them. The note on the
+    question's terms stays right after the opening's.
 
     `missing` (fact, times searched) goes first, as one line. The first note (the
     opening's background, which checks the user's premises) comes right after it, so
@@ -1401,7 +1435,10 @@ def render_research(
     gemma lost the premise checks its argument rested on).
     """
     rendered = [RESEARCH_ENTRY.format(focus=f, date=d, text=t) for f, d, t in entries]
-    notes = rendered[:1] + rendered[:0:-1]
+    terms = {labels["research_terms"] for labels in LABELS.values()}
+    lead = 2 if len(entries) > 1 and entries[1][0] in terms else 1
+    notes = [RESEARCH_ENTRY.format(focus=f, date=d, text=t) for f, d, t in named]
+    notes += rendered[:lead] + rendered[lead:][::-1]
     if missing:
         items = [
             (NOT_FINDABLE_ITEM if count > 1 else NOT_FINDABLE_ITEM_ONCE).format(

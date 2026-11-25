@@ -18,6 +18,9 @@ from privy_council.models.moderator import ModeratorDecision
 from privy_council.models.persona import Persona, Role
 from privy_council.models.session import PendingTurn
 
+# Points an estimate must move for its round to count as progress.
+ESTIMATE_MOVE = 3.0
+
 
 class EstimateFlow(FlawFlow):
     """Ask for, read and report the members' estimate lines."""
@@ -36,6 +39,8 @@ class EstimateFlow(FlawFlow):
             return ""
         devil = persona.meta.role is Role.DEVIL_ADVOCATE
         rule = prompts.estimate_rule(self.meta.language, devil, self.meta.runtime.split)
+        if not devil and not self._is_blind():
+            rule = f"{prompts.ESTIMATE_MOVE_RULE}\n{rule}"
         return f"\n\n{rule}"
 
     def _turn_flaws(self, persona: Persona, prompt: context.Prompt, text: str) -> list[Flaw]:
@@ -127,6 +132,20 @@ class EstimateFlow(FlawFlow):
             self._round_estimate_flaws(),
         )
         return f"\n\n{table}"
+
+    def _estimates_moved(self) -> bool:
+        """Whether a member's estimate moved this round: in a forecast, that is progress.
+
+        The moderator judged the decision settled while estimates still rose on its
+        challenges, and the debate stopped (2026-11-25).
+        """
+        rt = self.meta.runtime
+        return self._estimating() and any(
+            len(r) > 1
+            and r[-1].round == rt.round
+            and abs(r[-1].estimate.value - r[-2].estimate.value) >= ESTIMATE_MOVE
+            for r in rt.estimates.values()
+        )
 
     def _late_facts_turns(self) -> list[PendingTurn]:
         """Return a last turn for each member whose estimate predates the newest facts.

@@ -23,6 +23,7 @@ from privy_council.backends.base import (
 from privy_council.backends.registry import BackendRegistry
 from privy_council.config import Settings
 from privy_council.engine import context, prompts
+from privy_council.engine import facts as fact_tags
 from privy_council.engine.budget import BudgetReport, cap_warnings, quota_warnings
 from privy_council.engine.notices import (
     NOTICE_CUT_OFF,
@@ -158,6 +159,7 @@ class EngineCore:
         # Each member's failed turns in a row and the round of the last one. Not saved: a
         # resumed session tries everyone again.
         self._failed_turns: dict[str, tuple[int, int]] = {}
+        self._failed_reads: set[str] = set()  # pages the reader couldn't take (normalized)
         self._save()
 
     @property
@@ -372,6 +374,21 @@ class EngineCore:
         label = prompts.LABELS[self.meta.language]["primary"]
         domains = self.settings.research.primary_domains
         return context.facts_text(self.meta.runtime.research, domains, label)
+
+    def _member_facts(self, persona: Persona, prompt: str = "") -> str | None:
+        """Return the facts for a member's turn: compact on a local model's small window.
+
+        The facts its floor line (`prompt`) names come first there.
+        """
+        if self._route_placement(persona)[0] is not BackendKind.OLLAMA:
+            return self._facts()
+        return context.facts_text(
+            self.meta.runtime.research,
+            self.settings.research.primary_domains,
+            prompts.LABELS[self.meta.language]["primary"],
+            short=True,
+            first=fact_tags.cited_ids(prompt),
+        )
 
     def _facts_task(self) -> str:
         """Return the fact-tag rule to append to a member's task ("" with no facts)."""

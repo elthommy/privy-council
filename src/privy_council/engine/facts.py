@@ -26,6 +26,10 @@ _SPAN = re.compile(r"F(\d+)\s*[\-\u2013]\s*F(\d+)")
 _MAX_SPAN = 10
 # A fact's tag at the start of its line, after the bullet, as `tag_block` writes it.
 _TAGGED_LINE = re.compile(r"^\s*(?:(?:[-*•]|\d+[.)])\s+)?\[(F\d+)(?:, [a-z]+)?\] ?", re.MULTILINE)
+# "[F3]-[F6]": the moderator's way of writing a span.
+_TAG_SPAN = re.compile(r"(?<=\d)(?:, [a-z]+)?\]\s*[\-\u2013]\s*\[(?=F\d)")
+# A Markdown link; not a bare tag, which no "(" follows.
+_LINK = re.compile(r"\[([^\[\]]+)\]\((https?://[^\s)]+)\)")
 URL = re.compile(r"https?://[^\s)\]>\"']+")
 # Where a sentence ends: after . ! or ? (and any tags right after it) before a space,
 # or at a line break, so a list item is a sentence of its own. "5.5%" has no space.
@@ -118,6 +122,38 @@ def tagged_notes(
         joined = out[fact.note_index]
         out[fact.note_index] = f"{joined}\n{block}" if joined else block
     return out
+
+
+def without_urls(text: str) -> str:
+    """Return facts with each URL cut to its site: "[$4bn](https://x.org/a)" is "$4bn (x.org)".
+
+    For a small model's prompt: the links were a third of it, so the facts the
+    moderator asked about were trimmed away (2026-11-25).
+    """
+    text = _LINK.sub(lambda m: f"{m[1]} ({_site(m[2])})", text)
+    return URL.sub(lambda m: _site(m[0]), text)
+
+
+def _site(url: str) -> str:
+    """Return a URL's host without "www."."""
+    return (urlsplit(url).hostname or "").removeprefix("www.")
+
+
+def cited_ids(text: str) -> list[str]:
+    """Return the fact ids a floor line names, a span of two tags ("[F3]-[F6]") included."""
+    return tags(_TAG_SPAN.sub("-", text))
+
+
+def split_named(text: str, ids: Collection[str]) -> tuple[str, str]:
+    """Split a tagged note into the facts with these ids and the others."""
+    if not ids:
+        return "", text
+    top: list[str] = []
+    others: list[str] = []
+    for block in blocks(text):
+        tag = _TAGGED_LINE.match(block)
+        (top if tag and tag[1] in ids else others).append(block)
+    return "\n".join(top), "\n".join(others)
 
 
 def facts_section(prompt: str) -> str:

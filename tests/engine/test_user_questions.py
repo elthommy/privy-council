@@ -370,3 +370,20 @@ async def test_no_chair_search_when_it_stops_early(
     assert not questions_posted(h)
     await h.engine.close()  # the synthesis still runs
     assert [r for r in h.claude.requests if r.tag.purpose == "synthesis"]
+
+
+async def test_a_floor_prompt_written_before_the_answer_carries_it(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    h = Harness(tmp_path, personas, standard_responder([]))
+    h.engine.meta.runtime.round = 1
+    h.engine._post("rigor", "over the summer")
+    h.engine.meta.runtime.moderated_upto = len(h.engine.messages)
+    assert h.engine._answers_task() == ""
+    h.engine._post(h.engine.moderator.slug, "@user Which window?", to_user=True)
+    assert h.engine._answers_task() == ""  # not answered yet
+    h.engine._post("user", "any time before October")
+    task = h.engine._answers_task()
+    assert "any time before October" in task and "the user's answers win" in task
+    h.engine.meta.runtime.moderated_upto = len(h.engine.messages)  # the update saw it
+    assert h.engine._answers_task() == ""

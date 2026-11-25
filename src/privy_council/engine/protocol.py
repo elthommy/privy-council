@@ -477,6 +477,18 @@ class DebateEngine(DocumentFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
             return []
         return context.render_history(lines, self.nick)
 
+    def _answers_task(self) -> str:
+        """Return the user's answers to append to a floor prompt written before them.
+
+        The round's prompts are planned with the questions, so they can't know the
+        answers: they named a window the user then changed, and the members who
+        followed them were flagged for it (2026-11-25).
+        """
+        if self.meta.runtime.round == 0 or not (exchange := self._answer_exchange()):
+            return ""
+        lines, _ = context.fit_messages(exchange, PEOPLE_LINES_MAX_CHARS)
+        return "\n\n" + prompts.ANSWERS_AFTER_FLOOR.format(lines="\n".join(lines))
+
     def _opening_exchange(self) -> list[str]:
         """Return the opening and the users' answers to it as chat lines, [] if none."""
         opening = next(
@@ -611,11 +623,12 @@ class DebateEngine(DocumentFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
                 if turn.prompt
                 else prompts.task(prompts.OPEN_ROUND_TASK, lang, round=rt.round)
             )
+        task += self._answers_task() if turn.prompt else ""
         task += self._facts_task() + self._estimate_task(persona)
         return context.build_prompt(
             system=self._member_system(persona),
             topic=self.meta.topic,
-            facts=self._facts(),
+            facts=self._member_facts(persona, turn.prompt),
             facts_share=self.settings.research.context_share,
             dossier=self._dossier(),
             dossier_share=self.settings.dossier.context_share,
@@ -700,7 +713,9 @@ class DebateEngine(DocumentFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
                 or self._reads_for_repeats(decision.research)
                 or await self._picked_reads()
             )
-            relayed = await self._auto_research(decision.research)
+            relayed = await self._auto_research(
+                self._searches_for_unreadable(decision.research, decision.documents)
+            )
             relayed += await self._auto_documents(documents)
         if self._drop_answered_flaws(rt.research[searched:]):
             rt.pending = self._with_flaw_turns(planned)
@@ -884,6 +899,7 @@ class DebateEngine(DocumentFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
         progress = rt.round == 1 or not dynamics.stalled(
             decision.new_arguments, decision.decision_open, stats, decision.position_changes
         )
+        progress = progress or self._estimates_moved()
         rt.stalled_rounds = 0 if progress else rt.stalled_rounds + 1
         if self.store:
             self.store.save_debate_state(rt.debate_state)
@@ -945,6 +961,7 @@ class DebateEngine(DocumentFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
         The moderator stops on consensus; the engine on `stall_rounds` stalled
         rounds in a row (loop detection). Both need auto_stop_on_consensus, and
         neither stops the debate early after round 1, before any cross-examination.
+        The engine gives one more round to lookups the moderator just asked for.
         """
         protocol = self.council.protocol
         rt = self.meta.runtime
@@ -952,7 +969,10 @@ class DebateEngine(DocumentFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
         if decision is not None and decision.stop and (early_ok or last_round):
             default = NOTICE_REACHED_MAX if last_round else NOTICE_REASON_MODERATOR
             return decision.stop_reason or default
-        if early_ok and not last_round and 0 < protocol.stall_rounds <= rt.stalled_rounds:
+        limit = protocol.stall_rounds
+        if early_ok and not last_round and 0 < limit <= rt.stalled_rounds:
+            if decision is not None and rt.stalled_rounds == limit and self._looks_up(decision):
+                return None
             if decision is not None and not decision.decision_open:
                 return NOTICE_REASON_SETTLED
             return NOTICE_REASON_LOOPING.format(count=rt.stalled_rounds)
@@ -1084,7 +1104,7 @@ class DebateEngine(DocumentFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
         prompt = context.build_prompt(
             system=self._member_system(persona),
             topic=self.meta.topic,
-            facts=self._facts(),
+            facts=self._member_facts(persona, question),
             facts_share=self.settings.research.context_share,
             dossier=self._dossier(),
             dossier_share=self.settings.dossier.context_share,
