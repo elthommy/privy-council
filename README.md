@@ -35,6 +35,8 @@ uv sync
 uv run council doctor     # checks the claude login and flags, Ollama, models, config (no quota used)
 ```
 
+Before upgrading Ollama, follow [docs/upgrading-ollama.md](docs/upgrading-ollama.md): it checks that every seated model still loads.
+
 ## Quick start
 
 ```bash

@@ -122,6 +122,7 @@ uv run council new finance "topic" --no-tui   # plain-text REPL mode (handy for 
 uv run council memory show       # private notes + shared user facts (data/memory/)
 uv run pytest                    # tests (no live calls)
 uv run pytest -m live            # opt-in live tests (real claude/ollama) — uses quota!
+uv run python -u scripts/load_gate.py --help   # before/after an Ollama upgrade: docs/upgrading-ollama.md
 uv run ruff check . && uv run ruff format --check .
 uv run mypy src
 ```
