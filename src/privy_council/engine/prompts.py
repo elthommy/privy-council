@@ -15,7 +15,7 @@ from privy_council.models.session import DebateState, Message
 from privy_council.models.vote import Vote
 from privy_council.util.language import Language
 
-PROMPTS_VERSION = "79"
+PROMPTS_VERSION = "80"
 
 # Backends that accept a single user turn (the claude CLI on stdin) flatten a
 # multi-message conversation with these labels.
@@ -1232,6 +1232,9 @@ decisions. Return a JSON object matching the schema:
 Rules:
 - Only facts the user stated. Never infer, never take a council member's claim.
 - Skip facts already on file, temporary details, and the question itself.
+- Skip what only settles this question's terms: its deadline, what counts as the event, \
+how something in it is defined or measured ("a strike means a full day", "only a \
+signed letter counts"). Read later, on another question, it would pass for the user's view there.
 - At most {limit} facts. Return {{"facts": []}} if there is nothing new."""
 
 TITLE_USER_MESSAGES = "The user's messages this session"
