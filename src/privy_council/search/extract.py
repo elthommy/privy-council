@@ -1,4 +1,4 @@
-"""Page text for the document reader (M21): HTML to blocks, blocks to chunks.
+"""Page text for the document reader (M21): HTML, text or PDF text to blocks, blocks to chunks.
 
 Pure functions, stdlib only. Scripts and styles are dropped, headings kept, and a
 table row becomes its cells joined by " | ", so a maturity table stays readable.
@@ -16,6 +16,9 @@ from typing import Literal
 
 CHUNK_CHARS = 1500
 TABLE_CHARS = 4000
+# On a 119-page filing, 1,500-character passages ranked its debt table 6th to 25th.
+PDF_CHARS = 700
+PDF_OVERLAP_CHARS = 250  # lines a PDF passage repeats from the one before
 # A paragraph this short right before a table is its lead-in ("The following table
 # shows principal maturities by year"): it joins the table's passage, or it outranks
 # the table, whose rows hold the figures but few of the words. A release without
@@ -175,6 +178,37 @@ def html_blocks(html: str) -> list[Block]:
 def text_blocks(text: str) -> list[Block]:
     """Return a plain-text page's paragraphs (split on blank lines)."""
     return [Block("text", _clean(p)) for p in re.split(r"\n\s*\n", text) if p.strip()]
+
+
+def pdf_chunks(text: str) -> list[Chunk]:
+    """Return a PDF's text as passages of about PDF_CHARS, its lines kept.
+
+    A PDF has no paragraphs or tables, but each table row is a line: kept lines keep
+    the rows readable, and the overlap keeps a table's title with its first rows.
+    """
+    out: list[Chunk] = []
+    window: list[str] = []
+    for line in (_clean(raw) for raw in text.splitlines()):
+        if not line:
+            continue
+        line = line[:PDF_CHARS]
+        if window and sum(len(w) + 1 for w in window) + len(line) > PDF_CHARS:
+            out.append(Chunk("", "\n".join(window)))
+            window = _tail(window)
+        window.append(line)
+    if window:
+        out.append(Chunk("", "\n".join(window)))
+    return out
+
+
+def _tail(lines: list[str]) -> list[str]:
+    """Return the last lines that fit in PDF_OVERLAP_CHARS."""
+    size = 0
+    for index in reversed(range(len(lines))):
+        size += len(lines[index]) + 1
+        if size > PDF_OVERLAP_CHARS:
+            return lines[index + 1 :]
+    return list(lines)
 
 
 def chunks(blocks: list[Block]) -> list[Chunk]:

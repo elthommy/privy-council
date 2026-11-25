@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from privy_council.search import bm25
-from privy_council.search.extract import TABLE_CHARS, chunks, html_blocks, text_blocks
+from privy_council.search.extract import TABLE_CHARS, chunks, html_blocks, pdf_chunks, text_blocks
 
 # A made-up filing: its debt table sits after 100,000 characters of other notes,
 # past what a web fetch returns.
@@ -125,3 +125,13 @@ def test_every_part_of_a_cut_table_keeps_the_lead_in() -> None:
     assert len(cut) > 1
     assert all(c.text.startswith("Not seasonally adjusted.\nLine 0 | 0") for c in cut)
     assert all(c.label() == "Table 5. Widgets\nNot seasonally adjusted." for c in cut)
+
+
+def test_pdf_passages_keep_the_rows_and_a_tables_title() -> None:
+    filler = "\n".join(f"The company discusses other matter number {n}." for n in range(200))
+    table = "Principal payments by year:\n2027 $ 2,222\n2028  3,333"
+    passages = pdf_chunks(f"{filler}\n{table}\n{filler}")
+    assert all(len(b.text) <= 700 for b in passages)
+    assert any("Principal payments by year:\n2027 $ 2,222\n2028 3,333" in b.text for b in passages)
+    shared = passages[0].text.splitlines()[-1]
+    assert shared in passages[1].text  # passages overlap

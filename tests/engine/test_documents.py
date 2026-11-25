@@ -292,19 +292,31 @@ async def test_an_unreadable_page_becomes_a_search_and_is_not_tried_again(
     tmp_path: Path, personas: dict[str, Persona], fetched: list[str]
 ) -> None:
     h = Harness(tmp_path, personas, responder([]), config=ON)
-    pdf = "https://files.example.org/q3/filing.pdf"
+    sheet = "https://files.example.org/q3/filing.xlsx"
     h.engine.meta.runtime.research.append(
-        ResearchNote(focus="filing", text=f"- Debt $5B ({pdf}); leases ({FILING_URL})")
+        ResearchNote(focus="filing", text=f"- Debt $5B ({sheet}); leases ({FILING_URL})")
     )
-    request = document_flow.DocumentRequest(url=pdf, look_for="principal by year")
+    request = document_flow.DocumentRequest(url=sheet, look_for="principal by year")
     await h.engine._auto_documents([request])
     assert fetched == []
     searches = h.engine._searches_for_unreadable(["a"], [request])
-    assert searches[0] == "a" and pdf in searches[1] and "principal by year" in searches[1]
+    assert searches[0] == "a" and sheet in searches[1] and "principal by year" in searches[1]
     assert h.engine._searches_for_unreadable(["a", "b"], [request]) == ["a", "b"]  # no room
-    elsewhere = document_flow.DocumentRequest(url="https://x.example/a.pdf", look_for="debt")
+    elsewhere = document_flow.DocumentRequest(url="https://x.example/a.xlsx", look_for="debt")
     assert h.engine._searches_for_unreadable([], [elsewhere]) == []  # not in the facts
     page = document_flow.DocumentRequest(url=FILING_URL, look_for="leases")
     assert h.engine._searches_for_unreadable([], [page]) == []
     h.engine._failed_reads.add(document_flow.normalize_url(FILING_URL))  # it failed before
     assert len(h.engine._searches_for_unreadable([], [page])) == 1
+
+
+async def test_a_pdf_is_read_by_its_lines(tmp_path: Path, personas: dict[str, Persona]) -> None:
+    h = Harness(tmp_path, personas, responder([]), config=ON)
+    filler = "\n".join(f"Other matter {n}." for n in range(300))
+    page = FetchedPage(
+        url="https://www.example.gov/filing.pdf",
+        content_type="application/pdf",
+        text=f"{filler}\nPrincipal due by year:\n2027 $ 2,222\n{filler}",
+    )
+    best = h.engine._passages(page, "principal due by year")[0]
+    assert "Principal due by year:\n2027 $ 2,222" in best

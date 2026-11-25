@@ -5,8 +5,10 @@ from __future__ import annotations
 import pytest
 from pytest_httpx import HTTPXMock
 
+from privy_council.backends.base import BackendOutputError, BackendTimeoutError
 from privy_council.config import DocumentsConfig
 from privy_council.search.fetch import DocumentRefused, check_url, fetch_page
+from privy_council.search.pdf_text import pdf_text
 
 PUBLIC = "93.184.215.14"
 ADDRESSES = {
@@ -14,6 +16,27 @@ ADDRESSES = {
     "intranet.example.org": ["192.168.1.20"],
     "mixed.example.org": [PUBLIC, "10.0.0.5"],
 }
+
+
+def make_pdf(lines: list[str]) -> bytes:
+    """Return a one-page PDF with these lines of text."""
+    shown = "".join(f"({line}) Tj 0 -20 Td " for line in lines)
+    stream = f"BT /F1 12 Tf 72 700 Td {shown}ET"
+    objects = [
+        "<< /Type /Catalog /Pages 2 0 R >>",
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R "
+        "/Resources << /Font << /F1 5 0 R >> >> >>",
+        f"<< /Length {len(stream)} >>\nstream\n{stream}\nendstream",
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ]
+    out, offsets = "%PDF-1.4\n", []
+    for number, body in enumerate(objects, 1):
+        offsets.append(len(out))
+        out += f"{number} 0 obj\n{body}\nendobj\n"
+    table = "".join(f"{o:010} 00000 n \n" for o in offsets)
+    xref = f"xref\n0 6\n0000000000 65535 f \n{table}trailer << /Size 6 /Root 1 0 R >>\n"
+    return (out + xref + f"startxref\n{len(out)}\n%%EOF").encode()
 
 
 async def fake_resolve(host: str, port: int) -> list[str]:
@@ -104,9 +127,34 @@ async def test_an_oversize_body_is_refused(httpx_mock: HTTPXMock) -> None:
         await fetch_page("https://example.org/big", config(max_bytes=1000), fake_resolve)
 
 
-async def test_a_pdf_is_refused(httpx_mock: HTTPXMock) -> None:
+async def test_a_spreadsheet_is_refused(httpx_mock: HTTPXMock) -> None:
     httpx_mock.add_response(
-        url="https://example.org/f.pdf", headers={"content-type": "application/pdf"}, content=b"%"
+        url="https://example.org/f", headers={"content-type": "text/csv"}, content=b"a,b"
     )
-    with pytest.raises(DocumentRefused, match="application/pdf"):
+    with pytest.raises(DocumentRefused, match="text/csv"):
+        await fetch_page("https://example.org/f", config(), fake_resolve)
+
+
+async def test_a_pdf_is_read(httpx_mock: HTTPXMock) -> None:
+    httpx_mock.add_response(
+        url="https://example.org/f.pdf",
+        headers={"content-type": "application/pdf"},
+        content=make_pdf(["Principal due by year", "2027 $ 2,222"]),
+    )
+    page = await fetch_page("https://example.org/f.pdf", config(), fake_resolve)
+    assert page.content_type == "application/pdf"
+    assert "2027 $ 2,222" in page.text.splitlines()
+
+
+@pytest.mark.parametrize("body", [b"not a pdf", make_pdf([])])
+async def test_an_unreadable_pdf_is_a_typed_error(httpx_mock: HTTPXMock, body: bytes) -> None:
+    httpx_mock.add_response(
+        url="https://example.org/f.pdf", headers={"content-type": "application/pdf"}, content=body
+    )
+    with pytest.raises(BackendOutputError, match="PDF"):
         await fetch_page("https://example.org/f.pdf", config(), fake_resolve)
+
+
+async def test_a_slow_pdf_is_killed() -> None:
+    with pytest.raises(BackendTimeoutError):
+        await pdf_text(make_pdf(["x"]), timeout_s=0.001)

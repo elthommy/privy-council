@@ -61,8 +61,8 @@ from privy_council.models.persona import BackendKind
 from privy_council.models.research import DocumentRecord, ReadPick, SearchResult
 from privy_council.models.session import ErrorEvent, ResearchNote, TurnStarted
 from privy_council.search import bm25
-from privy_council.search.extract import chunks, html_blocks, text_blocks
-from privy_council.search.fetch import FetchedPage, fetch_page
+from privy_council.search.extract import chunks, html_blocks, pdf_chunks, text_blocks
+from privy_council.search.fetch import PDF_TYPE, FetchedPage, fetch_page
 
 log = logging.getLogger(__name__)
 
@@ -134,7 +134,7 @@ class DocumentFlow(ResearchFlow):
     ) -> list[str]:
         """Return the searches to run: an unreadable page becomes one, if there is room.
 
-        The moderator asked for the same PDF three rounds in a row (2026-11-25).
+        The moderator asked for the same unreadable file three rounds in a row (2026-11-25).
         """
         out = list(focuses)
         for request in requests[:MAX_DOCUMENT_REQUESTS]:
@@ -305,11 +305,15 @@ class DocumentFlow(ResearchFlow):
     def _passages(self, page: FetchedPage, look_for: str) -> list[str]:
         """Return the page's passages that best match `look_for`, best first."""
         cfg = self.settings.research.documents
-        html = page.content_type != "text/plain"
-        blocks = html_blocks(page.text) if html else text_blocks(page.text)
-        cut = chunks(blocks)
+        if page.content_type == PDF_TYPE:
+            cut = pdf_chunks(page.text)
+        elif page.content_type == "text/plain":
+            cut = chunks(text_blocks(page.text))
+        else:
+            cut = chunks(html_blocks(page.text))
         rendered = [c.render() for c in cut]
-        labels = [c.label() for c in cut]
+        # A PDF passage starts on any line: its first one is no label.
+        labels = None if page.content_type == PDF_TYPE else [c.label() for c in cut]
         picked = bm25.top(look_for, rendered, cfg.passages, cfg.passage_chars, labels)
         return [rendered[i][: cfg.passage_chars] for i in picked]
 

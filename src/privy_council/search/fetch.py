@@ -3,7 +3,8 @@
 The guard: http(s) only, no credentials in the URL, and every hop's host must
 resolve to public addresses only (no private, loopback, link-local or reserved
 ones). Redirects are followed by hand and re-checked. The body is streamed with a
-size cap, the whole fetch has a time cap, and only HTML and plain text are read.
+size cap, the whole fetch has a time cap, and only HTML, plain text and PDF are read
+(a PDF's text is extracted in a capped child process, `search/pdf_text.py`).
 
 The request carries only the URL: no cookies (a fresh client per hop), no referer,
 no proxy or netrc settings from the environment.
@@ -19,7 +20,7 @@ import ipaddress
 import logging
 import socket
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from urllib.parse import urljoin, urlsplit
 
 import httpx
@@ -30,11 +31,14 @@ from privy_council.backends.base import (
     BackendUnavailableError,
 )
 from privy_council.config import DocumentsConfig
+from privy_council.search.pdf_text import pdf_text
 
 log = logging.getLogger(__name__)
 
+PDF_TYPE = "application/pdf"
 MAX_REDIRECTS = 5
-READABLE_TYPES = frozenset({"text/html", "application/xhtml+xml", "text/plain"})
+READABLE_TYPES = frozenset({"text/html", "application/xhtml+xml", "text/plain", PDF_TYPE})
+ACCEPT = "text/html, text/plain, application/pdf"
 Resolver = Callable[[str, int], Awaitable[list[str]]]
 
 
@@ -118,19 +122,24 @@ async def fetch_page(
     """Fetch a page through the guard, following up to MAX_REDIRECTS redirects."""
     try:
         async with asyncio.timeout(config.timeout_s):
-            return await _follow(url, config, resolve)
+            page, body = await _follow(url, config, resolve)
     except (TimeoutError, httpx.TimeoutException) as exc:
         raise BackendTimeoutError(f"the page took over {config.timeout_s:g} s: {url}") from exc
     except httpx.TransportError as exc:
         raise BackendUnavailableError(f"can't reach {url}") from exc
+    if page.content_type == PDF_TYPE:  # outside the fetch's time cap: it has its own
+        return replace(page, text=await pdf_text(body))
+    return page
 
 
-async def _follow(url: str, config: DocumentsConfig, resolve: Resolver) -> FetchedPage:
+async def _follow(
+    url: str, config: DocumentsConfig, resolve: Resolver
+) -> tuple[FetchedPage, bytes]:
     """Fetch hop by hop: check each URL, then request it with a fresh client."""
     for _ in range(MAX_REDIRECTS + 1):
         await check_url(url, resolve)
         log.info("document fetch: %s", url)
-        headers = {"User-Agent": config.user_agent, "Accept": "text/html, text/plain"}
+        headers = {"User-Agent": config.user_agent, "Accept": ACCEPT}
         async with (
             httpx.AsyncClient(
                 headers=headers, follow_redirects=False, trust_env=False, timeout=config.timeout_s
@@ -144,13 +153,16 @@ async def _follow(url: str, config: DocumentsConfig, resolve: Resolver) -> Fetch
     raise DocumentRefused(f"refused: more than {MAX_REDIRECTS} redirects")
 
 
-async def _read(url: str, response: httpx.Response, max_bytes: int) -> FetchedPage:
-    """Read a response's body as text, refusing other types and oversized bodies."""
+async def _read(url: str, response: httpx.Response, max_bytes: int) -> tuple[FetchedPage, bytes]:
+    """Read a response's body, refusing other types and oversized bodies.
+
+    A PDF comes back as bytes with no text yet.
+    """
     if response.status_code != 200:
         raise BackendUnavailableError(f"HTTP {response.status_code} for {url}")
     content_type = response.headers.get("content-type", "").split(";")[0].strip().lower()
     if content_type not in READABLE_TYPES:
-        raise DocumentRefused(f"refused: {content_type or 'no type'} is not HTML or text")
+        raise DocumentRefused(f"refused: {content_type or 'no type'} is not HTML, text or PDF")
     declared = response.headers.get("content-length", "")
     if declared.isdigit() and int(declared) > max_bytes:
         raise DocumentRefused(f"refused: the page is over {max_bytes:,} bytes")
@@ -159,8 +171,10 @@ async def _read(url: str, response: httpx.Response, max_bytes: int) -> FetchedPa
         body += chunk
         if len(body) > max_bytes:
             raise DocumentRefused(f"refused: the page is over {max_bytes:,} bytes")
+    if content_type == PDF_TYPE:
+        return FetchedPage(url=url, content_type=content_type, text=""), bytes(body)
     try:
         text = bytes(body).decode(response.encoding or "utf-8", errors="replace")
     except LookupError:  # a charset Python doesn't know
         text = bytes(body).decode("utf-8", errors="replace")
-    return FetchedPage(url=url, content_type=content_type, text=text)
+    return FetchedPage(url=url, content_type=content_type, text=text), b""

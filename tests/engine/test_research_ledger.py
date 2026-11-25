@@ -132,7 +132,7 @@ def cited(focus: str, text: str, *, source: str = "claude", auto: bool = True) -
 def test_readable_pages_are_the_official_html_pages_newest_first() -> None:
     notes = [
         cited("deposits", f"- Deposits 120 ({GOV})\n- Blog view https://blog.example.com/x"),
-        cited("loans", "- Loans 80 https://stats.example.gov/release/h8.pdf."),
+        cited("loans", "- Loans 80 https://stats.example.gov/release/h8.xlsx."),
         cited("rates", "- Rate 3 % (https://bank.example.gov/rates/)"),
         cited("split by type", f"- Table 2: 70 {GOV}", source="document", auto=False),
     ]

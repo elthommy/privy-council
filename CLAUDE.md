@@ -57,7 +57,8 @@ change an entry point (a command, a front end, a network call, a file read);
     (http(s) only, no credentials in the URL, every hop's host resolved and refused
     unless all its addresses are public, an IPv4 address inside an IPv6 one
     included (mapped, 6to4, Teredo, NAT64), redirects followed by hand and re-checked, 5 at
-    most, 20 MB and 30 s caps, HTML and plain text only). The request carries only the
+    most, 20 MB and 30 s caps, HTML, plain text and PDF only; a PDF is parsed by pypdf in a
+    child process with no environment, file writes off, memory and CPU caps). The request carries only the
     URL: no cookies, referer, proxy or netrc, and a generic User-Agent. The page is data
     for one summary call with **no tools**; bullets with a figure or number the
     passages don't hold are dropped. The moderator may only ask for a URL already in
@@ -106,7 +107,7 @@ change an entry point (a command, a front end, a network call, a file read);
 ## Tech stack
 
 - Python **3.12+**, managed with **uv**.
-- **Textual** for the TUI, **Typer** for the CLI, **Pydantic v2** for models and config, **httpx** (async) for Ollama, **python-frontmatter** and **PyYAML** for persona and council files, **markdown-it-py** for the HTML export, **discord.py** for the Discord front end (`chat/discord_bot.py` only), **Jinja2** optionally for prompt templates, and `tomllib` for config.
+- **Textual** for the TUI, **Typer** for the CLI, **Pydantic v2** for models and config, **httpx** (async) for Ollama, **python-frontmatter** and **PyYAML** for persona and council files, **markdown-it-py** for the HTML export, **pypdf** for the document reader's PDFs (`search/pdf_text.py` only), **discord.py** for the Discord front end (`chat/discord_bot.py` only), **Jinja2** optionally for prompt templates, and `tomllib` for config.
 - Testing: **pytest**, **pytest-asyncio**, **pytest-httpx**. Style: **ruff** (lint + format). Types: **mypy** in strict mode on `src/`.
 - Use asyncio throughout the engine and backends. No threads, except where Textual requires them.
 
@@ -143,7 +144,7 @@ src/privy_council/
                *_flow.py: one module per feature (memory, research, document,
                dossier, flaw, review, roster, estimate)
   search/      base.py searxng.py (local web search, local-only sessions)
-               fetch.py (URL guard) extract.py bm25.py (document reader)
+               fetch.py (URL guard) extract.py pdf_text.py bm25.py (document reader)
   chat/        frontend.py render.py names.py store.py launch.py cli.py
                discord_bot.py (the only module importing discord.py)
   memory/      store.py distill.py

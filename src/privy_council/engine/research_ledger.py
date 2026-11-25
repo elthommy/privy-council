@@ -34,8 +34,8 @@ MAX_EARLIER_QUERIES = 15
 MAX_NOT_FINDABLE = 5
 # The moderator's task lists at most this many official pages it may read (newest first).
 MAX_READABLE_PAGES = 6
-# The document reader takes HTML and plain text only.
-_UNREADABLE = (".pdf", ".xls", ".xlsx", ".csv", ".zip", ".doc", ".docx", ".ppt", ".pptx")
+# The document reader takes HTML, plain text and PDF only.
+_UNREADABLE = (".xls", ".xlsx", ".csv", ".zip", ".doc", ".docx", ".ppt", ".pptx")
 # A release calendar holds dates, not figures: a local Chair's page pick read one for
 # a figure (2026-11-19). Path words, matched whole between separators.
 _CALENDAR_PATH = re.compile(r"(?:^|[/_.-])(?:schedule|schedules|calendar|calendars)(?:$|[/_.-])")
@@ -154,15 +154,14 @@ def _note_urls(note: ResearchNote) -> dict[str, str]:
 
 
 def data_file(url: str) -> bool:
-    """Tell whether a URL is a PDF or data file, by its path."""
-    path = urlsplit(url).path.lower()
-    return path.endswith(_UNREADABLE) or path.rstrip("/").endswith("/pdf")
+    """Tell whether a URL is a data or office file, by its path."""
+    return urlsplit(url).path.lower().endswith(_UNREADABLE)
 
 
 def _readable(url: str, primary_domains: Collection[str], refusing: Collection[str]) -> bool:
     """Tell whether a URL is an official page the reader can take.
 
-    No PDF or data file, no release calendar, and no site that refuses the reader
+    No data or office file, no release calendar, and no site that refuses the reader
     (`refusing`).
     """
     path = urlsplit(url).path.lower()
