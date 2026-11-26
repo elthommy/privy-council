@@ -2,8 +2,10 @@
 
 All notable changes, by milestone. Dates are when each milestone was built.
 
-## Unreleased (2026-10-25 – 2026-11-25)
+## Unreleased (2026-10-25 – 2026-11-26)
 
+- **The Chair's requests no longer ride on its questions**: a search, page read or summon it asks you to allow comes in its own message, before its questions, so your answer sits under the question it answers. The Chair is told that only the command (`/read`, `/research`, `/summon`) allows a request: a reply in words never does.
+- Basis points count as the percentage they equal ("412bp" is 4.12%), and an amount after a year ("2028 $187bn") keeps its currency: both were flagged as unsourced or miscited. A memory note no longer repeats its own date written bare ("2026-11-26: ...").
 - **A member sees your answer even when the Chair's prompt predates it**: the round's prompts are written with the Chair's questions, so they could name a window you then changed. Your answers now go into each prompt, and win over it. The Chair is told not to report a member who only followed its own wording.
 - **Small local models see every fact**: links are cut to their site name in their prompts (they were a third of the text), and the facts the Chair asks a member about come first. The note on your question's terms follows the opening's.
 - **The document reader reads PDFs** (new dependency: pypdf, run in a capped child process). Scans without text are refused.

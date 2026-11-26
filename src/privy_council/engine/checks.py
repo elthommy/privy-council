@@ -47,9 +47,11 @@ _NUM = r"(?:\d{1,3}(?:[ \u00a0\u202f]\d{3})+(?!\d)|\d+)(?:[.,]\d+)*"
 _MULT = r"(?:k|K|M|B|T|bn|tn|thousand|million|billion|trillion|milliards?|millions?)"
 _CURRENCY = r"[€$£]"
 _CURRENCY_BEFORE = re.compile(r"[€$£]\s?$")
-# Units that make a number a figure worth checking (M11).
+# Units that make a number a figure worth checking (M11). A currency sign with a
+# number right after it starts the next figure: in "2028 $187bn" the $ is 187bn's,
+# not a 2028-dollar amount (false MISCITED, 2026-11-26 session).
 _UNIT = (
-    r"(?:%|€|\$|£|\u00d7"
+    r"(?:%|[€$£](?!\s?\d)|\u00d7"
     r"|(?:EUR|USD|euros?|dollars?|GB|Go|TB|To|MB|Mo"
     r"|years?|yrs?|ans|années?|months?|mois|km|miles?|x)(?!\w))"
 )
@@ -59,6 +61,8 @@ _FIGURE = re.compile(
     rf"(?:\s?(?:\u2013|\u2014|-|to|à)\s?{_CURRENCY}?\s?(?P<b>{_NUM})(?:\s?(?P<bm>{_MULT})(?!\w))?)?"
     rf"(?:\s?(?P<unit>{_UNIT}))?"
 )
+# Basis points: a source's "1,075bp" is the 10.75% a member writes (2026-11-26 session).
+_BASIS_POINTS = re.compile(rf"(?<![\w.,])(?P<n>{_NUM})\s?(?:bps?|basis points?)(?!\w)")
 _ANY_NUMBER = re.compile(rf"(?<![\w.,])(?P<n>{_NUM})(?:\s?(?P<m>{_MULT})(?!\w))?")
 _MULTIPLIERS = {"k": 1e3, "thousand": 1e3, "m": 1e6, "million": 1e6, "b": 1e9, "bn": 1e9}
 _MULTIPLIERS |= {"billion": 1e9, "milliard": 1e9, "t": 1e12, "tn": 1e12, "trillion": 1e12}
@@ -416,6 +420,7 @@ def numbers(text: str) -> list[float]:
 
     In a range the second end's suffix scales the first too ("$860-940M" gives 860M),
     as in `figures`: else a member quoting the range was flagged (2026-10-31 run).
+    Basis points also give their value in percent ("412bp" gives 4.12).
     """
     out: list[float] = []
     for m in _ANY_NUMBER.finditer(text):
@@ -435,6 +440,7 @@ def numbers(text: str) -> list[float]:
             if not m["am"]:
                 out.append(parse_number(m["a"])[0] * factor)
             out.append(parse_number(m["b"])[0] * factor)  # "$40-45B": the currency is on 40
+    out += [parse_number(m["n"])[0] / 100 for m in _BASIS_POINTS.finditer(text)]
     return out
 
 

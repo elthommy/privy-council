@@ -26,8 +26,10 @@ def test_bullet_drops_a_date_the_model_copied() -> None:
     assert (
         bullet(date(2026, 10, 17), "finance", copied) == "- 2026-10-17 (finance): The user rents."
     )
-    dated = "2026-10-17: the fund closed."  # a fact's own date stays
+    dated = "2026-10-12: the fund closed."  # a fact's own date stays
     assert bullet(date(2026, 10, 17), "finance", dated).endswith(dated)
+    bare = "2026-10-17: I moved to 20%."  # the note's own day, without the council
+    assert bullet(date(2026, 10, 17), "finance", bare) == "- 2026-10-17 (finance): I moved to 20%."
 
 
 def test_bullet_lines_and_size() -> None:

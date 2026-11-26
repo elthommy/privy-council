@@ -15,7 +15,7 @@ from privy_council.models.session import DebateState, Message
 from privy_council.models.vote import Vote
 from privy_council.util.language import Language
 
-PROMPTS_VERSION = "81"
+PROMPTS_VERSION = "82"
 
 # Backends that accept a single user turn (the claude CLI on stdin) flatten a
 # multi-message conversation with these labels.
@@ -621,7 +621,10 @@ open_questions. {terms_rule}Only what the user personally knows (their situation
 preferences), never a fact the web can answer. Each question asks one thing, \
 since the user answers them one at a time: never join two with "and" or "or" ("How \
 much do you spend a month, and do you rent?" is two questions; keep the one that \
-matters more). Leave it empty if nothing is that important. {asked_rule}
+matters more). Leave it empty if nothing is that important. {asked_rule} \
+A search, page read or summon you asked the user to allow ("To allow it: /read ...") \
+runs only when they type that command: a reply in words answers your questions, never \
+that request.
 - still_open: {still_open_rule}
 - research: {research_rule}
 - documents: {documents_rule}

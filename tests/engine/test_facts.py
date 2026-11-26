@@ -102,6 +102,31 @@ def test_a_value_inside_the_cited_range_passes() -> None:
     assert [f.note for f in flaws] == ["$90 is not in [F1]."]
 
 
+def test_an_amount_after_a_year_is_read_with_its_currency() -> None:
+    sources, given = prompt_parts("- Commitments: $410bn; 2027 $64bn, 2028 $187bn, later $159bn.")
+    turn = "Commitments total $410bn, $187bn of it in 2028 [F1]."
+    flaws = checks.check_turn(turn, member="m", nick="M", sources=sources, given=given, known=[])
+    assert flaws == []
+    wrong = turn.replace("$187bn", "$201bn")
+    flaws = checks.check_turn(wrong, member="m", nick="M", sources=sources, given=given, known=[])
+    assert [f.note for f in flaws] == ["$201bn is not in [F1]."]
+
+
+def test_basis_points_written_as_percent_pass() -> None:
+    sources, given = prompt_parts("- Default insurance: Acme 412bp, Beta 1,075 basis points.")
+    turn = "Insuring Acme costs 4.12% a year and Beta 10.75% [F1]."
+    flaws = checks.check_turn(turn, member="m", nick="M", sources=sources, given=given, known=[])
+    assert flaws == []
+    untagged = "Insuring Acme costs 4.12% a year."
+    flaws = checks.check_turn(
+        untagged, member="m", nick="M", sources=sources, given=given, known=[]
+    )
+    assert flaws == []
+    wrong = "Insuring Acme costs 5.12% a year [F1]."
+    flaws = checks.check_turn(wrong, member="m", nick="M", sources=sources, given=given, known=[])
+    assert [f.note for f in flaws] == ["5.12% is not in [F1]."]
+
+
 def test_a_figure_no_fact_holds_is_miscited_not_unsourced() -> None:
     assert cite("Acme owes $7.1bn [F1].") == ["miscited: $7.1bn is not in [F1]."]
 

@@ -725,7 +725,10 @@ class DebateEngine(DocumentFlow, MemoryFlow, RosterFlow, ReviewFlow, DossierFlow
         # synthesis lists the questions instead.
         questions = [] if ending else decision.questions_for_user
         first, later = split_questions(questions, self.user_name, self.guests)
-        self._forward_questions([*first, *relayed, *summon])
+        # The requests go in their own message, before the questions: in one message, a
+        # reply in words ("ok for me") read as allowing a page read too (2026-11-26).
+        self._forward_questions([*relayed, *summon])
+        self._forward_questions(first)
         self.lines_for_user = len(first) + len(relayed) + len(summon)
         if later:
             self._notice(NOTICE_NEXT_QUESTION)

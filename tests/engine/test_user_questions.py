@@ -296,6 +296,25 @@ async def test_past_the_auto_limit_the_chair_asks_first(
     assert [n.focus for n in h.engine.meta.runtime.research] == ["VIX close", "Nasdaq close"]
 
 
+async def test_a_relayed_lookup_is_its_own_message_before_the_question(
+    tmp_path: Path, personas: dict[str, Persona]
+) -> None:
+    config: dict[str, Any] = {"research": {"auto_max_per_session": 0}}
+    update = {**asking([("rigor", "go")], QUESTION), "research": ["VIX close"]}
+    h = Harness(tmp_path, personas, standard_responder([update] * 3), config=config)
+    await h.engine.step()
+    await h.engine.step()
+    assert questions_posted(h) == [
+        "@User I'd like to look up: VIX close (web searches so far this session: 0). "
+        "To allow it: /research VIX close",
+        f"@User {QUESTION}",  # last: the answer comes right under it
+    ]
+    moderate = next(r for r in h.claude.requests if r.tag.purpose == "moderate")
+    assert "a reply in words answers your questions, never that request" in (
+        moderate.messages[0].content
+    )
+
+
 async def test_the_chair_keeps_asking_after_many_user_searches(
     tmp_path: Path, personas: dict[str, Persona]
 ) -> None:

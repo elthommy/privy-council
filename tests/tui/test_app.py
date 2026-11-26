@@ -491,7 +491,8 @@ async def test_the_answer_alone_doesnt_end_a_wait_for_a_lookup(
     async with app.run_test(size=SIZE) as pilot:
         await start_run_until_waiting(pilot, app)
         asked = [m.text for m in h.engine.messages if m.to_user]
-        assert asked[-1].endswith("To allow it: /research VIX close")
+        assert asked[-2].endswith("To allow it: /research VIX close")  # its own message
+        assert asked[-1].endswith(QUESTION)  # the question last, right above the answer
         first_wait = app._answered
         app.query_one(ChatInput).value = "2 months"
         await pilot.press("enter")

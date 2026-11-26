@@ -27,6 +27,10 @@ TAGGED_BULLET = re.compile(r"[-*] \d{4}-\d{2}-\d{2} \(([^)]*)\):")
 
 # A date and council the model copied from its earlier notes: `bullet()` adds its own.
 _OWN_DATE = re.compile(r"^(?:\d{4}-\d{2}-\d{2} \([^)]*\): *)+")
+# A bare leading date (no council), dropped only when it is the note's own day:
+# "2026-11-26: I moved..." under 2026-11-26 (2026-11-26 session). Another date is
+# the fact's own and stays.
+_BARE_DATE = re.compile(r"^(?P<d>\d{4}-\d{2}-\d{2}) *: *")
 
 
 class InvalidSlugError(ValueError):
@@ -41,6 +45,8 @@ def size_bytes(text: str) -> int:
 def bullet(day: date, council: str, text: str) -> str:
     """Render one dated memory bullet; the text is folded onto a single line."""
     one_line = _OWN_DATE.sub("", " ".join(text.split()))
+    while (m := _BARE_DATE.match(one_line)) and m["d"] == f"{day:%Y-%m-%d}":
+        one_line = one_line[m.end() :]
     return f"- {day:%Y-%m-%d} ({council}): {one_line}"
 
 
