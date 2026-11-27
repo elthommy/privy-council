@@ -56,8 +56,10 @@ _UNIT = (
     r"|years?|yrs?|ans|années?|months?|mois|km|miles?|x)(?!\w))"
 )
 _UNIT_AFTER = re.compile(rf"\s?{_UNIT}")
+# A price after a slash starts a figure of its own: in "$0.30/$1.70" (input/output
+# prices) the $1.70 was dropped, a false MISCITED when cited (2026-11-27 session).
 _FIGURE = re.compile(
-    rf"(?<![\w.,/-])(?P<cur>{_CURRENCY}\s?)?(?P<a>{_NUM})(?:\s?(?P<am>{_MULT})(?!\w))?"
+    rf"(?:(?<![\w.,/-])|(?<=/)(?={_CURRENCY}))(?P<cur>{_CURRENCY}\s?)?(?P<a>{_NUM})(?:\s?(?P<am>{_MULT})(?!\w))?"
     rf"(?:\s?(?:\u2013|\u2014|-|to|à)\s?{_CURRENCY}?\s?(?P<b>{_NUM})(?:\s?(?P<bm>{_MULT})(?!\w))?)?"
     rf"(?:\s?(?P<unit>{_UNIT}))?"
 )
@@ -140,18 +142,25 @@ _CURRENCY_WORDS = {"eur": "€", "euro": "€", "usd": "$", "dollar": "$"}
 _OWN_LINE = re.compile(r"\b(?:confidence|confiance)\b[^\n]*", re.IGNORECASE)
 # A sentence that presents its figures as the member's own (M18 step 2): an estimate
 # labelled in other words. Labelled flags (full.jsonl, 2026-11-11): every UNSOURCED
-# flag on such a sentence was false, none of the real ones had one.
+# flag on such a sentence was false, none of the real ones had one. A threshold,
+# assumption or definition the member sets is its own too, whatever the unit: "$0.40
+# a task (my threshold)", "Assuming 500 files of 10,000 tokens" (2026-11-27
+# session: the only engine flags of all saved sessions with these words, all false).
 _OWN_ESTIMATE = re.compile(
-    r"\b(?:from memory|my (?:own )?(?:estimate|guess)|I estimate|de mémoire"
-    r"|(?:mon|ma) (?:estimation|hypothèse)|j'estime)\b",
+    r"\b(?:from memory|my (?:own )?(?:estimate|guess|threshold|assumptions?|definitions?)"
+    r"|I estimate|I assume|assuming|de mémoire|en supposant|je suppose"
+    r"|(?:mon|ma|mes) (?:estimation|hypothèses?|seuil|définitions?)|j'estime)\b",
     re.IGNORECASE,
 )
-# The same for a percentage: the member's own probability or threshold.
+# The same for a percentage: the member's own probability.
 _OWN_PERCENT = re.compile(
-    r"\b(?:I update|my (?:position|probability|forecast|threshold|number)"
-    r"|ma (?:position|probabilité|prévision)|mon (?:seuil|chiffre))\b",
+    r"\b(?:I update|my (?:position|probability|forecast|number)"
+    r"|ma (?:position|probabilité|prévision)|mon chiffre)\b",
     re.IGNORECASE,
 )
+# A list item. Its lead-in line, "**Proposed test** (my definitions):", makes the
+# items below it the member's own ("a PC under about €4,000", 2026-11-27 session).
+_LIST_ITEM = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s")
 # Percentages that are figures of speech ("100% sure").
 _TRIVIAL_PERCENT = {0.0, 100.0}
 # Rounding: a figure may round its source, by at most this share of its value.
@@ -882,8 +891,9 @@ def _presented_as_own(text: str, fig: Figure) -> bool:
     """Whether the member presents a figure as its own estimate, not as a fact.
 
     The protocol's label "(estimate, from memory)" counts, and so does its sentence
-    saying so in other words ("from memory", "my estimate"); a percentage also when
-    the sentence gives the member's own position ("I update: 15%", "my threshold").
+    saying so in other words ("from memory", "my threshold", "assuming"), or the
+    lead-in of its list ("Proposed test (my definitions):"); a percentage also when
+    the sentence gives the member's own position ("I update: 15%").
     """
     if fig.labelled:
         return True
@@ -891,8 +901,27 @@ def _presented_as_own(text: str, fig: Figure) -> bool:
     after = _SENTENCE_END.search(text, fig.end)
     sentence = text[lo : after.start() if after else len(text)]
     return bool(
-        _OWN_ESTIMATE.search(sentence) or (fig.family == "%" and _OWN_PERCENT.search(sentence))
+        _OWN_ESTIMATE.search(sentence)
+        or (fig.family == "%" and _OWN_PERCENT.search(sentence))
+        or _OWN_ESTIMATE.search(_lead_in(text, fig.start))
     )
+
+
+def _lead_in(text: str, pos: int) -> str:
+    """Return the line introducing the list that holds `pos`, or "" outside a list.
+
+    That is the nearest line above the item's that isn't a list item, with no blank
+    line between them.
+    """
+    lines = text[:pos].split("\n")
+    if not _LIST_ITEM.match(lines[-1]):
+        return ""
+    for line in reversed(lines[:-1]):
+        if not line.strip():
+            return ""
+        if not _LIST_ITEM.match(line):
+            return line
+    return ""
 
 
 def figures_cleared(quote: str, text: str, sources: str, given: str) -> bool:

@@ -366,6 +366,10 @@ def test_other_shares_and_conversions_stay_unsourced(text: str, note: str) -> No
         "My estimate is roughly €40bn of reserves, unverified.",
         "I update: I move my position to 15% by the deadline.",
         "De mémoire, la garantie dure environ 2,5 ans.",
+        "Each group passes 90% of tasks for under about $0.40 a task (my threshold).",
+        "Assuming 500 files of 10,000 tokens each, input alone is about $2.80.",
+        "En supposant 500 fichiers, le coût serait d'environ 3 €.",
+        "**Proposed test** (my definitions):\n- **Tasks:** today's.\n- **Cheap:** under €4,000.",
     ],
 )
 def test_figures_the_member_presents_as_its_own_are_not_unsourced(text: str) -> None:
@@ -378,6 +382,9 @@ def test_figures_the_member_presents_as_its_own_are_not_unsourced(text: str) -> 
         ("The subsidy was €70M, as the article said.", "€70M"),  # stated as fact
         ("My position: the fee is €90 a year.", "€90"),  # "my position" frees only a %
         ("Roughly 12 years remain on the lease.", "12 years"),  # a hedge isn't a label
+        # A list's own lead-in frees its items only, and only up to a blank line.
+        ("**My definitions:**\n- cheap\n\n- The PC costs €4,000.", "€4,000"),
+        ("**Facts:**\n- The PC costs €4,000.", "€4,000"),
     ],
 )
 def test_other_unsourced_figures_are_still_reported(text: str, note: str) -> None:

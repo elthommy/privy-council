@@ -2,8 +2,9 @@
 
 All notable changes, by milestone. Dates are when each milestone was built.
 
-## Unreleased (2026-10-25 – 2026-11-26)
+## Unreleased (2026-10-25 – 2026-11-27)
 
+- A price after a slash ("$0.30/$1.70", input and output prices) is read as a figure of its own: citing the second one was flagged as miscited. A figure a member presents as its own threshold, assumption or definition ("my threshold", "assuming", or a list under "my definitions") is no longer flagged as unsourced.
 - **The Chair's requests no longer ride on its questions**: a search, page read or summon it asks you to allow comes in its own message, before its questions, so your answer sits under the question it answers. The Chair is told that only the command (`/read`, `/research`, `/summon`) allows a request: a reply in words never does.
 - Basis points count as the percentage they equal ("412bp" is 4.12%), and an amount after a year ("2028 $187bn") keeps its currency: both were flagged as unsourced or miscited. A memory note no longer repeats its own date written bare ("2026-11-26: ...").
 - **A member sees your answer even when the Chair's prompt predates it**: the round's prompts are written with the Chair's questions, so they could name a window you then changed. Your answers now go into each prompt, and win over it. The Chair is told not to report a member who only followed its own wording.

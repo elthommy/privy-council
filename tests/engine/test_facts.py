@@ -127,6 +127,16 @@ def test_basis_points_written_as_percent_pass() -> None:
     assert [f.note for f in flaws] == ["5.12% is not in [F1]."]
 
 
+def test_a_price_after_a_slash_is_read() -> None:
+    sources, given = prompt_parts("- List prices per M tokens in/out: $0.30/$1.70 open.")
+    turn = "My line is $0.30 input and $1.70 output per million tokens [F1]."
+    flaws = checks.check_turn(turn, member="m", nick="M", sources=sources, given=given, known=[])
+    assert flaws == []
+    wrong = turn.replace("$1.70", "$2.70")
+    flaws = checks.check_turn(wrong, member="m", nick="M", sources=sources, given=given, known=[])
+    assert [f.note for f in flaws] == ["$2.70 is not in [F1]."]
+
+
 def test_a_figure_no_fact_holds_is_miscited_not_unsourced() -> None:
     assert cite("Acme owes $7.1bn [F1].") == ["miscited: $7.1bn is not in [F1]."]
 
